@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { CalendarClock, ChartNoAxesColumn, History, LayoutGrid, Moon, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
+import { CalendarClock, ChartNoAxesColumn, History, LayoutGrid, Moon, Lock, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
 import { AddSessionDialog } from '@/components/add-session-dialog'
 import { AppIcon } from '@/components/app-icon'
 import { HistoryDialog } from '@/components/history-dialog'
-import { LimitAlarmDialog } from '@/components/limit-alarm-dialog'
+import { LimitAlarmDialog, LockedLimitAlarm } from '@/components/limit-alarm-dialog'
 import { LiveClock } from '@/components/live-clock'
+import { LockScreen } from '@/components/lock-screen'
+import { NoticeDialog } from '@/components/notice-dialog'
 import { OnboardingDialog } from '@/components/onboarding-dialog'
 import { SessionCard } from '@/components/session-card'
 import { CustomersDialog } from '@/components/customers-dialog'
@@ -17,7 +19,10 @@ import { Input } from '@/components/ui/input'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Tip } from '@/components/tip'
 import { currentShift, SHIFT_VISIBLE_MS } from '@/lib/history'
+import { acceptedNoticeVersion, acceptNotice, NOTICE_VERSION } from '@/lib/notice'
 import { rank } from '@/lib/search'
+import { lockNow, useSecurity } from '@/lib/security'
+import { useIdleLock } from '@/lib/use-idle-lock'
 import {
   addSessionRow,
   deleteSessionRow,
@@ -57,6 +62,8 @@ function ThemeToggle() {
 
 function Main() {
   const { title, view, setView, grouping } = useTheme()
+  const { hasPin } = useSecurity()
+  useIdleLock()
   const settings = useLiveQuery(readSettings)
   const sessions = useLiveQuery(readSessions)
   const [addOpen, setAddOpen] = useState(false)
@@ -65,6 +72,10 @@ function Main() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [customersOpen, setCustomersOpen] = useState(false)
   const [onboarding, setOnboarding] = useState(false)
+  // Notice version accepted before this visit; the notice (shown before onboarding) is open
+  // until the current version is accepted.
+  const [noticeSince] = useState(acceptedNoticeVersion)
+  const [noticeOk, setNoticeOk] = useState(noticeSince >= NOTICE_VERSION)
   // Settings opened from the wizard to import a backup; closing it brings the wizard back.
   const [importing, setImporting] = useState(false)
   // Device-type filter (category name); null = all types.
@@ -190,6 +201,13 @@ function Main() {
                 <Users />
               </Button>
             </Tip>
+            {hasPin && (
+              <Tip label="قفل کردن">
+                <Button variant="outline" size="icon" aria-label="قفل کردن" onClick={lockNow}>
+                  <Lock />
+                </Button>
+              </Tip>
+            )}
             <ThemeToggle />
             <SettingsDialog
               settings={settings}
@@ -389,8 +407,17 @@ function Main() {
         )}
       </main>
 
+      <NoticeDialog
+        open={!noticeOk}
+        since={noticeSince}
+        onAccept={() => {
+          acceptNotice()
+          setNoticeOk(true)
+        }}
+      />
+
       <OnboardingDialog
-        open={onboarding && !importing}
+        open={noticeOk && onboarding && !importing}
         settings={settings}
         onImport={() => {
           setImporting(true)
@@ -439,10 +466,20 @@ function Main() {
 }
 
 export default function App() {
+  // Locking unmounts the whole app, so nothing stays in the DOM until the PIN is entered.
+  const { epoch, locked } = useSecurity()
   return (
     <ThemeProvider>
       <TooltipProvider>
-        <Main />
+        {locked ? (
+          // Locked: nothing of the app is rendered, only the lock page (and a silent alarm).
+          <>
+            <LockScreen />
+            <LockedLimitAlarm />
+          </>
+        ) : (
+          <Main key={epoch} />
+        )}
       </TooltipProvider>
     </ThemeProvider>
   )

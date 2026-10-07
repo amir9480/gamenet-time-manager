@@ -1,3 +1,4 @@
+import { resetSecurity } from '@/lib/security'
 import Dexie, { type Table } from 'dexie'
 import {
   applyDevices,
@@ -415,5 +416,6 @@ export const clearHistory = () => db.history.clear()
 // the saved preferences.
 export const resetAllData = async () => {
   clearPrefs()
+  await resetSecurity()
   await db.delete()
 }

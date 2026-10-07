@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { DataTab } from '@/components/data-tab'
+import { SecuritySettings } from '@/components/security-settings'
 import { DevicesEditor } from '@/components/devices-editor'
 import { ExtraItemsEditor } from '@/components/extra-items-editor'
 import { RateGroupsEditor } from '@/components/rate-groups-editor'
@@ -44,7 +45,7 @@ const ROUND_ITEMS = (Object.keys(ROUND_MODE_LABELS) as RoundMode[]).map((value) 
   label: ROUND_MODE_LABELS[value],
 }))
 
-export type SettingsTab = 'general' | 'rates' | 'devices' | 'extras' | 'data'
+export type SettingsTab = 'general' | 'rates' | 'devices' | 'extras' | 'security' | 'data'
 
 type Props = {
   settings: Settings
@@ -195,6 +196,7 @@ export function SettingsDialog({
               <TabsTrigger value="rates">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
               <TabsTrigger value="devices">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
               <TabsTrigger value="extras">بوفه {dot(extrasValid)}</TabsTrigger>
+              <TabsTrigger value="security">امنیت</TabsTrigger>
               <TabsTrigger value="data">داده‌ها</TabsTrigger>
             </TabsList>
 
@@ -347,6 +349,10 @@ export function SettingsDialog({
                 items={draft.extraItems}
                 onChange={(extraCategories, extraItems) => patch({ extraCategories, extraItems })}
               />
+            </TabsContent>
+
+            <TabsContent value="security">
+              <SecuritySettings />
             </TabsContent>
 
             <TabsContent value="data">

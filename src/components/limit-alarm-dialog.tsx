@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { AlarmClock, Pause, Plus, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { LimitDialog } from '@/components/limit-dialog'
 import { ALARM_INTERVAL_MS, playAlarm } from '@/lib/alarm'
+import { readSessions } from '@/lib/db'
 import { formatDuration, formatNumber } from '@/lib/format'
 import { useNow } from '@/lib/use-now'
 import {
@@ -109,19 +111,15 @@ function AlarmBody({
   )
 }
 
-// One top-most blocking dialog for the sessions whose time limit ran out. It cannot be
-// dismissed: the admin has to pause the session or extend/remove the limit. While any session
-// is waiting, an alarm sounds right away and then every 15 seconds.
-export function LimitAlarmDialog({ sessions, settings, onUpdate }: Props) {
+// Sessions whose time limit ran out (most overdue first; the order stays stable over time)
+// plus the alarm: it sounds right away and then every ALARM_INTERVAL_MS while any is waiting.
+function useExpired(sessions: Session[]) {
   const watching = sessions.some((s) => s.status === 'running' && s.limitMs !== undefined)
   const now = useNow(watching)
-
-  // Most overdue first; the order stays stable as time passes.
   const expired = sessions
     .filter((s) => limitReached(s, now))
     .sort((a, b) => (remainingMs(a, now) ?? 0) - (remainingMs(b, now) ?? 0))
-  const current = expired[0]
-  const alarming = current !== undefined
+  const alarming = expired.length > 0
 
   useEffect(() => {
     if (!alarming) return
@@ -129,6 +127,24 @@ export function LimitAlarmDialog({ sessions, settings, onUpdate }: Props) {
     const id = setInterval(playAlarm, ALARM_INTERVAL_MS)
     return () => clearInterval(id)
   }, [alarming])
+
+  return { expired, now }
+}
+
+// Renders nothing: keeps the alarm sounding while the app is locked and no UI is mounted.
+export function LockedLimitAlarm() {
+  const sessions = useLiveQuery(readSessions)
+  useExpired(sessions ?? [])
+  return null
+}
+
+// One top-most blocking dialog for the sessions whose time limit ran out. It cannot be
+// dismissed: the admin has to pause the session or extend/remove the limit. While any session
+// is waiting, an alarm sounds right away and then every 15 seconds.
+export function LimitAlarmDialog({ sessions, settings, onUpdate }: Props) {
+  const { expired, now } = useExpired(sessions)
+  const current = expired[0]
+  const alarming = current !== undefined
 
   return (
     <Dialog open={alarming} disablePointerDismissal onOpenChange={() => {}}>

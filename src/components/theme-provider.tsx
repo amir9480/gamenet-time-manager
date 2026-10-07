@@ -32,13 +32,13 @@ const ThemeContext = createContext<{
 }>({
   theme: 'light',
   setTheme: () => {},
-  accent: 'neutral',
+  accent: 'teal',
   setAccent: () => {},
   title: DEFAULT_TITLE,
   setTitle: () => {},
   icon: DEFAULT_ICON,
   setIcon: () => {},
-  view: 'detailed',
+  view: 'compact',
   setView: () => {},
   grouping: true,
   setGrouping: () => {},
@@ -53,13 +53,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   )
 
-  const [accent, setAccent] = useLocalStorage<Accent>('gamenet-accent', () => 'neutral')
+  const [accent, setAccent] = useLocalStorage<Accent>('gamenet-accent', () => 'teal')
 
   const [storedTitle, setTitle] = useLocalStorage<string>('gamenet-title', () => DEFAULT_TITLE)
   const title = storedTitle.trim() || DEFAULT_TITLE
   const [icon, setIcon] = useLocalStorage<AppIconValue>('gamenet-icon', () => DEFAULT_ICON)
 
-  const [view, setView] = useLocalStorage<ViewMode>('gamenet-view', () => 'detailed')
+  const [view, setView] = useLocalStorage<ViewMode>('gamenet-view', () => 'compact')
   const [grouping, setGrouping] = useLocalStorage<boolean>('gamenet-grouping', () => true)
 
   const [rounding, setRounding] = useLocalStorage<Rounding>('gamenet-rounding', () => DEFAULT_ROUNDING)
