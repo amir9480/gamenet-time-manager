@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6d28d9"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <radialGradient id="ball" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#fca5a5"/>
+      <stop offset="0.5" stop-color="#ef4444"/>
+      <stop offset="1" stop-color="#991b1b"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <!-- base -->
+  <ellipse cx="512" cy="780" rx="330" ry="110" fill="#0f172a"/>
+  <path d="M182 700 Q182 600 300 600 H724 Q842 600 842 700 V780 Q842 890 512 890 Q182 890 182 780 Z" fill="#334155"/>
+  <ellipse cx="512" cy="700" rx="330" ry="110" fill="#475569"/>
+  <ellipse cx="512" cy="690" rx="190" ry="60" fill="#0f172a"/>
+  <!-- buttons -->
+  <circle cx="300" cy="730" r="26" fill="#22c55e"/>
+  <circle cx="724" cy="730" r="26" fill="#facc15"/>
+  <!-- stick -->
+  <rect x="478" y="330" width="68" height="370" rx="34" fill="#cbd5e1"/>
+  <rect x="478" y="330" width="26" height="370" rx="13" fill="#f1f5f9"/>
+  <!-- ball -->
+  <circle cx="512" cy="300" r="170" fill="url(#ball)"/>
+  <ellipse cx="450" cy="230" rx="52" ry="34" fill="#fff" opacity="0.45" transform="rotate(-30 450 230)"/>
+</svg>
