@@ -208,6 +208,16 @@ export const addCustomer = async (name: string, phone: string): Promise<Customer
 export const updateCustomer = (id: string, name: string, phone: string) =>
   db.customers.update(id, { name: name.trim(), phone: phone.trim() || undefined })
 
+// Total spent per customer over all history (the final income of each ended session). History has
+// no customer index, so this scans it once; callers load it after the customer list.
+export const readCustomerSpend = async (): Promise<Map<string, number>> => {
+  const spend = new Map<string, number>()
+  await db.history.each((h) => {
+    if (h.customerId) spend.set(h.customerId, (spend.get(h.customerId) ?? 0) + h.total)
+  })
+  return spend
+}
+
 export const deleteCustomer = (id: string) => db.customers.update(id, { deletedAt: Date.now() })
 
 // ---- onboarding ---------------------------------------------------------------

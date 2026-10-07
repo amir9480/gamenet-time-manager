@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/combobox'
 import { NewCustomerDialog } from '@/components/new-customer-dialog'
 import { Tip } from '@/components/tip'
+import { useComboboxSearch } from '@/lib/use-combobox-search'
 import type { Customer } from '@/lib/store'
 
 type Props = {
@@ -22,11 +23,13 @@ type Props = {
 }
 
 const label = (c: Customer) => (c.phone ? `${c.name} (${c.phone})` : c.name)
+export const customerFields = (c: Customer) => [{ text: c.name, weight: 3 }, c.phone ?? '']
 
 // Optional customer picker with search by name/phone and inline «مشتری جدید».
 export function CustomerSelect({ customers, value, onChange, id, autoFocus }: Props) {
   const [newOpen, setNewOpen] = useState(false)
   const selected = customers.find((c) => c.id === value) ?? null
+  const { props: search } = useComboboxSearch(customers, customerFields, selected ? label(selected) : '')
 
   return (
     <div className="flex items-center gap-2">
@@ -36,9 +39,7 @@ export function CustomerSelect({ customers, value, onChange, id, autoFocus }: Pr
         onValueChange={(c) => onChange((c as Customer | null)?.id)}
         itemToStringLabel={(c: Customer) => label(c)}
         isItemEqualToValue={(a: Customer, b: Customer) => a.id === b.id}
-        filter={(c: Customer, q: string) =>
-          `${c.name} ${c.phone ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())
-        }
+        {...search}
       >
         <ComboboxInput
           id={id}

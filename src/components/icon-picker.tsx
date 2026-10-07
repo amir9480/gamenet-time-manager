@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { RotateCcw, Search, Upload } from 'lucide-react'
 import { DynamicIcon, iconNames } from 'lucide-react/dynamic'
 import { AppIcon } from '@/components/app-icon'
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tip } from '@/components/tip'
 import { DEFAULT_ICON, imageToIcon, type AppIconValue } from '@/lib/app-icon'
+import { buildIndex, searchIndex } from '@/lib/search'
 import { cn } from '@/lib/utils'
 
 type Props = { value: AppIconValue; onChange: (v: AppIconValue) => void }
@@ -27,8 +28,8 @@ export function IconPicker({ value, onChange }: Props) {
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const needle = q.trim().toLowerCase().replace(/\s+/g, '-')
-  const matches = iconNames.filter((n) => n.includes(needle))
+  const index = useMemo(() => buildIndex(iconNames, (n) => n), [])
+  const matches = useMemo(() => searchIndex(index, q), [index, q])
   const shown = matches.slice(0, limit)
 
   const upload = async (file: File | undefined) => {

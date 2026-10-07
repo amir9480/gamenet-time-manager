@@ -6,6 +6,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
+import { useComboboxSearch } from '@/lib/use-combobox-search'
 
 export type FilterOption = { value: string; label: string }
 
@@ -19,6 +20,7 @@ type Props = {
 // Searchable replacement for a filter <Select>; stays usable with hundreds of options.
 export function FilterCombobox({ options, value, onChange, 'aria-label': ariaLabel }: Props) {
   const selected = options.find((o) => o.value === value) ?? options[0]
+  const { props: search } = useComboboxSearch(options, (o) => o.label, selected.label)
 
   return (
     <Combobox
@@ -27,12 +29,7 @@ export function FilterCombobox({ options, value, onChange, 'aria-label': ariaLab
       onValueChange={(o) => o && onChange((o as FilterOption).value)}
       itemToStringLabel={(o: FilterOption) => o.label}
       isItemEqualToValue={(a: FilterOption, b: FilterOption) => a.value === b.value}
-      // The input shows the chosen label on open; that must not hide the other options.
-      filter={(o: FilterOption, q: string) =>
-        q.trim() === '' ||
-        q === selected.label ||
-        o.label.toLowerCase().includes(q.trim().toLowerCase())
-      }
+      {...search}
     >
       <ComboboxInput aria-label={ariaLabel} showClear={false} className="w-full" />
       <ComboboxContent>

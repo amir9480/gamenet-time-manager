@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { Field } from '@/lib/search'
 
 // ---- catalog types ------------------------------------------------------------
 
@@ -491,34 +492,23 @@ export const buildHistoryEntry = (
 
 // ---- search -----------------------------------------------------------------
 
-// Normalises Persian/Arabic digits and letter variants so «۱۲۰» matches "120".
-export const normalizeSearch = (text: string) =>
-  text
-    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
-    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
-    .replace(/ي/g, 'ی')
-    .replace(/ك/g, 'ک')
-    .replace(/[,٬]/g, '')
-    .toLowerCase()
-
-// Everything a running session can be searched by: device, type, customer, prices, extras,
-// status and the current total.
-export const sessionSearchText = (s: Session, customer: Customer | undefined, now: number) =>
-  normalizeSearch(
-    [
-      s.deviceName,
-      s.categoryName,
-      customer?.name,
-      customer?.phone,
-      s.status === 'running' ? 'در حال بازی' : 'متوقف',
-      ...s.segments.map((x) => `${x.typeName} ${x.price}`),
-      ...s.extraTimes.map((t) => `${t.name} ${t.typeName} ${t.minutes}`),
-      ...s.extraItems.map((i) => `${i.name} ${i.description ?? ''} ${i.price}`),
-      String(computeCost(s, now)),
-    ]
-      .filter(Boolean)
-      .join(' '),
-  )
+// Everything a running session can be searched by (see `rank` in search.ts): device, type and
+// customer weigh most; status, prices, extras and the current total less.
+export const sessionSearchFields = (
+  s: Session,
+  customer: Customer | undefined,
+  now: number,
+): Field[] => [
+  { text: s.deviceName, weight: 3 },
+  { text: s.categoryName, weight: 2 },
+  { text: customer?.name ?? '', weight: 3 },
+  customer?.phone ?? '',
+  s.status === 'running' ? 'در حال بازی' : 'متوقف',
+  ...s.segments.map((x) => `${x.typeName} ${x.price}`),
+  ...s.extraTimes.map((t) => `${t.name} ${t.typeName} ${t.minutes}`),
+  ...s.extraItems.map((i) => `${i.name} ${i.description ?? ''} ${i.price}`),
+  String(computeCost(s, now)),
+]
 
 // ---- final-amount rounding ----------------------------------------------------
 

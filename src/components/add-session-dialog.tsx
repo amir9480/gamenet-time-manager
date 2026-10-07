@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { toFa } from '@/lib/jalali'
+import { rank, type Field } from '@/lib/search'
 import {
   categoryName,
   devicePriceGroups,
@@ -69,6 +70,7 @@ type SearchItem = {
   label: string
   sub: string
   busy: boolean // device in use (or type with no free device)
+  fields: Field[] // everything this entry can be found by, shown or not
 }
 
 const RedDot = () => <span className="size-2 shrink-0 rounded-full bg-destructive" aria-hidden />
@@ -196,6 +198,14 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
   // Quick search entries. When a device (or a whole type) offers more than one price, there is
   // one entry per price, so the price can be picked straight from the search results.
   const priceText = (p: FlatPrice) => `${p.name} (${formatNumber(p.price)})`
+  // Searchable text is independent of what an entry displays: every word of the query may hit
+  // the type, device, price name / value, rate group or the free / busy status.
+  const priceFields = (p: FlatPrice): Field[] => [
+    { text: p.name, weight: 2 },
+    String(p.price),
+    p.groupName,
+  ]
+  const statusField = (busy: boolean) => (busy ? 'در حال استفاده' : 'آزاد')
   const searchItems: SearchItem[] = categories.flatMap((c) => {
     const inCategory = devicesOf(c.id)
     const freeCount = freeIn(c.id).length
@@ -212,6 +222,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
             label: c.name,
             sub: `نوع دستگاه · ${priceText(p)}`,
             busy: !freeIn(c.id).some((d) => devicePrices(d, settings.rateGroups).some((x) => x.id === p.id)),
+            fields: [{ text: c.name, weight: 3 }, 'نوع دستگاه', ...priceFields(p)],
           }))
         : [
             {
@@ -221,6 +232,12 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
               label: c.name,
               sub: `نوع دستگاه · ${toFa(freeCount)} آزاد`,
               busy: freeCount === 0,
+              fields: [
+                { text: c.name, weight: 3 },
+                'نوع دستگاه',
+                ...[...typePrices.values()].flatMap(priceFields),
+                statusField(freeCount === 0),
+              ],
             },
           ]
     const deviceEntries = inCategory.flatMap((d): SearchItem[] => {
@@ -232,9 +249,16 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
         label: d.name,
         busy: busyIds.has(d.id),
       }
+      const own: Field[] = [{ text: d.name, weight: 3 }, { text: c.name, weight: 2 }, statusField(base.busy)]
       return prices.length > 1
-        ? prices.map((p) => ({ ...base, key: `d-${d.id}-${p.id}`, priceId: p.id, sub: `${c.name} · ${priceText(p)}` }))
-        : [{ ...base, key: `d-${d.id}`, sub: c.name }]
+        ? prices.map((p) => ({
+            ...base,
+            key: `d-${d.id}-${p.id}`,
+            priceId: p.id,
+            sub: `${c.name} · ${priceText(p)}`,
+            fields: [...own, ...priceFields(p)],
+          }))
+        : [{ ...base, key: `d-${d.id}`, sub: c.name, fields: [...own, ...prices.flatMap(priceFields)] }]
     })
     return [...typeEntries, ...deviceEntries]
   })
@@ -284,6 +308,9 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
 
           <Combobox
             items={searchItems}
+            // Ranked multi-word search instead of the built-in contiguous-substring filter.
+            filter={null}
+            filteredItems={rank(searchItems, query, (it) => it.fields)}
             value={null}
             onValueChange={(it) => quickSelect(it as SearchItem | null)}
             inputValue={query}

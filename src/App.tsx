@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Tip } from '@/components/tip'
+import { rank } from '@/lib/search'
 import {
   addSessionRow,
   endSessionRow,
@@ -28,8 +29,7 @@ import {
 import {
   buildHistoryEntry,
   createSession,
-  normalizeSearch,
-  sessionSearchText,
+  sessionSearchFields,
   usageOf,
   type Device,
   type FlatPrice,
@@ -95,14 +95,11 @@ function Main() {
   const showTypes = grouping && typeNames.length > 1
   const activeType = showTypes && typeFilter && typeNames.includes(typeFilter) ? typeFilter : null
   // Search over every parameter of the running sessions.
-  const needle = normalizeSearch(query.trim())
+  const needle = query.trim()
+  const now = Date.now()
   const found = needle
-    ? sessions.filter((x) =>
-        sessionSearchText(
-          x,
-          settings.customers.find((c) => c.id === x.customerId),
-          Date.now(),
-        ).includes(needle),
+    ? rank(sessions, needle, (x) =>
+        sessionSearchFields(x, settings.customers.find((c) => c.id === x.customerId), now),
       )
     : sessions
   // Grouped: one section per type (settings order). A chosen type is shown alone, or first
