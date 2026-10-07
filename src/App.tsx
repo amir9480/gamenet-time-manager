@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { History, LayoutGrid, Moon, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
+import { ChartNoAxesColumn, History, LayoutGrid, Moon, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
 import { AddSessionDialog } from '@/components/add-session-dialog'
 import { AppIcon } from '@/components/app-icon'
 import { HistoryDialog } from '@/components/history-dialog'
@@ -9,18 +9,21 @@ import { LiveClock } from '@/components/live-clock'
 import { OnboardingDialog } from '@/components/onboarding-dialog'
 import { SessionCard } from '@/components/session-card'
 import { CustomersDialog } from '@/components/customers-dialog'
+import { ShiftSummary } from '@/components/shift-summary'
 import { SettingsDialog, type SettingsTab } from '@/components/settings-dialog'
 import { ThemeProvider, useTheme } from '@/components/theme-provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Tip } from '@/components/tip'
+import { currentShift, SHIFT_VISIBLE_MS } from '@/lib/history'
 import { rank } from '@/lib/search'
 import {
   addSessionRow,
   endSessionRow,
   markOnboarded,
   needsOnboarding,
+  readRecentHistory,
   readSessions,
   readSettings,
   saveSettings,
@@ -63,12 +66,27 @@ function Main() {
   // Device-type filter (category name); null = all types.
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [showShift, setShowShift] = useState(false)
 
   // Only a brand-new database gets the onboarding dialog.
   useEffect(() => {
     needsOnboarding().then(setOnboarding)
   }, [])
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general')
+
+  // Shift summary: shown instead of the welcome page while the last ended session is recent.
+  const recent = useLiveQuery(readRecentHistory)
+  const [now, setNow] = useState(Date.now)
+  const latestEnd = recent?.[0]?.endedAt
+  useEffect(() => {
+    if (latestEnd === undefined) return
+    const left = latestEnd + SHIFT_VISIBLE_MS - Date.now()
+    if (left <= 0) return
+    // Re-evaluate when the 2 hour window closes (timeouts are capped at ~24 days, far above it).
+    const t = setTimeout(() => setNow(Date.now()), left + 50)
+    setNow(Date.now())
+    return () => clearTimeout(t)
+  }, [latestEnd])
 
   // Wait for IndexedDB so the empty state / default settings never flash.
   if (!settings || !sessions) return null
@@ -96,10 +114,9 @@ function Main() {
   const activeType = showTypes && typeFilter && typeNames.includes(typeFilter) ? typeFilter : null
   // Search over every parameter of the running sessions.
   const needle = query.trim()
-  const now = Date.now()
   const found = needle
     ? rank(sessions, needle, (x) =>
-        sessionSearchFields(x, settings.customers.find((c) => c.id === x.customerId), now),
+        sessionSearchFields(x, settings.customers.find((c) => c.id === x.customerId), Date.now()),
       )
     : sessions
   // Grouped: one section per type (settings order). A chosen type is shown alone, or first
@@ -124,6 +141,12 @@ function Main() {
         }))
         .filter((g) => g.items.length > 0)
 
+  const shift = sessions.length === 0 && recent && settings.devices.length > 0 ? currentShift(recent, now) : null
+
+  // On demand (toolbar button): the latest shift however old it is, next to running sessions.
+  const manualShift = recent ? currentShift(recent, now, Infinity) : null
+  const summaryOn = showShift && !!manualShift
+
   const openSettings = (tab: SettingsTab) => {
     setSettingsTab(tab)
     setSettingsOpen(true)
@@ -137,7 +160,7 @@ function Main() {
           <h1 className="text-2xl font-bold">{title}</h1>
         </div>
         <div className="flex items-center gap-3">
-          {sessions.length > 0 && <LiveClock size="small" />}
+          {(sessions.length > 0 || shift) && <LiveClock size="small" />}
           <div className="flex gap-2">
             <Tip label="تاریخچه">
               <Button
@@ -173,7 +196,9 @@ function Main() {
       </header>
 
       <main className="flex flex-1 flex-col gap-3">
-        {sessions.length === 0 ? (
+        {shift ? (
+          <ShiftSummary entries={shift} onAdd={() => setAddOpen(true)} />
+        ) : sessions.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6 rounded-xl border border-dashed p-10 text-center">
             <LiveClock size="large" />
             <AppIcon className="size-20 opacity-80" />
@@ -244,13 +269,18 @@ function Main() {
                     </button>
                   )}
                 </div>
+                <div role="radiogroup" aria-label="نحوه‌ی نمایش" className="flex items-center gap-1">
                 <Tip label="نمای کامل">
                   <Button
                     size="icon-sm"
-                    variant={view === 'detailed' ? 'secondary' : 'ghost'}
+                    variant={!summaryOn && view === 'detailed' ? 'secondary' : 'ghost'}
+                    role="radio"
                     aria-label="نمای کامل"
-                    aria-pressed={view === 'detailed'}
-                    onClick={() => setView('detailed')}
+                    aria-checked={!summaryOn && view === 'detailed'}
+                    onClick={() => {
+                      setView('detailed')
+                      setShowShift(false)
+                    }}
                   >
                     <Rows3 />
                   </Button>
@@ -258,23 +288,48 @@ function Main() {
                 <Tip label="نمای فشرده">
                   <Button
                     size="icon-sm"
-                    variant={view === 'compact' ? 'secondary' : 'ghost'}
+                    variant={!summaryOn && view === 'compact' ? 'secondary' : 'ghost'}
+                    role="radio"
                     aria-label="نمای فشرده"
-                    aria-pressed={view === 'compact'}
-                    onClick={() => setView('compact')}
+                    aria-checked={!summaryOn && view === 'compact'}
+                    onClick={() => {
+                      setView('compact')
+                      setShowShift(false)
+                    }}
                   >
                     <LayoutGrid />
                   </Button>
                 </Tip>
+                <Tip label="خلاصه‌ی شیفت">
+                  <Button
+                    size="icon-sm"
+                    variant={summaryOn ? 'secondary' : 'ghost'}
+                    role="radio"
+                    aria-label="خلاصه‌ی شیفت"
+                    aria-checked={summaryOn}
+                    disabled={!manualShift}
+                    onClick={() => setShowShift(true)}
+                  >
+                    <ChartNoAxesColumn />
+                  </Button>
+                </Tip>
+                </div>
                 <Button size="sm" onClick={() => setAddOpen(true)}>
                   <Plus /> افزودن تایم
                 </Button>
               </div>
             </div>
-            {found.length === 0 && (
+            {summaryOn && manualShift && (
+              <ShiftSummary
+                entries={manualShift}
+                active={sessions.length}
+                onAdd={() => setAddOpen(true)}
+              />
+            )}
+            {!summaryOn && found.length === 0 && (
               <p className="py-10 text-center text-sm text-muted-foreground">تایمی پیدا نشد.</p>
             )}
-            {sections.map((sec) => (
+            {(summaryOn ? [] : sections).map((sec) => (
               <section
                 key={sec.name ?? 'all'}
                 className={`flex flex-col gap-2 ${sec.dim ? 'opacity-50' : ''}`}

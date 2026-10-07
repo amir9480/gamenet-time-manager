@@ -99,6 +99,10 @@ export const readSessions = async (): Promise<Session[]> =>
     (a, b) => (a.segments[0]?.from ?? 0) - (b.segments[0]?.from ?? 0),
   )
 
+// Latest ended sessions, newest first (enough to cover the current shift).
+export const readRecentHistory = (): Promise<HistoryEntry[]> =>
+  db.history.orderBy('endedAt').reverse().limit(300).toArray()
+
 const norm = (name: string) => name.trim().toLowerCase()
 
 // Writes `rows` as the active list of `table`:
