@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDuration, formatNumber } from '@/lib/format'
 import { summarize } from '@/lib/history'
 import { formatJalaliClock, formatJalaliDate } from '@/lib/jalali'
+import { NO_CUSTOMER } from '@/lib/stats'
 import type { HistoryEntry } from '@/lib/store'
 
 function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
@@ -99,9 +100,7 @@ export function ShiftSummary({
               <div className="flex flex-col">
                 <span className="font-medium">
                   {e.deviceNames.join('، ') || '—'}
-                  {e.customerName && (
-                    <span className="ms-2 text-muted-foreground">{e.customerName}</span>
-                  )}
+                  <span className="ms-2 text-muted-foreground">{e.customerName ?? NO_CUSTOMER}</span>
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {formatJalaliClock(e.startedAt, false)} تا {formatJalaliClock(e.endedAt, false)} ·{' '}

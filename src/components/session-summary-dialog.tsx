@@ -67,7 +67,7 @@ export function SessionSummaryDialog({
   const [onAccount, setOnAccount] = useState(false)
   useEffect(() => {
     if (open) {
-      setFinalText(String(total))
+      setFinalText(String(rounding.auto ? roundAmount(total, rounding) : total))
       setOnAccount(false)
     }
     // Reset only when (re)opened.
@@ -166,16 +166,18 @@ export function SessionSummaryDialog({
               <div className="flex items-center justify-between gap-4 text-base font-bold">
                 <label htmlFor="final-total">مبلغ نهایی</label>
                 <div className="flex items-center gap-2">
-                  <Tip label={`رند کردن (${ROUND_MODE_LABELS[rounding.mode]} ${formatNumber(rounding.step)} تومان)`}>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      aria-label="رند کردن"
-                      onClick={() => setFinalText(String(roundAmount(finalAmount, rounding)))}
-                    >
-                      <Coins />
-                    </Button>
-                  </Tip>
+                  {!rounding.auto && (
+                    <Tip label={`رند کردن (${ROUND_MODE_LABELS[rounding.mode]} ${formatNumber(rounding.step)} تومان)`}>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        aria-label="رند کردن"
+                        onClick={() => setFinalText(String(roundAmount(finalAmount, rounding)))}
+                      >
+                        <Coins />
+                      </Button>
+                    </Tip>
+                  )}
                   <Input
                     id="final-total"
                     dir="ltr"

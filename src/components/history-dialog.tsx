@@ -32,7 +32,7 @@ import { StatsPanel } from '@/components/stats-panel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { JalaliDatePicker } from '@/components/jalali-date-picker'
 import { db } from '@/lib/db'
-import { previousRange } from '@/lib/stats'
+import { NO_CUSTOMER, previousRange } from '@/lib/stats'
 import { exportCsv, exportXlsx, printReport, rangeLabel } from '@/lib/report-export'
 import { formatDuration, formatNumber } from '@/lib/format'
 import { groupByDay, pageCount, pageGroups, summarize } from '@/lib/history'
@@ -339,7 +339,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
                           <td className="px-2 py-2">
                             <div className="truncate">{e.deviceNames.join('، ')}</div>
                             <div className="truncate text-xs text-muted-foreground">
-                              {[e.categoryNames.join('، '), e.customerName].filter(Boolean).join(' · ')}
+                              {[e.categoryNames.join('، '), e.customerName ?? NO_CUSTOMER].filter(Boolean).join(' · ')}
                             </div>
                           </td>
                           <td className="px-2 py-2 whitespace-nowrap">

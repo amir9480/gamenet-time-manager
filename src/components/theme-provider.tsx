@@ -62,7 +62,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [view, setView] = useLocalStorage<ViewMode>('gamenet-view', () => 'compact')
   const [grouping, setGrouping] = useLocalStorage<boolean>('gamenet-grouping', () => true)
 
-  const [rounding, setRounding] = useLocalStorage<Rounding>('gamenet-rounding', () => DEFAULT_ROUNDING)
+  const [storedRounding, setRounding] = useLocalStorage<Rounding>('gamenet-rounding', () => DEFAULT_ROUNDING)
+  // Older saved values have no `auto`: fall back to the defaults.
+  const rounding = { ...DEFAULT_ROUNDING, ...storedRounding }
 
   useEffect(() => {
     document.title = title

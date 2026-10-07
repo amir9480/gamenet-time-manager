@@ -550,9 +550,10 @@ export const sessionSearchFields = (
 // ---- final-amount rounding ----------------------------------------------------
 
 export type RoundMode = 'round' | 'floor' | 'ceil'
-export type Rounding = { step: number; mode: RoundMode }
+// `auto`: ending a session pre-fills the final amount already rounded.
+export type Rounding = { step: number; mode: RoundMode; auto: boolean }
 
-export const DEFAULT_ROUNDING: Rounding = { step: 1000, mode: 'round' }
+export const DEFAULT_ROUNDING: Rounding = { step: 1000, mode: 'round', auto: true }
 
 export const ROUND_MODE_LABELS: Record<RoundMode, string> = {
   round: 'نزدیک‌ترین',

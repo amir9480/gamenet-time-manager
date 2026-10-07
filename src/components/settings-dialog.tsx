@@ -275,6 +275,15 @@ export function SettingsDialog({
                 </p>
               </div>
 
+              <div className="flex items-center justify-between gap-4">
+                <Label htmlFor="auto-round-switch">رند کردن خودکار مبلغ نهایی هنگام اتمام تایم</Label>
+                <Switch
+                  id="auto-round-switch"
+                  checked={draft.rounding.auto}
+                  onCheckedChange={(auto) => patch({ rounding: { ...draft.rounding, auto } })}
+                />
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="round-step">رند کردن مبلغ نهایی</Label>
                 <div className="flex flex-wrap items-center gap-2">
@@ -309,7 +318,7 @@ export function SettingsDialog({
                   <span className="text-sm text-muted-foreground">تومان</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  دکمه‌ی «رند کردن» هنگام اتمام تایم، مبلغ نهایی را به این صورت گرد می‌کند.
+                  مبلغ نهایی هنگام اتمام تایم به این صورت گرد می‌شود (خودکار یا با دکمه‌ی «رند کردن»).
                 </p>
               </div>
 
