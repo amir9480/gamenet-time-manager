@@ -1,10 +1,10 @@
 [package]
-name = "gamenet-timer-manager"
+name = "gamenet-time-manager"
 version = "0.1.0"
-description = "Gamenet Timer Manager"
-authors = ["you"]
-license = ""
-repository = ""
+description = "Gamenet Time Manager"
+authors = ["Amir Alizadeh"]
+license = "MIT"
+repository = "https://github.com/amir9480/gamenet-time-manager"
 edition = "2024"
 rust-version = "1.90"
 
@@ -23,6 +23,8 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.12.1", features = [] }
 tauri-plugin-log = "2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+futures-util = "0.3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"

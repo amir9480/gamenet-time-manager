@@ -1,0 +1,27 @@
+name: پیشنهاد قابلیت
+description: ایده‌ای برای بهتر شدن برنامه دارید
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: چه مشکلی را حل می‌کند؟
+      description: موقعیتی که الان در آن به مشکل می‌خورید را شرح دهید.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: راه‌حل پیشنهادی
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: جایگزین‌هایی که بررسی کرده‌اید
+  - type: checkboxes
+    id: help
+    attributes:
+      label: مشارکت
+      options:
+        - label: خودم می‌خواهم این را پیاده‌سازی کنم

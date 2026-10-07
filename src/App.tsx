@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { CalendarClock, ChartNoAxesColumn, History, LayoutGrid, Moon, Lock, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
+import { CalendarClock, ChartNoAxesColumn, History, LayoutGrid, Moon, Lock, Download, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
 import { AddSessionDialog } from '@/components/add-session-dialog'
 import { AppIcon } from '@/components/app-icon'
+import { InstallDialog } from '@/components/install-dialog'
 import { HistoryDialog } from '@/components/history-dialog'
 import { LimitAlarmDialog, LockedLimitAlarm } from '@/components/limit-alarm-dialog'
 import { LiveClock } from '@/components/live-clock'
@@ -13,6 +14,7 @@ import { SessionCard } from '@/components/session-card'
 import { CustomersDialog } from '@/components/customers-dialog'
 import { ShiftSummary } from '@/components/shift-summary'
 import { SettingsDialog, type SettingsTab } from '@/components/settings-dialog'
+import { UpdateDialog } from '@/components/update-dialog'
 import { ThemeProvider, useTheme } from '@/components/theme-provider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +23,8 @@ import { Tip } from '@/components/tip'
 import { currentShift, SHIFT_VISIBLE_MS } from '@/lib/history'
 import { acceptedNoticeVersion, acceptNotice, NOTICE_VERSION } from '@/lib/notice'
 import { rank } from '@/lib/search'
+import { installSeen, markInstallSeen, useInstall } from '@/lib/install'
+import { APP_VERSION, REPO_URL } from '@/lib/platform'
 import { lockNow, useSecurity } from '@/lib/security'
 import { useIdleLock } from '@/lib/use-idle-lock'
 import {
@@ -82,11 +86,21 @@ function Main() {
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [showShift, setShowShift] = useState(false)
+  const [installOpen, setInstallOpen] = useState(false)
+  const { offer: offerInstall } = useInstall()
+  const ready = noticeOk && !onboarding && !importing
 
   // Only a brand-new database gets the onboarding dialog.
   useEffect(() => {
     needsOnboarding().then(setOnboarding)
   }, [])
+  // The install offer opens once by itself (after the notice/onboarding); the top-bar button reopens it.
+  useEffect(() => {
+    if (ready && offerInstall && !installSeen()) {
+      markInstallSeen()
+      setInstallOpen(true)
+    }
+  }, [ready, offerInstall])
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general')
 
   // Shift summary: shown instead of the welcome page while the last ended session is recent.
@@ -201,6 +215,18 @@ function Main() {
                 <Users />
               </Button>
             </Tip>
+            {offerInstall && (
+              <Tip label="نصب برنامه">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="نصب برنامه"
+                  onClick={() => setInstallOpen(true)}
+                >
+                  <Download />
+                </Button>
+              </Tip>
+            )}
             {hasPin && (
               <Tip label="قفل کردن">
                 <Button variant="outline" size="icon" aria-label="قفل کردن" onClick={lockNow}>
@@ -407,6 +433,22 @@ function Main() {
         )}
       </main>
 
+      <footer className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t pt-4 text-xs text-muted-foreground">
+        <span dir="ltr">v{APP_VERSION}</span>
+        <span aria-hidden>·</span>
+        <span>
+          ساخته‌شده توسط{' '}
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Amir Alizadeh
+          </a>
+        </span>
+      </footer>
+
       <NoticeDialog
         open={!noticeOk}
         since={noticeSince}
@@ -455,6 +497,9 @@ function Main() {
         sessions={sessions}
         onCreate={addSession}
       />
+
+      <InstallDialog open={installOpen} onOpenChange={setInstallOpen} />
+      <UpdateDialog enabled={ready} />
 
       <LimitAlarmDialog
         sessions={sessions}

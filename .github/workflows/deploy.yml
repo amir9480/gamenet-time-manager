@@ -1,0 +1,137 @@
+name: Release and deploy
+
+# Pushing a tag like v0.1.0-beta.1 builds the web PWA and the Windows installer, creates the
+# GitHub release with both, and only then publishes the PWA to GitHub Pages.
+# package.json is the single version source: it is set from the tag before every build, so the
+# web footer, the Tauri installer and the update check all agree.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: npm pkg set version="${GITHUB_REF_NAME#v}"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+        env:
+          # Project sites are served from /<repo>/; user/org sites (<user>.github.io) from /.
+          BASE_PATH: ${{ endsWith(github.repository, '.github.io') && '/' || format('/{0}/', github.event.repository.name) }}
+      - run: cd dist && zip -r ../gamenet-time-manager-web-${{ github.ref_name }}.zip .
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-zip
+          path: gamenet-time-manager-web-*.zip
+
+  desktop:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Sync version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm pkg set version="$VERSION"
+          # tauri.conf.json reads package.json; keep Cargo.toml in step too.
+          sed -i "0,/^version = .*/s//version = \"$VERSION\"/" src-tauri/Cargo.toml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri build --bundles nsis
+      - name: Name the installer
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir out
+          cp src-tauri/target/release/bundle/nsis/*-setup.exe "out/gamenet-time-manager_${VERSION}_x64-setup.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: out/*-setup.exe
+
+  release:
+    needs: [web, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          # Tags with a suffix (v0.1.0-beta.1) are pre-releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            assets/*.zip
+            assets/*-setup.exe
+
+  # Writes the released version back to main so the repo matches the tag. It does not retrigger
+  # this workflow (only tags do). Skipped when the tagged commit is not on main.
+  sync-version:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Commit version to main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tag is not on main; skipping."
+            exit 0
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm pkg set version="$VERSION"
+          sed -i "0,/^version = .*/s//version = \"$VERSION\"/" src-tauri/Cargo.toml
+          sed -i "/^name = \"gamenet-time-manager\"\$/{n;s/^version = .*/version = \"$VERSION\"/}" src-tauri/Cargo.lock
+          if git diff --quiet; then
+            echo "Already at $VERSION."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release $VERSION"
+          git push origin main
+
+  deploy:
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

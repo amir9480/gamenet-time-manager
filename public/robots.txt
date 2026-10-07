@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://amir9480.github.io/gamenet-time-manager/sitemap.xml

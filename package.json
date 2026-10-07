@@ -1,7 +1,9 @@
 {
-  "name": "gamenet-timer-manager",
+  "name": "gamenet-time-manager",
   "private": true,
-  "version": "0.0.0",
+  "license": "MIT",
+  "author": "Amir Alizadeh",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -38,6 +40,8 @@
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vite-plugin-pwa": "^2.0.0",
+    "workbox-window": "^7.4.1"
   }
 }

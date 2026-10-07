@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Build output
+/dist/
+/dev-dist/
+/src-tauri/target/
+/src-tauri/gen/schemas/
+*.exe
+*.msi
+*.zip
+*.tsbuildinfo

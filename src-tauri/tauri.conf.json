@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Gamenet Timer Manager",
-  "version": "0.1.0",
+  "productName": "Gamenet Time Manager",
+  "version": "../package.json",
   "identifier": "com.gamenet.timermanager",
   "build": {
     "frontendDist": "../dist",
@@ -26,7 +26,15 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
+    "publisher": "Amir Alizadeh",
+    "homepage": "https://github.com/amir9480/gamenet-time-manager",
+    "shortDescription": "Gamenet Time Manager",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

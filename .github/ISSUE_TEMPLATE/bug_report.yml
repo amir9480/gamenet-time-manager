@@ -1,0 +1,47 @@
+name: گزارش خطا
+description: چیزی درست کار نمی‌کند
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: چه اتفاقی افتاد؟
+      description: مشکل را کوتاه شرح دهید. اگر می‌توانید تصویر بگذارید.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: مراحل بازتولید
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: انتظار داشتید چه شود؟
+  - type: input
+    id: version
+    attributes:
+      label: نسخه‌ی برنامه
+      description: در پایین صفحه‌ی برنامه نوشته شده است.
+      placeholder: v0.1.0-beta.1
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: نوع نسخه
+      options:
+        - وب (PWA نصب‌شده)
+        - وب (تب مرورگر)
+        - ویندوز (exe)
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: مرورگر و سیستم‌عامل
+      placeholder: Chrome 130، ویندوز 11
