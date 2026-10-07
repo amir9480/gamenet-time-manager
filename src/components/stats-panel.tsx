@@ -159,7 +159,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <Kpi
           label="مجموع درآمد"
           value={toman(k.total)}
@@ -191,7 +191,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
             )
           }
         />
-        <div className="col-span-2 flex flex-col gap-2 rounded-lg border p-3">
+        <div className="col-span-full flex flex-col gap-2 rounded-lg border p-3">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>زمان بازی: {toman(k.timeCost)} ({toFa(timeShare)}٪)</span>
             <span>بوفه: {toman(k.extrasCost)} ({toFa(100 - timeShare)}٪)</span>

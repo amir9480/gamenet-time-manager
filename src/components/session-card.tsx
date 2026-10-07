@@ -308,81 +308,93 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
             }
           />
 
-          <div className="flex items-center gap-1.5">
-            {running ? (
-              <Tip label="توقف موقت تایم">
-                <Button size="sm" className="flex-1" onClick={pause}>
-                  <Pause /> توقف
-                </Button>
-              </Tip>
-            ) : (
-              <>
-                <Tip label={reserved ? 'شروع تایم' : 'ادامه‌ی تایم'}>
-                  <Button size="sm" className="flex-1" onClick={resume}>
-                    <Play /> {reserved ? 'شروع' : 'ادامه'}
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-1">
+              {running ? (
+                <Tip label="توقف موقت تایم">
+                  <Button size="sm" className="flex-1" onClick={pause}>
+                    <Pause /> توقف
                   </Button>
                 </Tip>
-                {reserved ? (
-                  <Tip label="لغو رزرو">
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="flex-1"
-                      onClick={() => setCancelOpen(true)}
-                    >
-                      <X /> لغو
+              ) : (
+                <>
+                  <Tip label={reserved ? 'شروع تایم' : 'ادامه‌ی تایم'}>
+                    <Button size="sm" className="flex-1" onClick={resume}>
+                      <Play /> {reserved ? 'شروع' : 'ادامه'}
                     </Button>
                   </Tip>
-                ) : (
-                  <Tip label="پایان تایم و مشاهده صورت‌حساب">
-                    <Button size="sm" variant="destructive" className="flex-1" onClick={openSummary}>
-                      <Square /> اتمام
-                    </Button>
-                  </Tip>
-                )}
-              </>
-            )}
-            <Tip label={remaining === undefined ? 'تعیین محدودیت زمانی' : 'ویرایش محدودیت زمانی'}>
-              <Button
-                variant={exceeded ? 'destructive' : remaining === undefined ? 'outline' : 'secondary'}
-                size="icon-sm"
-                aria-label="محدودیت زمانی"
-                onClick={() => setLimitOpen(true)}
-              >
-                <AlarmClock />
-              </Button>
-            </Tip>
-            <ExtraTimeDialog
-              compact
-              groups={groups}
-              allGroups={settings.rateGroups}
-              currentTypeId={type.id}
-              onAdd={(t) => onUpdate((s) => addExtraTime(s, t))}
-            />
-            <ExtraItemPicker
-              compact
-              settings={settings}
-              onAdd={(item) => onUpdate((s) => addExtraItem(s, item))}
-            />
+                  {reserved ? (
+                    <Tip label="لغو رزرو">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="flex-1"
+                        onClick={() => setCancelOpen(true)}
+                      >
+                        <X /> لغو
+                      </Button>
+                    </Tip>
+                  ) : (
+                    <Tip label="پایان تایم و مشاهده صورت‌حساب">
+                      <Button size="sm" variant="destructive" className="flex-1" onClick={openSummary}>
+                        <Square /> اتمام
+                      </Button>
+                    </Tip>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-1.5">
+              <Tip label={remaining === undefined ? 'تعیین محدودیت زمانی' : 'ویرایش محدودیت زمانی'}>
+                <Button
+                  variant={exceeded ? 'destructive' : remaining === undefined ? 'outline' : 'secondary'}
+                  size="icon-sm"
+                  aria-label="محدودیت زمانی"
+                  onClick={() => setLimitOpen(true)}
+                >
+                  <AlarmClock />
+                </Button>
+              </Tip>
+              <ExtraTimeDialog
+                compact
+                groups={groups}
+                allGroups={settings.rateGroups}
+                currentTypeId={type.id}
+                onAdd={(t) => onUpdate((s) => addExtraTime(s, t))}
+              />
+              <ExtraItemPicker
+                compact
+                settings={settings}
+                onAdd={(item) => onUpdate((s) => addExtraItem(s, item))}
+              />
+            </div>
           </div>
 
           {(session.extraTimes.length > 0 || session.extraItems.length > 0) && (
-            <Tip label="مشاهده و تغییر زمان‌ها و اقلام اضافه">
-              <Badge
-                variant="secondary"
-                className="h-auto cursor-pointer self-center py-0.5 hover:bg-secondary/70"
-                render={<button type="button" onClick={() => setManageOpen(true)} />}
-              >
-                {session.extraTimes.length > 0 && (
-                  <>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              {session.extraTimes.length > 0 && (
+                <Tip label="مشاهده و تغییر زمان‌های اضافه">
+                  <Badge
+                    variant="outline"
+                    className="h-auto cursor-pointer py-0.5 hover:bg-muted"
+                    render={<button type="button" onClick={() => setManageOpen(true)} />}
+                  >
                     <Clock /> {formatNumber(session.extraTimes.length)}
-                  </>
-                )}
-                {session.extraItems.length > 0 && (
-                  <>بوفه: {formatNumber(session.extraItems.reduce((n, i) => n + i.qty, 0))}</>
-                )}
-              </Badge>
-            </Tip>
+                  </Badge>
+                </Tip>
+              )}
+              {session.extraItems.length > 0 && (
+                <Tip label="مشاهده و تغییر بوفه">
+                  <Badge
+                    variant="secondary"
+                    className="h-auto cursor-pointer py-0.5 hover:bg-secondary/70"
+                    render={<button type="button" onClick={() => setManageOpen(true)} />}
+                  >
+                    بوفه: {formatNumber(session.extraItems.reduce((n, i) => n + i.qty, 0))}
+                  </Badge>
+                </Tip>
+              )}
+            </div>
           )}
         </CardContent>
         {dialogs}
@@ -502,7 +514,7 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
             ))}
           </div>
         )}
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           {running ? (
             <Tip label="توقف موقت تایم">
               <Button className="flex-1" onClick={pause}>

@@ -209,7 +209,7 @@ function AddManyDialog({
               <Label htmlFor="dev-prefix">پیشوند نام</Label>
               <Input id="dev-prefix" value={prefix} onChange={(e) => setPrefix(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="dev-count">تعداد</Label>
                 <Input

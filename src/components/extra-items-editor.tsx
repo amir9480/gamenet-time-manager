@@ -81,7 +81,7 @@ export function ExtraItemsEditor({ categories, items, onChange }: Props) {
             </div>
 
             {list.length > 0 && (
-              <div className="grid grid-cols-[1fr_7rem_9rem_2rem] gap-2 text-xs text-muted-foreground">
+              <div className="hidden grid-cols-[1fr_7rem_9rem_2rem] gap-2 text-xs text-muted-foreground sm:grid">
                 <span>نام مورد</span>
                 <span>قیمت (تومان)</span>
                 <span>دسته‌بندی</span>
@@ -89,12 +89,16 @@ export function ExtraItemsEditor({ categories, items, onChange }: Props) {
               </div>
             )}
             {list.map((i) => (
-              <div key={i.id} className="grid grid-cols-[1fr_7rem_9rem_2rem] items-center gap-2">
+              <div
+                key={i.id}
+                className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_9rem_2rem] sm:items-center"
+              >
                 <Input
                   aria-label="نام مورد"
                   aria-invalid={!i.name.trim()}
                   value={i.name}
                   onChange={(e) => update(i.id, { name: e.target.value })}
+                  className="col-span-2 sm:col-span-1"
                 />
                 <Input
                   aria-label={`قیمت ${i.name}`}
@@ -125,6 +129,7 @@ export function ExtraItemsEditor({ categories, items, onChange }: Props) {
                   variant="ghost"
                   size="icon"
                   aria-label="حذف"
+                  className="col-span-2 justify-self-end sm:col-span-1"
                   onClick={() =>
                     onChange(
                       categories,

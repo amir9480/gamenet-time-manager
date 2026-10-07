@@ -75,8 +75,8 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative w-full sm:flex-1">
               <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 aria-label="جستجوی مشتری"
@@ -90,6 +90,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
               />
             </div>
             <Button
+              className="w-full sm:w-auto"
               variant={debtorsOnly ? 'default' : 'outline'}
               aria-pressed={debtorsOnly}
               disabled={debts === undefined}
@@ -100,7 +101,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
             >
               <NotebookPen /> بدهکاران{debts ? ` (${formatNumber(debtors.length)})` : ''}
             </Button>
-            <Button variant="outline" onClick={() => setAdding(true)}>
+            <Button className="w-full sm:w-auto" variant="outline" onClick={() => setAdding(true)}>
               <Plus /> مشتری جدید
             </Button>
           </div>
@@ -118,7 +119,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
             </p>
           ) : (
             <div className="flex flex-col divide-y rounded-lg border">
-              <div className="grid grid-cols-[1fr_1fr_7rem_8rem_5rem] gap-2 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <div className="hidden grid-cols-[1fr_1fr_7rem_8rem_5rem] gap-2 bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:grid">
                 <span>نام</span>
                 <span>شماره‌ی تماس</span>
                 <span>مجموع خرید</span>
@@ -129,7 +130,10 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                 const busy = usage.customerIds.has(c.id)
                 const indebted = owed(c.id) > 0
                 return (
-                  <div key={c.id} className="grid grid-cols-[1fr_1fr_7rem_8rem_5rem] items-center gap-2 px-3 py-1.5">
+                  <div
+                    key={c.id}
+                    className="grid grid-cols-2 items-center gap-2 px-3 py-1.5 sm:grid-cols-[1fr_1fr_7rem_8rem_5rem]"
+                  >
                     <span className="truncate text-sm">{c.name}</span>
                     <span className="truncate text-sm text-muted-foreground" dir="ltr">
                       {c.phone || '—'}
@@ -168,7 +172,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                         )
                       })()
                     )}
-                    <div className="flex justify-end gap-0.5">
+                    <div className="col-start-2 row-start-3 flex justify-end gap-0.5 sm:col-start-auto sm:row-start-auto">
                       <Tip label="ویرایش">
                         <Button
                           variant="ghost"

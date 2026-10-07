@@ -191,13 +191,13 @@ export function SettingsDialog({
           </DialogHeader>
 
           <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className="gap-4">
-            <TabsList className="w-full">
-              <TabsTrigger value="general">عمومی</TabsTrigger>
-              <TabsTrigger value="rates">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
-              <TabsTrigger value="devices">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
-              <TabsTrigger value="extras">بوفه {dot(extrasValid)}</TabsTrigger>
-              <TabsTrigger value="security">امنیت</TabsTrigger>
-              <TabsTrigger value="data">داده‌ها</TabsTrigger>
+            <TabsList className="w-full max-w-full justify-start overflow-x-auto">
+              <TabsTrigger value="general" className="shrink-0">عمومی</TabsTrigger>
+              <TabsTrigger value="rates" className="shrink-0">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
+              <TabsTrigger value="devices" className="shrink-0">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
+              <TabsTrigger value="extras" className="shrink-0">بوفه {dot(extrasValid)}</TabsTrigger>
+              <TabsTrigger value="security" className="shrink-0">امنیت</TabsTrigger>
+              <TabsTrigger value="data" className="shrink-0">داده‌ها</TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="flex flex-col gap-4">

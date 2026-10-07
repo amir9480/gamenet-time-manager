@@ -188,18 +188,20 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
           <DialogDescription>تایم‌های پایان‌یافته به تفکیک روز و درآمد هر روز؛ با فیلتر نام، جمع درآمد هر مشتری را ببینید.</DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {PRESETS.map((p) => (
-            <Button
-              key={p.id}
-              size="sm"
-              variant={preset === p.id ? 'default' : 'outline'}
-              onClick={() => choosePreset(p.id)}
-            >
-              {p.label}
-            </Button>
-          ))}
-          <div className="ms-auto flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex flex-wrap items-center gap-2">
+            {PRESETS.map((p) => (
+              <Button
+                key={p.id}
+                size="sm"
+                variant={preset === p.id ? 'default' : 'outline'}
+                onClick={() => choosePreset(p.id)}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2 sm:ms-auto sm:flex-row sm:flex-wrap sm:items-center">
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={<Button size="sm" variant="outline" disabled={!entries?.length} />}
@@ -215,7 +217,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
               </DropdownMenuContent>
             </DropdownMenu>
           {preset !== 'all' && (
-            <>
+            <div className="flex flex-wrap items-center gap-2">
               <JalaliDatePicker
                 label="از"
                 value={startOfDay(range.from)}
@@ -226,7 +228,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
                 value={startOfDay(range.to)}
                 onChange={(d) => setCustom(Math.min(range.from, d), endOfDay(d))}
               />
-            </>
+            </div>
           )}
           </div>
         </div>
@@ -277,12 +279,12 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
           </TabsList>
 
           <TabsContent value="history" className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <Stat label="تعداد تایم" value={toFa(formatNumber(summary.count))} />
           <Stat label="مجموع زمان" value={toFa(formatDuration(summary.durationMs))} ltr />
           <Stat label="درآمد زمان" value={toman(summary.timeCost)} />
           <Stat label="درآمد بوفه" value={toman(summary.extrasCost)} />
-          <div className="col-span-2 flex items-center justify-between rounded-lg bg-primary px-4 py-3 text-primary-foreground sm:col-span-4">
+          <div className="col-span-full flex items-center justify-between rounded-lg bg-primary px-4 py-3 text-primary-foreground">
             <span className="font-bold">مجموع درآمد</span>
             <span className="text-lg font-bold">{toman(summary.total)}</span>
           </div>
@@ -294,7 +296,85 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
           </p>
         ) : (
           <div className="flex flex-col gap-3">
-            <table className="w-full table-fixed text-start text-sm">
+            <div className="flex flex-col gap-3 sm:hidden">
+              {visible.map((g) => (
+                <div key={g.key} className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+                    <div>
+                      <div className="font-bold">{formatJalaliLong(g.entries[0].endedAt)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {toFa(g.key)} · {toFa(g.entries.length)} تایم ·{' '}
+                        <span dir="ltr" className="inline-block">
+                          {toFa(formatDuration(g.durationMs))}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="font-bold whitespace-nowrap">{toman(g.total)}</div>
+                  </div>
+                  {g.entries.map((e) => (
+                    <div key={e.id} className="flex flex-col gap-2 rounded-lg border p-3">
+                      <button
+                        type="button"
+                        className="flex items-start justify-between gap-2 text-start"
+                        onClick={() => setExpanded(expanded === e.id ? null : e.id)}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium">{e.deviceNames.join('، ')}</div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {[e.categoryNames.join('، '), e.customerName ?? NO_CUSTOMER]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </div>
+                        </div>
+                        <ChevronDown
+                          className={cn(
+                            'mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform',
+                            expanded === e.id && 'rotate-180',
+                          )}
+                        />
+                      </button>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span dir="ltr" className="inline-block">
+                          {formatJalaliClock(e.startedAt, false)} –{' '}
+                          {formatJalaliClock(e.endedAt, false)}
+                        </span>
+                        <span dir="ltr" className="inline-block">
+                          {toFa(formatDuration(e.durationMs))}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-bold">
+                          {toman(e.total)}
+                          {e.onAccount && (
+                            <Badge variant="destructive" className="ms-1.5">
+                              نسیه
+                            </Badge>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="حذف"
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            setPending({ kind: 'one', entry: e })
+                          }}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
+                      {expanded === e.id && (
+                        <div className="border-t pt-2">
+                          <Details entry={e} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            <table className="hidden w-full table-fixed text-start text-sm sm:table">
               <colgroup>
                 <col className="w-[28%]" />
                 <col className="w-[26%]" />
@@ -397,11 +477,16 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
               </tbody>
             </table>
 
-            <div className="flex items-center justify-between">
-              <Button variant="destructive" size="sm" onClick={() => setPending({ kind: 'range' })}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <Button
+                variant="destructive"
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={() => setPending({ kind: 'range' })}
+              >
                 <Trash2 /> حذف تاریخچه‌ی این بازه
               </Button>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2">
                 <Button
                   variant="outline"
                   size="icon-sm"

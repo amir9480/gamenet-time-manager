@@ -74,7 +74,7 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
               </Tip>
             </div>
 
-            <div className="grid grid-cols-[1.5rem_1fr_1fr_2rem] items-center gap-2 text-xs text-muted-foreground">
+            <div className="hidden grid-cols-[1.5rem_1fr_1fr_2rem] items-center gap-2 text-xs text-muted-foreground sm:grid">
               <Tip label="پیش‌فرض">
                 <span>پ</span>
               </Tip>
@@ -89,7 +89,10 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
               {g.prices.map((p) => {
                 const inUse = usage.priceIds.has(p.id)
                 return (
-                  <div key={p.id} className="grid grid-cols-[1.5rem_1fr_1fr_2rem] items-center gap-2">
+                  <div
+                    key={p.id}
+                    className="grid grid-cols-[1.5rem_1fr_2rem] items-center gap-2 sm:grid-cols-[1.5rem_1fr_1fr_2rem]"
+                  >
                     <RadioGroupItem value={p.id} aria-label={`پیش‌فرض: ${p.name}`} />
                     <Input
                       aria-label="نام قیمت"
@@ -117,6 +120,7 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
                           ),
                         }))
                       }
+                      className="col-start-2 row-start-2 sm:col-start-3 sm:row-start-1"
                     />
                     <Tip
                       label={

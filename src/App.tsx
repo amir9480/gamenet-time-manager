@@ -189,14 +189,14 @@ function Main() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 p-4 md:p-6">
-      <header className="sticky top-0 z-40 -mx-4 -mt-4 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:-mt-6 md:px-6">
-        <div className="flex items-center gap-3">
-          <AppIcon className="size-10" />
-          <h1 className="text-2xl font-bold">{title}</h1>
+      <header className="sticky top-0 z-40 -mx-4 -mt-4 flex flex-wrap items-center justify-between gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:-mt-6 md:px-6">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <AppIcon className="size-8 sm:size-10" />
+          <h1 className="text-lg font-bold sm:text-2xl">{title}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {(sessions.length > 0 || shift) && <LiveClock size="small" />}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Tip label="تاریخچه">
               <Button
                 variant="outline"
@@ -315,12 +315,12 @@ function Main() {
                 </div>
               )}
               <div className="flex flex-wrap items-center gap-1">
-                <div className="relative">
+                <div className="relative w-full sm:w-52">
                   <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     aria-label="جستجوی تایم‌ها"
                     placeholder="جستجو در تایم‌ها…"
-                    className="h-9 w-52 ps-8 pe-8 text-sm"
+                    className="h-9 w-full ps-8 pe-8 text-sm"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />

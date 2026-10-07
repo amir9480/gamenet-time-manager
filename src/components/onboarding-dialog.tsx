@@ -208,7 +208,10 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
 
                     <div className="text-xs text-muted-foreground">نرخ‌های ساعتی (نرخ «{PREFERRED_DEFAULT_PRICE}» پیش‌فرض است؛ اگر نباشد، اولی)</div>
                     {c.prices.map((p) => (
-                      <div key={p.id} className="grid grid-cols-[1fr_11rem_2rem] items-center gap-2">
+                      <div
+                        key={p.id}
+                        className="grid grid-cols-[1fr_2rem] items-center gap-2 sm:grid-cols-[1fr_11rem_2rem]"
+                      >
                         <Input
                           aria-label={`نام نرخ ${d.name}`}
                           aria-invalid={!p.name.trim()}
@@ -219,6 +222,7 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                               ps.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)),
                             )
                           }
+                          className="col-span-2 sm:col-span-1"
                         />
                         <Money>
                           <Input
@@ -282,8 +286,11 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                     <p className="text-xs text-muted-foreground">موردی در این دسته نیست.</p>
                   )}
                   {choice.items[e.id].map((i) => (
-                    <div key={i.id} className="grid grid-cols-[1fr_11rem_2rem] items-center gap-2">
-                      <span className="truncate">{i.name}</span>
+                    <div
+                      key={i.id}
+                      className="grid grid-cols-[1fr_2rem] items-center gap-2 sm:grid-cols-[1fr_11rem_2rem]"
+                    >
+                      <span className="col-span-2 truncate sm:col-span-1">{i.name}</span>
                       <Money>
                         <Input
                           aria-label={`قیمت ${i.name}`}
