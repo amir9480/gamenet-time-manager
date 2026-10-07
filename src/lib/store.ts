@@ -1,24 +1,50 @@
 import { useEffect, useState } from 'react'
 
-export type PriceType = { id: string; name: string; price: number }
+// ---- catalog types ------------------------------------------------------------
 
-export type CatalogItem = { id: string; name: string; price: number }
+export type Price = { id: string; name: string; price: number }
+
+// A named group of per-hour prices (e.g. «نرخ پی‌سی») with one default price.
+export type RateGroup = { id: string; name: string; prices: Price[]; defaultPriceId: string }
+
+// A price flattened out of its group; this is what segments/extra times mirror.
+export type FlatPrice = Price & { groupId: string; groupName: string }
+
+export type DeviceCategory = { id: string; name: string }
+
+// A device can be billed with the prices of every rate group in `rateIds`.
+export type Device = { id: string; categoryId: string; name: string; rateIds: string[] }
+
+export type ExtraCategory = { id: string; name: string }
+
+export type CatalogItem = { id: string; name: string; price: number; categoryId: string }
+
+export type Customer = { id: string; name: string; phone?: string }
 
 export type Settings = {
-  priceTypes: PriceType[]
-  defaultTypeId: string
+  rateGroups: RateGroup[]
+  deviceCategories: DeviceCategory[]
+  devices: Device[]
+  extraCategories: ExtraCategory[]
   extraItems: CatalogItem[]
+  customers: Customer[]
 }
 
-// One continuous run at a single rate. `typeName`/`price` mirror the price type
-// `typeId`; editing a price type in Settings rewrites them everywhere
-// (see `applyPriceTypes`). If the type was deleted the last values are kept.
+// ---- session types ----------------------------------------------------------
+
+// One continuous run on one device at a single price. `typeName`/`price` mirror the price
+// `typeId`, `deviceName`/`categoryName` mirror the device; editing them in Settings rewrites
+// them everywhere (see `applyPrices` / `applyDevices`). If the source was deleted the last
+// values are kept.
 export type Segment = {
   from: number
   to: number | null
   typeId: string
   typeName: string
   price: number
+  deviceId: string
+  deviceName: string
+  categoryName: string
 }
 
 // `catalogId` links an item to its catalog entry so Settings edits propagate to live
@@ -32,7 +58,7 @@ export type ExtraItem = {
   description?: string
 }
 
-// Manually added minutes, billed at the price type chosen when added.
+// Manually added minutes, billed at the price chosen when added.
 export type ExtraTime = {
   id: string
   name: string
@@ -44,9 +70,11 @@ export type ExtraTime = {
 
 export type Session = {
   id: string
-  // Number used for the default name «دستگاه N»; `name` overrides it when set.
-  number: number
-  name: string
+  // Current device (snapshots of its name/category are kept in sync by `applyDevices`).
+  deviceId: string
+  deviceName: string
+  categoryName: string
+  customerId?: string
   status: 'running' | 'paused'
   typeId: string
   segments: Segment[]
@@ -58,80 +86,137 @@ export const OTHER_ITEM_NAME = 'موارد دیگر'
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 
-export const defaultPriceTypes = (): { types: PriceType[]; defaultId: string } => {
-  const names = ['یک دسته', 'دو دسته', 'سه دسته', 'چهار دسته']
-  const types = names.map((name, i) => ({ id: uid(), name, price: (i + 1) * 1000 }))
-  return { types, defaultId: types[1].id }
-}
-
-export const defaultExtraItems = (): CatalogItem[] => [
-  { id: uid(), name: 'نوشابه', price: 1000 },
-  { id: uid(), name: 'چیپس', price: 2000 },
-  { id: uid(), name: 'کیک', price: 500 },
-]
+// ---- defaults -----------------------------------------------------------------
 
 export const defaultSettings = (): Settings => {
-  const { types, defaultId } = defaultPriceTypes()
-  return { priceTypes: types, defaultTypeId: defaultId, extraItems: defaultExtraItems() }
+  const prices: Price[] = ['یک دسته', 'دو دسته', 'سه دسته', 'چهار دسته'].map((name, i) => ({
+    id: uid(),
+    name,
+    price: (i + 1) * 1000,
+  }))
+  const cat = (name: string) => ({ id: uid(), name })
+  const extraCategories = ['خوراکی', 'نوشیدنی سرد', 'نوشیدنی گرم', 'قهوه', 'سیگار و قلیان'].map(cat)
+  const byName = (n: string) => extraCategories.find((c) => c.name === n)!.id
+  return {
+    rateGroups: [{ id: uid(), name: 'نرخ عمومی', prices, defaultPriceId: prices[1].id }],
+    deviceCategories: ['پی‌سی', 'پلی‌استیشن', 'بیلیارد', 'پینگ‌پنگ'].map(cat),
+    devices: [],
+    extraCategories,
+    extraItems: [
+      { id: uid(), name: 'نوشابه', price: 1000, categoryId: byName('نوشیدنی سرد') },
+      { id: uid(), name: 'چیپس', price: 2000, categoryId: byName('خوراکی') },
+      { id: uid(), name: 'کیک', price: 500, categoryId: byName('خوراکی') },
+    ],
+    customers: [],
+  }
 }
 
-export const defaultType = (settings: Settings): PriceType =>
-  settings.priceTypes.find((t) => t.id === settings.defaultTypeId) ?? settings.priceTypes[0]
+// ---- prices & devices ---------------------------------------------------------
 
-// Falls back to the default type if the session's type was deleted in Settings.
-export const selectedType = (settings: Settings, s: Session): PriceType =>
-  settings.priceTypes.find((t) => t.id === s.typeId) ?? defaultType(settings)
+export const flatPrices = (groups: RateGroup[]): FlatPrice[] =>
+  groups.flatMap((g) => g.prices.map((p) => ({ ...p, groupId: g.id, groupName: g.name })))
 
-// ---- sessions list ----------------------------------------------------------
+// The device's rate groups (in the order they were assigned) with their prices.
+export const devicePriceGroups = (device: Device | undefined, groups: RateGroup[]): RateGroup[] =>
+  device
+    ? device.rateIds.flatMap((id) => groups.filter((g) => g.id === id && g.prices.length > 0))
+    : []
 
-export const defaultSessionName = (number: number) => `دستگاه ${number}`
+export const devicePrices = (device: Device | undefined, groups: RateGroup[]): FlatPrice[] =>
+  flatPrices(devicePriceGroups(device, groups))
 
-export const displayName = (s: Session) => s.name.trim() || defaultSessionName(s.number)
-
-// Smallest positive number not used by a session currently on screen.
-export const nextFreeNumber = (sessions: Session[]) => {
-  const used = new Set(sessions.map((s) => s.number))
-  let n = 1
-  while (used.has(n)) n++
-  return n
+// Default price of the device's first rate group.
+export const defaultPriceFor = (
+  device: Device | undefined,
+  groups: RateGroup[],
+): FlatPrice | undefined => {
+  const prices = devicePrices(device, groups)
+  const first = devicePriceGroups(device, groups)[0]
+  return prices.find((p) => p.id === first?.defaultPriceId) ?? prices[0]
 }
+
+export const deviceOf = (settings: Settings, s: Session) =>
+  settings.devices.find((d) => d.id === s.deviceId)
+
+// Falls back to the device default if the session's price was deleted in Settings.
+export const selectedPrice = (settings: Settings, s: Session): FlatPrice => {
+  const device = deviceOf(settings, s)
+  const own = devicePrices(device, settings.rateGroups)
+  const pick =
+    own.find((p) => p.id === s.typeId) ??
+    flatPrices(settings.rateGroups).find((p) => p.id === s.typeId) ??
+    defaultPriceFor(device, settings.rateGroups)
+  const last = s.segments[s.segments.length - 1]
+  return (
+    pick ?? {
+      id: s.typeId,
+      name: last?.typeName ?? '—',
+      price: last?.price ?? 0,
+      groupId: '',
+      groupName: '',
+    }
+  )
+}
+
+export const categoryName = (settings: Settings, device: Device) =>
+  settings.deviceCategories.find((c) => c.id === device.categoryId)?.name ?? ''
+
+export const freeDevices = (devices: Device[], sessions: Session[]) => {
+  const used = new Set(sessions.map((s) => s.deviceId))
+  return devices.filter((d) => !used.has(d.id))
+}
+
+// ---- sessions ---------------------------------------------------------------
 
 export const createSession = (
-  sessions: Session[],
-  type: PriceType,
-  name: string,
+  device: Device,
+  category: string,
+  price: FlatPrice,
+  customerId: string | undefined,
   now: number,
 ): Session => ({
   id: uid(),
-  number: nextFreeNumber(sessions),
-  name: name.trim(),
+  deviceId: device.id,
+  deviceName: device.name,
+  categoryName: category,
+  customerId,
   status: 'running',
-  typeId: type.id,
-  segments: [{ from: now, to: null, typeId: type.id, typeName: type.name, price: type.price }],
+  typeId: price.id,
+  segments: [openSegment(price, device.id, device.name, category, now)],
   extraTimes: [],
   extraItems: [],
 })
 
-// ---- session transitions ----------------------------------------------
-
 const closeOpen = (segments: Segment[], now: number): Segment[] =>
   segments.map((seg) => (seg.to === null ? { ...seg, to: now } : seg))
 
-const openSegment = (type: PriceType, now: number): Segment => ({
+const openSegment = (
+  price: Price,
+  deviceId: string,
+  deviceName: string,
+  categoryName: string,
+  now: number,
+): Segment => ({
   from: now,
   to: null,
-  typeId: type.id,
-  typeName: type.name,
-  price: type.price,
+  typeId: price.id,
+  typeName: price.name,
+  price: price.price,
+  deviceId,
+  deviceName,
+  categoryName,
 })
 
+const openOnSession = (s: Session, price: Price, now: number) =>
+  openSegment(price, s.deviceId, s.deviceName, s.categoryName, now)
+
 export const resumeSession = (settings: Settings, s: Session, now: number): Session => {
-  const type = selectedType(settings, s)
+  const price = selectedPrice(settings, s)
   return {
     ...s,
     status: 'running',
-    typeId: type.id,
-    segments: [...s.segments, openSegment(type, now)],
+    typeId: price.id,
+    segments: [...s.segments, openOnSession(s, price, now)],
   }
 }
 
@@ -147,13 +232,30 @@ export const changeType = (
   typeId: string,
   now: number,
 ): Session => {
-  const type = settings.priceTypes.find((t) => t.id === typeId)
-  if (!type) return s
+  const price = flatPrices(settings.rateGroups).find((p) => p.id === typeId)
+  if (!price) return s
   if (s.status !== 'running') return { ...s, typeId }
   return {
     ...s,
     typeId,
-    segments: [...closeOpen(s.segments, now), openSegment(type, now)],
+    segments: [...closeOpen(s.segments, now), openOnSession(s, price, now)],
+  }
+}
+
+// Moves the session to another device: a running session closes its segment and opens a new
+// one on the new device; a paused one just remembers the device/price for the next resume.
+export const switchDevice = (
+  s: Session,
+  device: Device,
+  category: string,
+  price: FlatPrice,
+  now: number,
+): Session => {
+  const next = { ...s, deviceId: device.id, deviceName: device.name, categoryName: category, typeId: price.id }
+  if (s.status !== 'running') return next
+  return {
+    ...next,
+    segments: [...closeOpen(s.segments, now), openOnSession(next, price, now)],
   }
 }
 
@@ -181,10 +283,12 @@ export const computeCost = (s: Session, now: number) =>
   extraTimesCost(s) +
   extraItemsCost(s)
 
-// Propagate edited price types to every existing session (past segments, the
-// running one and extra-time entries). Sessions of deleted types keep their values.
-export const applyPriceTypes = (sessions: Session[], types: PriceType[]): Session[] => {
-  const byId = new Map(types.map((t) => [t.id, t]))
+// ---- settings → live sessions ----------------------------------------------------
+
+// Propagate edited prices to every live session (past segments, the running one and
+// extra-time entries). Entries of deleted prices keep their values.
+export const applyPrices = (sessions: Session[], groups: RateGroup[]): Session[] => {
+  const byId = new Map(flatPrices(groups).map((t) => [t.id, t]))
   const sync = <T extends { typeId: string; typeName: string; price: number }>(x: T): T => {
     const t = byId.get(x.typeId)
     return t ? { ...x, typeName: t.name, price: t.price } : x
@@ -196,7 +300,26 @@ export const applyPriceTypes = (sessions: Session[], types: PriceType[]): Sessio
   }))
 }
 
-// Propagate edited catalog items (name/price) to extra items on existing sessions.
+// Propagate renamed devices/categories to live sessions.
+export const applyDevices = (
+  sessions: Session[],
+  devices: Device[],
+  categories: DeviceCategory[],
+): Session[] => {
+  const byId = new Map(devices.map((d) => [d.id, d]))
+  const catName = (id: string) => categories.find((c) => c.id === id)?.name
+  return sessions.map((s) => {
+    const sync = <T extends { deviceId: string; deviceName: string; categoryName: string }>(
+      x: T,
+    ): T => {
+      const d = byId.get(x.deviceId)
+      return d ? { ...x, deviceName: d.name, categoryName: catName(d.categoryId) ?? x.categoryName } : x
+    }
+    return { ...sync(s), segments: s.segments.map(sync) }
+  })
+}
+
+// Propagate edited catalog items (name/price) to extra items on live sessions.
 // Items whose catalog entry was deleted keep their last values.
 export const applyExtraItems = (sessions: Session[], catalog: CatalogItem[]): Session[] => {
   const byId = new Map(catalog.map((c) => [c.id, c]))
@@ -234,6 +357,16 @@ export const addExtraItem = (s: Session, item: Omit<ExtraItem, 'id'>): Session =
   return { ...s, extraItems: [...s.extraItems, { ...item, id: uid() }] }
 }
 
+// ---- what a live session still references (blocks deletion in Settings) -----------
+
+export type Usage = { deviceIds: Set<string>; customerIds: Set<string>; priceIds: Set<string> }
+
+export const usageOf = (sessions: Session[]): Usage => ({
+  deviceIds: new Set(sessions.map((s) => s.deviceId)),
+  customerIds: new Set(sessions.flatMap((s) => (s.customerId ? [s.customerId] : []))),
+  priceIds: new Set(sessions.map((s) => s.typeId)),
+})
+
 // ---- persistence ----------------------------------------------------------
 
 const readRaw = (key: string): unknown => {
@@ -268,7 +401,11 @@ export function useLocalStorage<T>(key: string, initial: () => T) {
 export type HistoryEntry = {
   id: string
   sessionId: string
-  name: string
+  deviceNames: string[]
+  categoryNames: string[]
+  customerId?: string
+  customerName?: string
+  customerPhone?: string
   startedAt: number
   endedAt: number
   durationMs: number
@@ -281,7 +418,13 @@ export type HistoryEntry = {
   total: number
 }
 
-export const buildHistoryEntry = (s: Session, now: number): HistoryEntry => {
+const distinct = (xs: string[]) => [...new Set(xs.filter(Boolean))]
+
+export const buildHistoryEntry = (
+  s: Session,
+  customer: Customer | undefined,
+  now: number,
+): HistoryEntry => {
   const closed = pauseSession(s, now)
   const timeCost = closed.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0)
   const timesCost = extraTimesCost(closed)
@@ -289,7 +432,11 @@ export const buildHistoryEntry = (s: Session, now: number): HistoryEntry => {
   return {
     id: uid(),
     sessionId: s.id,
-    name: displayName(s),
+    deviceNames: distinct(closed.segments.map((g) => g.deviceName)),
+    categoryNames: distinct(closed.segments.map((g) => g.categoryName)),
+    customerId: customer?.id,
+    customerName: customer?.name,
+    customerPhone: customer?.phone,
     startedAt: closed.segments[0]?.from ?? now,
     endedAt: now,
     durationMs: elapsedMs(closed, now),
@@ -302,5 +449,3 @@ export const buildHistoryEntry = (s: Session, now: number): HistoryEntry => {
     total: timeCost + timesCost + itemsCost,
   }
 }
-
-export const isDefaultName = (name: string) => /^دستگاه \d+$/.test(name)

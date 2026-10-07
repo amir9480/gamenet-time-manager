@@ -20,10 +20,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { StatsPanel } from '@/components/StatsPanel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { JalaliDatePicker } from '@/components/JalaliDatePicker'
-import { NameCombobox } from '@/components/NameCombobox'
 import { db } from '@/lib/db'
 import { previousRange } from '@/lib/stats'
 import { formatDuration, formatNumber } from '@/lib/format'
@@ -64,20 +70,50 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
   const [page, setPage] = useState(0)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [pending, setPending] = useState<Pending>(null)
-  const [nameFilter, setNameFilter] = useState('')
+  // 'all' | 'none' (no customer) | customer id; 'all' | category name
+  const [customerFilter, setCustomerFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
 
   const rangeEntries = useLiveQuery(
     () => db.history.where('endedAt').between(range.from, range.to, true, true).reverse().toArray(),
     [range.from, range.to],
   )
 
-  const names = useMemo(() => [...new Set((rangeEntries ?? []).map((e) => e.name))], [rangeEntries])
-  const byName = (list: HistoryEntry[]) => {
-    const q = nameFilter.trim().toLowerCase()
-    return q ? list.filter((e) => e.name.toLowerCase().includes(q)) : list
-  }
+  const customerItems = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const e of rangeEntries ?? [])
+      if (e.customerId && !seen.has(e.customerId))
+        seen.set(
+          e.customerId,
+          e.customerPhone ? `${e.customerName} (${e.customerPhone})` : (e.customerName ?? ''),
+        )
+    if (customerFilter !== 'all' && customerFilter !== 'none' && !seen.has(customerFilter))
+      seen.set(customerFilter, '—')
+    return [
+      { value: 'all', label: 'همه‌ی مشتریان' },
+      { value: 'none', label: 'بدون مشتری' },
+      ...[...seen].map(([value, label]) => ({ value, label })),
+    ]
+  }, [rangeEntries, customerFilter])
+
+  const categoryItems = useMemo(() => {
+    const names = new Set((rangeEntries ?? []).flatMap((e) => e.categoryNames))
+    if (categoryFilter !== 'all') names.add(categoryFilter)
+    return [
+      { value: 'all', label: 'همه‌ی انواع دستگاه' },
+      ...[...names].map((n) => ({ value: n, label: n })),
+    ]
+  }, [rangeEntries, categoryFilter])
+
+  const applyFilters = (list: HistoryEntry[]) =>
+    list.filter(
+      (e) =>
+        (customerFilter === 'all' ||
+          (customerFilter === 'none' ? !e.customerId : e.customerId === customerFilter)) &&
+        (categoryFilter === 'all' || e.categoryNames.includes(categoryFilter)),
+    )
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const entries = useMemo(() => rangeEntries && byName(rangeEntries), [rangeEntries, nameFilter])
+  const entries = useMemo(() => rangeEntries && applyFilters(rangeEntries), [rangeEntries, customerFilter, categoryFilter])
 
   // Equally long range right before the selected one, for the stats comparison.
   const prevRange = previousRange(range)
@@ -89,7 +125,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
     [prevRange?.from, prevRange?.to],
   )
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const previousEntries = useMemo(() => (prevRaw ? byName(prevRaw) : null), [prevRaw, nameFilter])
+  const previousEntries = useMemo(() => (prevRaw ? applyFilters(prevRaw) : null), [prevRaw, customerFilter, categoryFilter])
 
   const groups = useMemo(() => groupByDay(entries ?? []), [entries])
   const summary = useMemo(() => summarize(entries ?? []), [entries])
@@ -120,8 +156,8 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle className="text-lg">تاریخچه نشست‌ها</DialogTitle>
-          <DialogDescription>نشست‌های پایان‌یافته به تفکیک روز و درآمد هر روز؛ با فیلتر نام، جمع درآمد هر مشتری را ببینید.</DialogDescription>
+          <DialogTitle className="text-lg">تاریخچه تایم‌ها</DialogTitle>
+          <DialogDescription>تایم‌های پایان‌یافته به تفکیک روز و درآمد هر روز؛ با فیلتر نام، جمع درآمد هر مشتری را ببینید.</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -151,20 +187,51 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
           )}
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="history-name-filter" className="text-xs text-muted-foreground">
-            فیلتر بر اساس نام نشست / مشتری
-          </Label>
-          <NameCombobox
-            id="history-name-filter"
-            value={nameFilter}
-            onChange={(v) => {
-              setNameFilter(v)
-              setPage(0)
-            }}
-            suggestions={names}
-            placeholder="نام را تایپ کنید یا از لیست انتخاب کنید"
-          />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">مشتری</Label>
+            <Select
+              items={customerItems}
+              value={customerFilter}
+              onValueChange={(v) => {
+                setCustomerFilter(v as string)
+                setPage(0)
+              }}
+            >
+              <SelectTrigger className="w-full" aria-label="فیلتر مشتری">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {customerItems.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">نوع دستگاه</Label>
+            <Select
+              items={categoryItems}
+              value={categoryFilter}
+              onValueChange={(v) => {
+                setCategoryFilter(v as string)
+                setPage(0)
+              }}
+            >
+              <SelectTrigger className="w-full" aria-label="فیلتر نوع دستگاه">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {categoryItems.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <Tabs defaultValue="history">
@@ -175,10 +242,10 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
 
           <TabsContent value="history" className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="تعداد نشست" value={toFa(formatNumber(summary.count))} />
+          <Stat label="تعداد تایم" value={toFa(formatNumber(summary.count))} />
           <Stat label="مجموع زمان" value={toFa(formatDuration(summary.durationMs))} ltr />
           <Stat label="درآمد زمان" value={toman(summary.timeCost)} />
-          <Stat label="درآمد موارد اضافه" value={toman(summary.extrasCost)} />
+          <Stat label="درآمد بوفه" value={toman(summary.extrasCost)} />
           <div className="col-span-2 flex items-center justify-between rounded-lg bg-primary px-4 py-3 text-primary-foreground sm:col-span-4">
             <span className="font-bold">مجموع درآمد</span>
             <span className="text-lg font-bold">{toman(summary.total)}</span>
@@ -187,7 +254,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
 
         {entries === undefined ? null : groups.length === 0 ? (
           <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-            نشستی با این مشخصات ثبت نشده است.
+            تایمی با این مشخصات ثبت نشده است.
           </p>
         ) : (
           <div className="flex flex-col gap-3">
@@ -201,7 +268,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
               </colgroup>
               <thead className="text-xs text-muted-foreground">
                 <tr className="border-b">
-                  <th className="px-2 py-1.5 text-start font-normal">نشست</th>
+                  <th className="px-2 py-1.5 text-start font-normal">تایم</th>
                   <th className="px-2 py-1.5 text-start font-normal">شروع – پایان</th>
                   <th className="px-2 py-1.5 text-start font-normal">مدت</th>
                   <th className="px-2 py-1.5 text-start font-normal">هزینه</th>
@@ -215,7 +282,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
                       <td colSpan={2} className="px-2 py-2 font-bold">
                         {formatJalaliLong(g.entries[0].endedAt)}{' '}
                         <span className="font-normal text-muted-foreground">
-                          ({toFa(g.key)} · {toFa(g.entries.length)} نشست)
+                          ({toFa(g.key)} · {toFa(g.entries.length)} تایم)
                         </span>
                       </td>
                       <td className="px-2 py-2 text-muted-foreground">
@@ -233,7 +300,12 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
                           className="cursor-pointer border-b align-middle hover:bg-muted/40"
                           onClick={() => setExpanded(expanded === e.id ? null : e.id)}
                         >
-                          <td className="truncate px-2 py-2">{e.name}</td>
+                          <td className="px-2 py-2">
+                            <div className="truncate">{e.deviceNames.join('، ')}</div>
+                            <div className="truncate text-xs text-muted-foreground">
+                              {[e.categoryNames.join('، '), e.customerName].filter(Boolean).join(' · ')}
+                            </div>
+                          </td>
                           <td className="px-2 py-2 whitespace-nowrap">
                             <span dir="ltr" className="inline-block">
                               {formatJalaliClock(e.startedAt, false)} –{' '}
@@ -327,8 +399,8 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
             <AlertDialogTitle>حذف از تاریخچه؟</AlertDialogTitle>
             <AlertDialogDescription>
               {pending?.kind === 'one'
-                ? `نشست «${pending.entry.name}» (${formatJalaliDate(pending.entry.endedAt)}) برای همیشه حذف می‌شود.`
-                : `${toFa(summary.count)} نشست در بازه‌ی انتخاب‌شده برای همیشه حذف می‌شود.`}
+                ? `تایم «${pending.entry.deviceNames.join('، ')}» (${formatJalaliDate(pending.entry.endedAt)}) برای همیشه حذف می‌شود.`
+                : `${toFa(summary.count)} تایم در بازه‌ی انتخاب‌شده برای همیشه حذف می‌شود.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

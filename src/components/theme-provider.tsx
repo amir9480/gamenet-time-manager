@@ -1,19 +1,44 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import type { Accent } from '@/lib/accents'
+import { DEFAULT_ICON, type AppIconValue } from '@/lib/appIcon'
 import { useLocalStorage } from '@/lib/store'
 
 export type Theme = 'light' | 'dark'
+
+export type ViewMode = 'detailed' | 'compact'
+
+export const DEFAULT_TITLE = 'نرم افزار مدیریت زمان گیم نت'
 
 const ThemeContext = createContext<{
   theme: Theme
   setTheme: (t: Theme) => void
   accent: Accent
   setAccent: (a: Accent) => void
+  // App title shown in the header / window title; the user can rename it in Settings.
+  title: string
+  setTitle: (t: string) => void
+  // App icon shown in the header / empty state.
+  icon: AppIconValue
+  setIcon: (i: AppIconValue) => void
+  // Main list layout (toggled on the main page).
+  view: ViewMode
+  setView: (v: ViewMode) => void
+  // Group / filter timers by device type (edited in Settings).
+  grouping: boolean
+  setGrouping: (g: boolean) => void
 }>({
   theme: 'light',
   setTheme: () => {},
   accent: 'neutral',
   setAccent: () => {},
+  title: DEFAULT_TITLE,
+  setTitle: () => {},
+  icon: DEFAULT_ICON,
+  setIcon: () => {},
+  view: 'detailed',
+  setView: () => {},
+  grouping: true,
+  setGrouping: () => {},
 })
 
 export const useTheme = () => useContext(ThemeContext)
@@ -25,6 +50,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const [accent, setAccent] = useLocalStorage<Accent>('gamenet-accent', () => 'neutral')
 
+  const [storedTitle, setTitle] = useLocalStorage<string>('gamenet-title', () => DEFAULT_TITLE)
+  const title = storedTitle.trim() || DEFAULT_TITLE
+  const [icon, setIcon] = useLocalStorage<AppIconValue>('gamenet-icon', () => DEFAULT_ICON)
+
+  const [view, setView] = useLocalStorage<ViewMode>('gamenet-view', () => 'detailed')
+  const [grouping, setGrouping] = useLocalStorage<boolean>('gamenet-grouping', () => true)
+
+  useEffect(() => {
+    document.title = title
+    // The native window title is separate from document.title in the desktop app.
+    if ('__TAURI_INTERNALS__' in window) {
+      import('@tauri-apps/api/window')
+        .then((m) => m.getCurrentWindow().setTitle(title))
+        .catch(() => {})
+    }
+  }, [title])
+
   useEffect(() => {
     document.documentElement.dataset.accent = accent
   }, [accent])
@@ -33,5 +75,5 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
-  return <ThemeContext.Provider value={{ theme, setTheme, accent, setAccent }}>{children}</ThemeContext.Provider>
+  return <ThemeContext.Provider value={{ theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, view, setView, grouping, setGrouping }}>{children}</ThemeContext.Provider>
 }

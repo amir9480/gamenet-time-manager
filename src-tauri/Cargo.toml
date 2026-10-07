@@ -1,7 +1,7 @@
 [package]
-name = "gamenet-reza"
+name = "gamenet-timer-manager"
 version = "0.1.0"
-description = "Gamenet Reza"
+description = "Gamenet Timer Manager"
 authors = ["you"]
 license = ""
 repository = ""

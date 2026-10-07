@@ -9,6 +9,8 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, './src') },
   },
+  // Served unbundled: pre-bundling would pull all ~1,850 lazy icon modules into the dep cache.
+  optimizeDeps: { exclude: ['lucide-react/dynamic'] },
   clearScreen: false,
   server: { host: '0.0.0.0', port: 3000, strictPort: true },
 })

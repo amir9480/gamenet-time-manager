@@ -1,6 +1,6 @@
 import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
 
-export function Timer({ ms }: { ms: number }) {
+export function Timer({ ms, compact }: { ms: number; compact?: boolean }) {
   const total = Math.max(0, Math.floor(ms / 1000))
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
@@ -10,7 +10,7 @@ export function Timer({ ms }: { ms: number }) {
     <NumberFlowGroup>
       <div
         dir="ltr"
-        className="flex items-baseline justify-center font-mono text-4xl font-bold"
+        className={`flex items-baseline justify-center font-mono font-bold ${compact ? 'text-3xl' : 'text-4xl'}`}
         style={{ fontVariantNumeric: 'tabular-nums', fontKerning: 'none' }}
       >
         <NumberFlow value={h} format={{ minimumIntegerDigits: 2 }} trend={1} />

@@ -1,15 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Minus, Trash2 } from 'lucide-react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useDiscardGuard } from '@/components/DiscardDialog'
 import { formatNumber } from '@/lib/format'
 import { extraTimeCost, type ExtraItem, type ExtraTime } from '@/lib/store'
 
@@ -40,7 +31,6 @@ export function ExtraItemsManageDialog({
   // Edits are kept in a draft until the user saves.
   const [items, setItems] = useState(savedItems)
   const [times, setTimes] = useState(savedTimes)
-  const [discardOpen, setDiscardOpen] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -58,10 +48,7 @@ export function ExtraItemsManageDialog({
     JSON.stringify(items) !== JSON.stringify(savedItems) ||
     JSON.stringify(times) !== JSON.stringify(savedTimes)
 
-  const requestClose = () => {
-    if (dirty) setDiscardOpen(true)
-    else onOpenChange(false)
-  }
+  const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
 
   const save = () => {
     onSave(items, times)
@@ -81,7 +68,7 @@ export function ExtraItemsManageDialog({
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : requestClose())}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>زمان و هزینه‌های اضافه ثبت‌شده</DialogTitle>
+          <DialogTitle>زمان اضافه و بوفه ثبت‌شده</DialogTitle>
           <DialogDescription>
             برای اصلاح اشتباه، تعداد را کم کنید یا مورد را حذف کنید و سپس ذخیره را بزنید.
           </DialogDescription>
@@ -157,28 +144,7 @@ export function ExtraItemsManageDialog({
       </DialogContent>
     </Dialog>
 
-      <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>تغییرات ذخیره نشده</AlertDialogTitle>
-            <AlertDialogDescription>
-              تغییراتی که اعمال کرده‌اید ذخیره نشده‌اند. با خروج، این تغییرات از بین می‌روند.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>ادامه ویرایش</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                setDiscardOpen(false)
-                onOpenChange(false)
-              }}
-            >
-              خروج بدون ذخیره
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {dialog}
     </>
   )
 }

@@ -1,15 +1,5 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Check, Settings as SettingsIcon } from 'lucide-react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -20,47 +10,63 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tip } from '@/components/Tip'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useDiscardGuard } from '@/components/DiscardDialog'
+import { DevicesEditor } from '@/components/DevicesEditor'
 import { ExtraItemsEditor } from '@/components/ExtraItemsEditor'
-import { PriceTypeEditor } from '@/components/PriceTypeEditor'
-import { useTheme, type Theme } from '@/components/theme-provider'
+import { RateGroupsEditor } from '@/components/RateGroupsEditor'
+import { DEFAULT_TITLE, useTheme, type Theme } from '@/components/theme-provider'
 import { ACCENTS, type Accent } from '@/lib/accents'
-import type { Settings } from '@/lib/store'
+import type { AppIconValue } from '@/lib/appIcon'
+import type { Settings, Usage } from '@/lib/store'
 import { cn } from '@/lib/utils'
+
+// The picker pulls in the whole Lucide icon list, so it is only downloaded when Settings opens.
+const IconPicker = lazy(() =>
+  import('@/components/IconPicker').then((m) => ({ default: m.IconPicker })),
+)
+
+export type SettingsTab = 'general' | 'rates' | 'devices' | 'extras'
 
 type Props = {
   settings: Settings
-  onChange: (s: Settings) => void
+  usage: Usage
+  onChange: (s: Omit<Settings, 'customers'>) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  // Tab shown each time the dialog opens.
+  initialTab?: SettingsTab
 }
 
-type Draft = {
-  priceTypes: Settings['priceTypes']
-  defaultTypeId: string
-  extraItems: Settings['extraItems']
+type Draft = Settings & {
   theme: Theme
   accent: Accent
   autostart: boolean
+  title: string
+  icon: AppIconValue
+  grouping: boolean
 }
 
 const isTauri = () => '__TAURI_INTERNALS__' in window
 
-export function SettingsDialog({ settings, onChange }: Props) {
-  const { theme, setTheme, accent, setAccent } = useTheme()
-  const [open, setOpen] = useState(false)
-  const [discardOpen, setDiscardOpen] = useState(false)
+export function SettingsDialog({
+  settings,
+  usage,
+  onChange,
+  open,
+  onOpenChange,
+  initialTab = 'general',
+}: Props) {
+  const { theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, grouping, setGrouping } =
+    useTheme()
   const [autostartSaved, setAutostartSaved] = useState(false)
+  const [tab, setTab] = useState<SettingsTab>(initialTab)
 
-  const saved: Draft = {
-    priceTypes: settings.priceTypes,
-    defaultTypeId: settings.defaultTypeId,
-    extraItems: settings.extraItems,
-    theme,
-    accent,
-    autostart: autostartSaved,
-  }
+  const saved: Draft = { ...settings, theme, accent, autostart: autostartSaved, title, icon, grouping }
   const [draft, setDraft] = useState<Draft>(saved)
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }))
@@ -82,6 +88,7 @@ export function SettingsDialog({ settings, onChange }: Props) {
       setDraft({ ...saved, autostart: enabled })
     })
     setDraft(saved)
+    setTab(initialTab)
     return () => {
       cancelled = true
     }
@@ -91,25 +98,45 @@ export function SettingsDialog({ settings, onChange }: Props) {
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
 
-  const ratesValid = draft.priceTypes.every((t) => t.name.trim() && t.price > 0)
-  const extrasValid = draft.extraItems.every((i) => i.name.trim() && i.price > 0)
-  const valid = ratesValid && extrasValid
+  const named = (xs: { name: string }[]) => xs.every((x) => x.name.trim())
+  const ratesValid =
+    draft.rateGroups.length > 0 &&
+    named(draft.rateGroups) &&
+    draft.rateGroups.every((g) => g.prices.length > 0 && named(g.prices) && g.prices.every((p) => p.price > 0))
+  const devicesValid =
+    named(draft.deviceCategories) &&
+    named(draft.devices) &&
+    draft.devices.every((d) => d.rateIds.length > 0)
+  const extrasValid =
+    draft.extraCategories.length > 0 &&
+    named(draft.extraCategories) &&
+    named(draft.extraItems) &&
+    draft.extraItems.every((i) => i.price > 0)
+  const valid = ratesValid && devicesValid && extrasValid
 
-  const requestClose = () => {
-    if (dirty) setDiscardOpen(true)
-    else setOpen(false)
-  }
+  const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
+
+  const trimNames = <T extends { name: string }>(xs: T[]): T[] =>
+    xs.map((x) => ({ ...x, name: x.name.trim() }))
 
   const save = async () => {
     if (!valid) return
     onChange({
-      ...settings,
-      priceTypes: draft.priceTypes.map((t) => ({ ...t, name: t.name.trim() })),
-      defaultTypeId: draft.defaultTypeId,
-      extraItems: draft.extraItems.map((i) => ({ ...i, name: i.name.trim() })),
+      rateGroups: draft.rateGroups.map((g) => ({
+        ...g,
+        name: g.name.trim(),
+        prices: trimNames(g.prices),
+      })),
+      deviceCategories: trimNames(draft.deviceCategories),
+      devices: trimNames(draft.devices),
+      extraCategories: trimNames(draft.extraCategories),
+      extraItems: trimNames(draft.extraItems),
     })
     setTheme(draft.theme)
     setAccent(draft.accent)
+    setTitle(draft.title.trim() || DEFAULT_TITLE)
+    setIcon(draft.icon)
+    setGrouping(draft.grouping)
     if (isTauri() && draft.autostart !== autostartSaved) {
       try {
         const m = await import('@tauri-apps/plugin-autostart')
@@ -120,41 +147,67 @@ export function SettingsDialog({ settings, onChange }: Props) {
         // keep the previous autostart state if the plugin call fails
       }
     }
-    setOpen(false)
+    onOpenChange(false)
   }
+
+  const dot = (ok: boolean) => !ok && <span className="size-2 rounded-full bg-destructive" />
 
   return (
     <>
       <Dialog
         open={open}
         onOpenChange={(o) => {
-          if (o) setOpen(true)
+          if (o) onOpenChange(true)
           else requestClose()
         }}
       >
-        <DialogTrigger render={<Button variant="outline" size="icon" aria-label="تنظیمات" />}>
-          <SettingsIcon />
-        </DialogTrigger>
-        <DialogContent className="sm:max-w-2xl">
+        <Tip label="تنظیمات">
+          <DialogTrigger render={<Button variant="outline" size="icon" aria-label="تنظیمات" />}>
+            <SettingsIcon />
+          </DialogTrigger>
+        </Tip>
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>تنظیمات</DialogTitle>
             <DialogDescription>برای اعمال تغییرات، دکمه ذخیره را بزنید.</DialogDescription>
           </DialogHeader>
 
-          <Tabs defaultValue="general" className="gap-4">
+          <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className="gap-4">
             <TabsList className="w-full">
               <TabsTrigger value="general">عمومی</TabsTrigger>
-              <TabsTrigger value="rates">
-                نرخ‌ها
-                {!ratesValid && <span className="size-2 rounded-full bg-destructive" />}
-              </TabsTrigger>
-              <TabsTrigger value="extras">
-                موارد اضافه
-                {!extrasValid && <span className="size-2 rounded-full bg-destructive" />}
-              </TabsTrigger>
+              <TabsTrigger value="rates">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
+              <TabsTrigger value="devices">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
+              <TabsTrigger value="extras">بوفه {dot(extrasValid)}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="app-title">عنوان برنامه</Label>
+                <Input
+                  id="app-title"
+                  placeholder={DEFAULT_TITLE}
+                  value={draft.title}
+                  onChange={(e) => patch({ title: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  این عنوان بالای صفحه و در نوار عنوان پنجره نمایش داده می‌شود. خالی بگذارید تا عنوان
+                  پیش‌فرض استفاده شود.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>آیکن برنامه</Label>
+                <Suspense
+                  fallback={<div className="h-14 animate-pulse rounded-xl bg-muted/50" aria-hidden />}
+                >
+                  <IconPicker value={draft.icon} onChange={(icon) => patch({ icon })} />
+                </Suspense>
+                <p className="text-xs text-muted-foreground">
+                  این آیکن بالای صفحه و در صفحه‌ی خالی نمایش داده می‌شود. می‌توانید از فهرست انتخاب کنید،
+                  تصویر دلخواه بارگذاری کنید یا به آیکن پیش‌فرض برگردید.
+                </p>
+              </div>
+
               <div className="flex items-center justify-between gap-4">
                 <Label htmlFor="theme-switch">حالت تاریک</Label>
                 <Switch
@@ -187,6 +240,21 @@ export function SettingsDialog({ settings, onChange }: Props) {
                 </div>
               </div>
 
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-4">
+                  <Label htmlFor="grouping-switch">گروه‌بندی تایم‌ها بر اساس نوع دستگاه</Label>
+                  <Switch
+                    id="grouping-switch"
+                    checked={draft.grouping}
+                    onCheckedChange={(c) => patch({ grouping: c })}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  تایم‌ها بر اساس نوع دستگاه دسته‌بندی می‌شوند و بالای فهرست می‌توانید فقط یک نوع را
+                  نمایش دهید. فقط وقتی بیش از یک نوع دستگاه دارید دیده می‌شود.
+                </p>
+              </div>
+
               <div className="flex items-center justify-between gap-4">
                 <Label htmlFor="autostart-switch">اجرای خودکار با روشن شدن سیستم</Label>
                 <Switch
@@ -198,25 +266,37 @@ export function SettingsDialog({ settings, onChange }: Props) {
               </div>
             </TabsContent>
 
-            <TabsContent value="rates" className="flex flex-col gap-3">
-              <PriceTypeEditor
-                types={draft.priceTypes}
-                defaultId={draft.defaultTypeId}
-                onChange={(priceTypes, defaultTypeId) => patch({ priceTypes, defaultTypeId })}
+            <TabsContent value="rates">
+              <RateGroupsEditor
+                groups={draft.rateGroups}
+                devices={draft.devices}
+                usage={usage}
+                onChange={(rateGroups) => patch({ rateGroups })}
+              />
+            </TabsContent>
+
+            <TabsContent value="devices">
+              <DevicesEditor
+                categories={draft.deviceCategories}
+                devices={draft.devices}
+                rateGroups={draft.rateGroups}
+                usage={usage}
+                onChange={(deviceCategories, devices) => patch({ deviceCategories, devices })}
               />
             </TabsContent>
 
             <TabsContent value="extras">
               <ExtraItemsEditor
+                categories={draft.extraCategories}
                 items={draft.extraItems}
-                onChange={(extraItems) => patch({ extraItems })}
+                onChange={(extraCategories, extraItems) => patch({ extraCategories, extraItems })}
               />
             </TabsContent>
           </Tabs>
 
           <DialogFooter className="items-center sm:justify-between">
             <span className="text-sm text-destructive">
-              {valid ? '' : 'نام و قیمت تمام موارد باید تکمیل شود (قیمت بیشتر از صفر).'}
+              {valid ? '' : 'نام‌ها باید تکمیل و قیمت‌ها بیشتر از صفر باشند و هر دستگاه یک نرخ داشته باشد.'}
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={requestClose}>
@@ -230,28 +310,7 @@ export function SettingsDialog({ settings, onChange }: Props) {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>تغییرات ذخیره نشده</AlertDialogTitle>
-            <AlertDialogDescription>
-              تغییراتی که اعمال کرده‌اید ذخیره نشده‌اند. با خروج، این تغییرات از بین می‌روند.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>ادامه ویرایش</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                setDiscardOpen(false)
-                setOpen(false)
-              }}
-            >
-              خروج بدون ذخیره
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {dialog}
     </>
   )
 }

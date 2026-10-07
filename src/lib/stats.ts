@@ -129,16 +129,48 @@ export const weekdaySeries = (entries: HistoryEntry[]): WeekdayPoint[] => {
 
 export type NamePoint = { name: string; sessions: number; income: number }
 
-export const topNames = (entries: HistoryEntry[], limit = 10): NamePoint[] => {
+export const NO_CUSTOMER = 'بدون مشتری'
+
+export const topCustomers = (entries: HistoryEntry[], limit = 10): NamePoint[] => {
   const map = new Map<string, NamePoint>()
   for (const e of entries) {
-    const p = map.get(e.name) ?? { name: e.name, sessions: 0, income: 0 }
+    const key = e.customerId ?? ''
+    const p = map.get(key) ?? { name: e.customerName ?? NO_CUSTOMER, sessions: 0, income: 0 }
     p.sessions += 1
     p.income += e.total
-    map.set(e.name, p)
+    map.set(key, p)
   }
   return [...map.values()].sort((a, b) => b.income - a.income).slice(0, limit)
 }
+
+// Income per device category or device: each segment's time cost goes to its own device;
+// extras (extra time + items) go to the session's last device.
+const bySegment = (entries: HistoryEntry[], key: (seg: HistoryEntry['segments'][number]) => string) => {
+  const map = new Map<string, NamePoint>()
+  const add = (name: string, income: number, sessions = 0) => {
+    const p = map.get(name) ?? { name, sessions: 0, income: 0 }
+    p.income += income
+    p.sessions += sessions
+    map.set(name, p)
+  }
+  for (const e of entries) {
+    const seen = new Set<string>()
+    for (const seg of e.segments) {
+      const k = key(seg)
+      add(k, segmentCost(seg, e.endedAt), seen.has(k) ? 0 : 1)
+      seen.add(k)
+    }
+    const last = e.segments[e.segments.length - 1]
+    if (last) add(key(last), extrasOf(e))
+  }
+  return [...map.values()].filter((p) => p.income > 0).sort((a, b) => b.income - a.income)
+}
+
+export const byCategory = (entries: HistoryEntry[]) =>
+  bySegment(entries, (seg) => seg.categoryName || '—')
+
+export const byDevice = (entries: HistoryEntry[], limit = 12) =>
+  bySegment(entries, (seg) => seg.deviceName || '—').slice(0, limit)
 
 export type RatePoint = { name: string; income: number }
 

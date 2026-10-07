@@ -53,12 +53,12 @@ export function SessionSummaryDialog({
       <AlertDialogContent className="data-[size=default]:max-w-[calc(100%-2rem)] data-[size=default]:sm:max-w-3xl">
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {readOnly ? `جزئیات هزینه ${deviceName}` : `اتمام نشست ${deviceName}`}
+            {readOnly ? `جزئیات هزینه ${deviceName}` : `اتمام تایم ${deviceName}`}
           </AlertDialogTitle>
           <AlertDialogDescription>
             {readOnly
               ? 'هزینه‌ها به‌صورت زنده محاسبه می‌شوند.'
-              : 'با تایید، نشست پایان می‌یابد و زمان و هزینه‌ها صفر می‌شوند.'}
+              : 'با تایید، تایم پایان می‌یابد و زمان و هزینه‌ها صفر می‌شوند.'}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -70,9 +70,9 @@ export function SessionSummaryDialog({
 
           <table className="w-full table-fixed text-start">
             <colgroup>
-              <col className="w-[34%]" />
+              <col className="w-[32%]" />
               <col className="w-[16%]" />
-              <col className="w-[28%]" />
+              <col className="w-[30%]" />
               <col className="w-[22%]" />
             </colgroup>
             <thead className="text-xs text-muted-foreground">
@@ -97,7 +97,7 @@ export function SessionSummaryDialog({
                     </span>
                   </td>
                   <td className="px-2 py-2 text-start">
-                    <div>{seg.typeName}</div>
+                    <div>{seg.deviceName ? `${seg.deviceName} · ${seg.typeName}` : seg.typeName}</div>
                     <div className="text-xs text-muted-foreground">
                       {formatNumber(seg.price)} در ساعت
                     </div>
@@ -140,7 +140,7 @@ export function SessionSummaryDialog({
           ) : (
             <>
               <AlertDialogCancel>انصراف</AlertDialogCancel>
-              <AlertDialogAction onClick={onConfirm}>تایید و اتمام نشست</AlertDialogAction>
+              <AlertDialogAction onClick={onConfirm}>تایید و اتمام تایم</AlertDialogAction>
             </>
           )}
         </AlertDialogFooter>

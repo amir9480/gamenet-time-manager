@@ -1,0 +1,173 @@
+import { useState } from 'react'
+import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { NewCustomerDialog } from '@/components/NewCustomerDialog'
+import { Tip } from '@/components/Tip'
+import { deleteCustomer } from '@/lib/db'
+import type { Customer, Usage } from '@/lib/store'
+
+const PAGE_SIZE = 8
+
+type Props = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  customers: Customer[]
+  usage: Usage
+}
+
+// Customer management; every change is saved immediately (not part of the Settings draft).
+export function CustomersDialog({ open, onOpenChange, customers, usage }: Props) {
+  const [q, setQ] = useState('')
+  const [page, setPage] = useState(0)
+  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<Customer | null>(null)
+
+  const needle = q.trim().toLowerCase()
+  // Newest first.
+  const all = [...customers].reverse()
+  const matches = needle
+    ? all.filter((c) => `${c.name} ${c.phone ?? ''}`.toLowerCase().includes(needle))
+    : all
+  const pages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE))
+  const current = Math.min(page, pages - 1)
+  const shown = matches.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
+
+  return (
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (o) {
+            setQ('')
+            setPage(0)
+          }
+          onOpenChange(o)
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>مشتریان</DialogTitle>
+            <DialogDescription>
+              مشتریان هنگام شروع تایم قابل انتخاب هستند (اختیاری) و در تاریخچه و آمار فیلتر می‌شوند.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                aria-label="جستجوی مشتری"
+                placeholder="جستجو بر اساس نام یا شماره"
+                className="ps-8"
+                value={q}
+                onChange={(e) => {
+                  setQ(e.target.value)
+                  setPage(0)
+                }}
+              />
+            </div>
+            <Button variant="outline" onClick={() => setAdding(true)}>
+              <Plus /> مشتری جدید
+            </Button>
+          </div>
+
+          {matches.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {customers.length === 0 ? 'هنوز مشتری ثبت نشده است.' : 'مشتری‌ای پیدا نشد.'}
+            </p>
+          ) : (
+            <div className="flex flex-col divide-y rounded-lg border">
+              <div className="grid grid-cols-[1fr_1fr_5rem] gap-2 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                <span>نام</span>
+                <span>شماره‌ی تماس</span>
+                <span />
+              </div>
+              {shown.map((c) => {
+                const busy = usage.customerIds.has(c.id)
+                return (
+                  <div key={c.id} className="grid grid-cols-[1fr_1fr_5rem] items-center gap-2 px-3 py-1.5">
+                    <span className="truncate text-sm">{c.name}</span>
+                    <span className="truncate text-sm text-muted-foreground" dir="ltr">
+                      {c.phone || '—'}
+                    </span>
+                    <div className="flex justify-end gap-0.5">
+                      <Tip label="ویرایش">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="ویرایش"
+                          onClick={() => setEditing(c)}
+                        >
+                          <Pencil />
+                        </Button>
+                      </Tip>
+                      <Tip label={busy ? 'این مشتری در یک تایم فعال است' : 'حذف'}>
+                        <span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="حذف"
+                            disabled={busy}
+                            onClick={() => deleteCustomer(c.id)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </span>
+                      </Tip>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {pages > 1 && (
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                {matches.length} مشتری · صفحه {current + 1} از {pages}
+              </span>
+              <div className="flex gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="صفحه‌ی قبل"
+                  disabled={current === 0}
+                  onClick={() => setPage(current - 1)}
+                >
+                  <ChevronRight />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="صفحه‌ی بعد"
+                  disabled={current >= pages - 1}
+                  onClick={() => setPage(current + 1)}
+                >
+                  <ChevronLeft />
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {adding && <NewCustomerDialog open onOpenChange={setAdding} />}
+      {editing && (
+        <NewCustomerDialog
+          key={editing.id}
+          open
+          customer={editing}
+          onOpenChange={(o) => !o && setEditing(null)}
+        />
+      )}
+    </>
+  )
+}

@@ -958,7 +958,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gamenet-reza"
+name = "gamenet-timer-manager"
 version = "0.1.0"
 dependencies = [
  "log",

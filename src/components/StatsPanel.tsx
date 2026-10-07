@@ -20,7 +20,9 @@ import {
   kpis,
   pctChange,
   rateUsage,
-  topNames,
+  byCategory,
+  byDevice,
+  topCustomers,
   weekdaySeries,
 } from '@/lib/stats'
 import type { HistoryEntry } from '@/lib/store'
@@ -121,7 +123,9 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
   const daily = useMemo(() => dailySeries(entries, range), [entries, range])
   const hourly = useMemo(() => hourlySeries(entries), [entries])
   const weekdays = useMemo(() => weekdaySeries(entries), [entries])
-  const names = useMemo(() => topNames(entries), [entries])
+  const names = useMemo(() => topCustomers(entries), [entries])
+  const categories = useMemo(() => byCategory(entries), [entries])
+  const devices = useMemo(() => byDevice(entries), [entries])
   const rates = useMemo(() => rateUsage(entries), [entries])
   const items = useMemo(() => itemsSold(entries), [entries])
 
@@ -137,11 +141,15 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
 
   const dailyConfig = {
     time: { label: 'زمان بازی', color: 'var(--chart-1)' },
-    extras: { label: 'موارد اضافه', color: 'var(--chart-2)' },
+    extras: { label: 'بوفه', color: 'var(--chart-2)' },
   } satisfies ChartConfig
-  const hourConfig = { sessions: { label: 'نشست', color: 'var(--chart-1)' } } satisfies ChartConfig
+  const hourConfig = { sessions: { label: 'تایم', color: 'var(--chart-1)' } } satisfies ChartConfig
   const weekConfig = { income: { label: 'درآمد', color: 'var(--chart-2)' } } satisfies ChartConfig
   const nameConfig = { income: { label: 'درآمد', color: 'var(--chart-1)' } } satisfies ChartConfig
+  const deviceConfig = { income: { label: 'درآمد', color: 'var(--chart-4)' } } satisfies ChartConfig
+  const categoryConfig: ChartConfig = Object.fromEntries(
+    categories.map((r, i) => [r.name, { label: r.name, color: COLORS[i % COLORS.length] }]),
+  )
   const itemConfig = { income: { label: 'درآمد', color: 'var(--chart-3)' } } satisfies ChartConfig
   const rateConfig: ChartConfig = Object.fromEntries(
     rates.map((r, i) => [r.name, { label: r.name, color: COLORS[i % COLORS.length] }]),
@@ -156,13 +164,13 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
           extra={<Delta current={k.total} previous={prev ? prev.total : null} />}
         />
         <Kpi
-          label="تعداد نشست"
+          label="تعداد تایم"
           value={toFa(formatNumber(k.count))}
           extra={<Delta current={k.count} previous={prev ? prev.count : null} />}
         />
-        <Kpi label="میانگین درآمد هر نشست" value={toman(k.avgIncome)} />
+        <Kpi label="میانگین درآمد هر تایم" value={toman(k.avgIncome)} />
         <Kpi
-          label="میانگین مدت نشست"
+          label="میانگین مدت تایم"
           value={<span dir="ltr">{toFa(formatDuration(k.avgDurationMs))}</span>}
         />
         <Kpi
@@ -176,7 +184,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
           extra={
             k.peak && (
               <span className="text-xs text-muted-foreground">
-                {toFa(k.peak.sessions)} نشست شروع‌شده
+                {toFa(k.peak.sessions)} تایم شروع‌شده
               </span>
             )
           }
@@ -184,7 +192,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
         <div className="col-span-2 flex flex-col gap-2 rounded-lg border p-3">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>زمان بازی: {toman(k.timeCost)} ({toFa(timeShare)}٪)</span>
-            <span>موارد اضافه: {toman(k.extrasCost)} ({toFa(100 - timeShare)}٪)</span>
+            <span>بوفه: {toman(k.extrasCost)} ({toFa(100 - timeShare)}٪)</span>
           </div>
           <div className="flex h-2.5 overflow-hidden rounded-full bg-muted" dir="ltr">
             <div style={{ width: `${timeShare}%`, backgroundColor: 'var(--chart-1)' }} />
@@ -217,7 +225,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
       </ChartCard>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <ChartCard title="نشست‌ها در ساعات شبانه‌روز (بر اساس شروع)">
+        <ChartCard title="تایم‌ها در ساعات شبانه‌روز (بر اساس شروع)">
           <ChartContainer config={hourConfig} className="h-56 w-full">
             <BarChart data={hourly}>
               <CartesianGrid vertical={false} />
@@ -228,7 +236,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
                   <ChartTooltipContent
                     labelFormatter={(_, p) => `ساعت ${p?.[0]?.payload?.label ?? ''}`}
                     formatter={rowsFormatter((p) => [
-                      ['تعداد نشست', toFa(p.sessions)],
+                      ['تعداد تایم', toFa(p.sessions)],
                       ['درآمد', toman(p.income)],
                     ])}
                   />
@@ -250,7 +258,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
                   <ChartTooltipContent
                     formatter={rowsFormatter((p) => [
                       ['درآمد', toman(p.income)],
-                      ['تعداد نشست', toFa(p.sessions)],
+                      ['تعداد تایم', toFa(p.sessions)],
                     ])}
                   />
                 }
@@ -261,7 +269,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
         </ChartCard>
       </div>
 
-      <ChartCard title="مشتریان / نام‌های برتر" empty={names.length === 0}>
+      <ChartCard title="مشتریان برتر" empty={names.length === 0}>
         <ChartContainer
           config={nameConfig}
           className="w-full"
@@ -276,7 +284,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
                 <ChartTooltipContent
                   formatter={rowsFormatter((p) => [
                     ['درآمد', toman(p.income)],
-                    ['تعداد نشست', toFa(p.sessions)],
+                    ['تعداد تایم', toFa(p.sessions)],
                   ])}
                 />
               }
@@ -285,6 +293,57 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
           </BarChart>
         </ChartContainer>
       </ChartCard>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <ChartCard title="سهم درآمد هر نوع دستگاه" empty={categories.length === 0}>
+          <ChartContainer config={categoryConfig} className="mx-auto h-64 w-full">
+            <PieChart>
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    hideLabel
+                    formatter={rowsFormatter((p) => [
+                      [p.name, toman(p.income)],
+                      ['تعداد تایم', toFa(p.sessions)],
+                    ])}
+                  />
+                }
+              />
+              <Pie data={categories} dataKey="income" nameKey="name" innerRadius={55} strokeWidth={2}>
+                {categories.map((r, i) => (
+                  <Cell key={r.name} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
+              <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+            </PieChart>
+          </ChartContainer>
+        </ChartCard>
+
+        <ChartCard title="درآمد هر دستگاه" empty={devices.length === 0}>
+          <ChartContainer
+            config={deviceConfig}
+            className="w-full"
+            style={{ height: Math.max(120, devices.length * 36 + 24) }}
+          >
+            <BarChart data={devices} layout="vertical" margin={{ left: 8 }}>
+              <CartesianGrid horizontal={false} />
+              <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} width={90} />
+              <XAxis type="number" hide />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={rowsFormatter((p) => [
+                      ['درآمد', toman(p.income)],
+                      ['تعداد تایم', toFa(p.sessions)],
+                    ])}
+                  />
+                }
+              />
+              <Bar dataKey="income" fill="var(--color-income)" radius={4} />
+            </BarChart>
+          </ChartContainer>
+        </ChartCard>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <ChartCard title="سهم درآمد هر نوع نرخ" empty={rates.length === 0}>
@@ -310,7 +369,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
           </ChartContainer>
         </ChartCard>
 
-        <ChartCard title="فروش موارد اضافه" empty={items.length === 0}>
+        <ChartCard title="فروش بوفه" empty={items.length === 0}>
           <ChartContainer
             config={itemConfig}
             className="w-full"
