@@ -5,7 +5,7 @@ import { AddSessionDialog } from '@/components/add-session-dialog'
 import { AppIcon } from '@/components/app-icon'
 import { InstallDialog } from '@/components/install-dialog'
 import { HistoryDialog } from '@/components/history-dialog'
-import { LimitAlarmDialog, LockedLimitAlarm } from '@/components/limit-alarm-dialog'
+import { LimitAlarmDialog, LockedLimitAlarmDialog } from '@/components/limit-alarm-dialog'
 import { InstanceScreen } from '@/components/instance-screen'
 import { LiveClock } from '@/components/live-clock'
 import { LockScreen } from '@/components/lock-screen'
@@ -527,10 +527,11 @@ export default function App() {
             <div className="min-h-screen bg-background" />
           )
         ) : locked ? (
-          // Locked: nothing of the app is rendered, only the lock page (and a silent alarm).
+          // Locked: nothing of the app is rendered except the lock page and the time-limit
+          // alarm (still shown, but every action on it re-asks for the PIN).
           <>
             <LockScreen />
-            <LockedLimitAlarm />
+            <LockedLimitAlarmDialog onUpdate={(id, fn) => updateSessionRow(id, fn)} />
           </>
         ) : (
           <Main key={epoch} />

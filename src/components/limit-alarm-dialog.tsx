@@ -11,9 +11,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { LimitDialog } from '@/components/limit-dialog'
+import { PinConfirmDialog } from '@/components/pin-confirm-dialog'
 import { ALARM_INTERVAL_MS, playAlarm } from '@/lib/alarm'
 import { alertLimitReached } from '@/lib/attention'
-import { readSessions } from '@/lib/db'
+import { readSessions, readSettings } from '@/lib/db'
 import { formatDuration, formatNumber } from '@/lib/format'
 import { useNow } from '@/lib/use-now'
 import {
@@ -146,35 +147,69 @@ function useExpired(sessions: Session[]) {
   return { expired, now }
 }
 
-// Renders nothing: keeps the alarm sounding while the app is locked and no UI is mounted.
-export function LockedLimitAlarm() {
-  const sessions = useLiveQuery(readSessions)
-  useExpired(sessions ?? [])
-  return null
-}
-
-// One top-most blocking dialog for the sessions whose time limit ran out. It cannot be
-// dismissed: the admin has to pause the session or extend/remove the limit. While any session
-// is waiting, an alarm sounds right away and then every 15 seconds.
-export function LimitAlarmDialog({ sessions, settings, onUpdate }: Props) {
+// One top-most blocking dialog for the sessions whose time limit ran out. Normally it cannot
+// be dismissed: the admin has to pause the session or extend/remove the limit. While any
+// session is waiting, an alarm sounds right away and then every 15 seconds.
+//
+// `locked`: the app lock is on top of this dialog (it still shows, so a running session isn't
+// hidden from view), so every button here must re-ask for the PIN before it takes effect —
+// otherwise the dialog would be a way to act on the app without unlocking it. It can be
+// dismissed in this case though, so the lock screen underneath stays reachable to unlock
+// normally; it reappears for a newly-overdue session, or the same one if nothing changed by
+// the next render it's shown for.
+export function LimitAlarmDialog({ sessions, settings, onUpdate, locked }: Props & { locked?: boolean }) {
   const { expired, now } = useExpired(sessions)
   const current = expired[0]
   const alarming = current !== undefined
+  const [pending, setPending] = useState<(() => void) | null>(null)
+  const [dismissedId, setDismissedId] = useState<string | null>(null)
+
+  const guardedUpdate = (id: string, fn: (s: Session) => Session) => {
+    if (locked) setPending(() => () => onUpdate(id, fn))
+    else onUpdate(id, fn)
+  }
+
+  const open = locked ? alarming && current?.id !== dismissedId : alarming
 
   return (
-    <Dialog open={alarming} disablePointerDismissal onOpenChange={() => {}}>
-      <DialogContent raised showCloseButton={false} className="sm:max-w-sm">
-        {current && (
-          <AlarmBody
-            key={current.id}
-            session={current}
-            settings={settings}
-            waiting={expired.length - 1}
-            now={now}
-            onUpdate={(fn) => onUpdate(current.id, fn)}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog
+        open={open}
+        disablePointerDismissal={!locked}
+        onOpenChange={(o) => {
+          if (!o && locked) setDismissedId(current?.id ?? null)
+        }}
+      >
+        <DialogContent raised showCloseButton={!!locked} className="sm:max-w-sm">
+          {current && (
+            <AlarmBody
+              key={current.id}
+              session={current}
+              settings={settings}
+              waiting={expired.length - 1}
+              now={now}
+              onUpdate={(fn) => guardedUpdate(current.id, fn)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+      <PinConfirmDialog
+        open={pending !== null}
+        onConfirm={() => {
+          pending?.()
+          setPending(null)
+        }}
+        onCancel={() => setPending(null)}
+      />
+    </>
   )
+}
+
+// Same dialog, shown over the lock screen: it reads its own data since `Main` (and the live
+// queries it would otherwise come from) isn't mounted while locked.
+export function LockedLimitAlarmDialog({ onUpdate }: { onUpdate: Props['onUpdate'] }) {
+  const sessions = useLiveQuery(readSessions)
+  const settings = useLiveQuery(readSettings)
+  if (!sessions || !settings) return null
+  return <LimitAlarmDialog sessions={sessions} settings={settings} onUpdate={onUpdate} locked />
 }
