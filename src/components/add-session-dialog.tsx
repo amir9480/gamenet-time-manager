@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ArrowLeft, ArrowRight, CalendarClock, Play } from 'lucide-react'
+import { Tip } from '@/components/tip'
 import { Button } from '@/components/ui/button'
 import {
   Combobox,
@@ -389,13 +390,12 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
                 const busy = busyIds.has(d.id)
                 return (
                   <RadioCard key={d.id} value={d.id} checked={pick.deviceId === d.id} disabled={busy}>
-                    <span className="flex flex-1 items-center justify-between gap-2">
-                      <span className="flex items-center gap-2 font-medium">
+                    <Tip label={busy ? 'در حال استفاده' : undefined}>
+                      <span className="flex flex-1 items-center gap-2 font-medium">
                         {busy && <RedDot />}
                         {d.name}
                       </span>
-                      {busy && <span className="text-xs text-muted-foreground">در حال استفاده</span>}
-                    </span>
+                    </Tip>
                   </RadioCard>
                 )
               })}

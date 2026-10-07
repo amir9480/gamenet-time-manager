@@ -65,6 +65,8 @@ function Main() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [customersOpen, setCustomersOpen] = useState(false)
   const [onboarding, setOnboarding] = useState(false)
+  // Settings opened from the wizard to import a backup; closing it brings the wizard back.
+  const [importing, setImporting] = useState(false)
   // Device-type filter (category name); null = all types.
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -194,7 +196,10 @@ function Main() {
               usage={usageOf(sessions)}
               onChange={saveSettings}
               open={settingsOpen}
-              onOpenChange={setSettingsOpen}
+              onOpenChange={(o) => {
+                setSettingsOpen(o)
+                if (!o) setImporting(false)
+              }}
               initialTab={settingsTab}
             />
           </div>
@@ -385,8 +390,12 @@ function Main() {
       </main>
 
       <OnboardingDialog
-        open={onboarding}
+        open={onboarding && !importing}
         settings={settings}
+        onImport={() => {
+          setImporting(true)
+          openSettings('data')
+        }}
         onFinish={async (next) => {
           await saveSettings(next)
           await markOnboarded()

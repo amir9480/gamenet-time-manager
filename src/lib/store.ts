@@ -225,6 +225,26 @@ const openOnSession = (s: Session, price: Price, now: number) =>
 export const isReserved = (s: Session) =>
   s.status === 'paused' && s.segments.every((seg) => seg.to !== null && seg.to <= seg.from)
 
+// Forgotten sessions: paused this long, or reserved this long without being started.
+export const PAUSE_WARN_MS = 3_600_000
+export const RESERVE_WARN_MS = 2 * 3_600_000
+
+// How long the session has been idle (reserved, or paused since its last segment ended);
+// undefined while running.
+export const idleMs = (s: Session, now: number): number | undefined => {
+  if (s.status !== 'paused') return undefined
+  const since = isReserved(s) ? s.reservedAt : s.segments[s.segments.length - 1]?.to
+  return since == null ? undefined : Math.max(0, now - since)
+}
+
+// The idle time when it passed the warning threshold, otherwise undefined.
+export const forgottenMs = (s: Session, now: number): number | undefined => {
+  const idle = idleMs(s, now)
+  return idle !== undefined && idle >= (isReserved(s) ? RESERVE_WARN_MS : PAUSE_WARN_MS)
+    ? idle
+    : undefined
+}
+
 export const resumeSession = (settings: Settings, s: Session, now: number): Session => {
   const price = selectedPrice(settings, s)
   return {

@@ -1,3 +1,5 @@
+import { toFa } from '@/lib/jalali'
+
 export const formatNumber = (n: number) =>
   Math.round(n).toLocaleString('en-US')
 
@@ -17,6 +19,15 @@ export const formatDuration = (ms: number) => {
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
   return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':')
+}
+
+// «۱ ساعت و ۵ دقیقه» (Persian digits, minutes precision).
+export const formatIdle = (ms: number) => {
+  const mins = Math.floor(ms / 60_000)
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  const parts = [h > 0 ? `${toFa(h)} ساعت` : '', h === 0 || m > 0 ? `${toFa(m)} دقیقه` : '']
+  return parts.filter(Boolean).join(' و ')
 }
 
 export const formatClock = (ts: number) =>

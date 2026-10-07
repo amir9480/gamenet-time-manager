@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlarmClock, Clock, Pause, Pencil, Play, Square, X } from 'lucide-react'
 import {
   AlertDialog,
@@ -26,7 +26,7 @@ import { LimitDialog } from '@/components/limit-dialog'
 import { SessionSummaryDialog } from '@/components/session-summary-dialog'
 import { Timer } from '@/components/timer'
 import { Tip } from '@/components/tip'
-import { formatDuration, formatNumber } from '@/lib/format'
+import { formatDuration, formatIdle, formatNumber } from '@/lib/format'
 import { formatJalaliDateTime } from '@/lib/jalali'
 import { useNow } from '@/lib/use-now'
 import {
@@ -39,6 +39,7 @@ import {
   devicePriceGroups,
   elapsedMs,
   flatPrices,
+  forgottenMs,
   isReserved,
   pauseSession,
   remainingMs,
@@ -80,6 +81,22 @@ export function SessionCard({ session, sessions, settings, onUpdate, onEnd, onCa
   const [cancelOpen, setCancelOpen] = useState(false)
 
   const now = useNow(running)
+
+  // Idle sessions don't tick every second; a coarse tick is enough for the forgotten warning.
+  const [idleNow, setIdleNow] = useState(Date.now)
+  useEffect(() => {
+    if (running) return
+    setIdleNow(Date.now())
+    const t = setInterval(() => setIdleNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [running])
+  const forgotten = running ? undefined : forgottenMs(session, idleNow)
+  const forgottenBadge = forgotten !== undefined && (
+    <Badge variant="destructive" className="shrink-0">
+      {reserved ? 'رزرو‌شده از' : 'متوقف از'} {formatIdle(forgotten)} پیش
+    </Badge>
+  )
+  const forgottenClass = forgotten !== undefined ? 'ring-2 ring-destructive/40' : undefined
 
   const time = running ? now : Date.now()
   const type = selectedPrice(settings, session)
@@ -223,7 +240,7 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
 
   if (compact) {
     return (
-      <Card size="sm">
+      <Card size="sm" className={forgottenClass}>
         <CardContent className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -254,6 +271,8 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
               </Button>
             </Tip>
           </div>
+
+          {forgottenBadge && <div className="flex justify-center">{forgottenBadge}</div>}
 
           <Tip label={rangeTitle}>
             <div>
@@ -373,7 +392,7 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
   }
 
   return (
-    <Card>
+    <Card className={forgottenClass}>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -396,6 +415,7 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
               }
             />
             <Badge variant={running ? 'default' : 'secondary'}>{statusLabel[statusKey]}</Badge>
+            {forgottenBadge}
             <Tip label="تغییر مشتری">
               <Button
                 variant="ghost"

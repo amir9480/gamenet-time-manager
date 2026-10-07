@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Plus, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -34,6 +34,8 @@ type Props = {
   settings: Settings
   // Apply the chosen catalog (also marks onboarding as done).
   onFinish: (next: Settings) => void
+  // Open Settings > داده‌ها to restore a backup instead (the wizard reopens if nothing is imported).
+  onImport: () => void
 }
 
 const MAX_DEVICES = 50
@@ -51,7 +53,7 @@ function Money({ children }: { children: ReactNode }) {
   )
 }
 
-export function OnboardingDialog({ open, settings, onFinish }: Props) {
+export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) {
   const { title } = useTheme()
   const [choice, setChoice] = useState<OnboardingChoice>(defaultChoice)
   const [step, setStep] = useState(0)
@@ -319,6 +321,10 @@ export function OnboardingDialog({ open, settings, onFinish }: Props) {
               <span role="alert" className="text-sm text-destructive">
                 {error}
               </span>
+            ) : step === 0 ? (
+              <Button variant="outline" onClick={onImport}>
+                <Upload /> وارد کردن اطلاعات از بک‌آپ
+              </Button>
             ) : (
               <span className="text-sm text-muted-foreground">
                 {step === 1 && total > 0 ? `${formatNumber(total)} دستگاه ساخته می‌شود` : ''}
