@@ -58,8 +58,6 @@ jobs:
         env:
           # Project sites are served from /<repo>/; user/org sites (<user>.github.io) from /.
           BASE_PATH: ${{ endsWith(github.repository, '.github.io') && '/' || format('/{0}/', github.event.repository.name) }}
-      - name: Zip web
-        run: mkdir -p out && cd web-dist && 7z a -tzip "../out/gamenet-time-manager-web-${GITHUB_REF_NAME}.zip" . > /dev/null
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web-dist
@@ -68,6 +66,7 @@ jobs:
       - name: Name the installer
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          mkdir out
           cp src-tauri/target/release/bundle/nsis/*-setup.exe "out/gamenet-time-manager_${VERSION}_x64-setup.exe"
       - uses: actions/upload-artifact@v4
         with:
@@ -87,9 +86,7 @@ jobs:
           generate_release_notes: true
           # Tags with a suffix (v0.1.0-beta.1) are pre-releases.
           prerelease: ${{ contains(github.ref_name, '-') }}
-          files: |
-            assets/*.zip
-            assets/*-setup.exe
+          files: assets/*-setup.exe
 
   # Writes the released version back to main so the repo matches the tag. It does not retrigger
   # this workflow (only tags do). Skipped when the tagged commit is not on main.
