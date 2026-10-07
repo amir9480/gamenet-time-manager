@@ -5,7 +5,8 @@ export type AppIconValue =
   | { kind: 'custom'; src: string } // small PNG data URL
 
 export const DEFAULT_ICON: AppIconValue = { kind: 'default' }
-export const DEFAULT_ICON_SRC = '/favicon.svg'
+// Relative to the deploy base (GitHub Pages serves the app from /<repo>/).
+export const DEFAULT_ICON_SRC = `${import.meta.env.BASE_URL}favicon.svg`
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024
 const SIZE = 128

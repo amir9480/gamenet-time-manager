@@ -23,6 +23,7 @@ import type { Pick } from '@/components/device-picker'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { requestNotificationPermission } from '@/lib/attention'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { toFa } from '@/lib/jalali'
 import { rank, type Field } from '@/lib/search'
@@ -290,6 +291,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
   const submit = () => {
     if (!device || !price) return
     const limitMinutes = Math.floor(parseNumber(limit))
+    if (limitMinutes > 0) requestNotificationPermission()
     onCreate(device, categoryName(settings, device), price, customerId, limitMinutes || undefined, reserve)
     onOpenChange(false)
   }

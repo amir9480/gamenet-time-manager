@@ -3,12 +3,12 @@
 <h1 align="center">نرم افزار مدیریت زمان گیم نت</h1>
 
 <p align="center">
-  <a href="https://amir9480.github.io/gamenet-time-manager/"><img alt="PWA آنلاین" src="https://img.shields.io/badge/PWA-آنلاین-5a0fc8?logo=pwa&logoColor=white"></a>
-  <a href="https://github.com/amir9480/gamenet-time-manager/releases"><img alt="نسخه" src="https://img.shields.io/github/v/release/amir9480/gamenet-time-manager?include_prereleases&label=نسخه"></a>
-  <a href="https://github.com/amir9480/gamenet-time-manager/actions/workflows/deploy.yml"><img alt="ساخت" src="https://img.shields.io/github/actions/workflow/status/amir9480/gamenet-time-manager/deploy.yml?label=ساخت"></a>
-  <a href="LICENSE"><img alt="مجوز" src="https://img.shields.io/github/license/amir9480/gamenet-time-manager?label=مجوز"></a>
-  <img alt="پلتفرم" src="https://img.shields.io/badge/ویندوز-%7C%20وب-0078d4?logo=windows&logoColor=white">
-  <a href="https://github.com/amir9480/gamenet-time-manager/issues"><img alt="مشکلات" src="https://img.shields.io/github/issues/amir9480/gamenet-time-manager?label=مشکلات"></a>
+  <a href="https://amir9480.github.io/gamenet-time-manager/"><img alt="PWA online" src="https://img.shields.io/badge/PWA-online-5a0fc8?logo=pwa&logoColor=white"></a>
+  <a href="https://github.com/amir9480/gamenet-time-manager/releases"><img alt="Version" src="https://img.shields.io/github/v/release/amir9480/gamenet-time-manager?include_prereleases&label=version"></a>
+  <a href="https://github.com/amir9480/gamenet-time-manager/actions/workflows/deploy.yml"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/amir9480/gamenet-time-manager/deploy.yml?label=build"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/amir9480/gamenet-time-manager?label=license"></a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20Web-0078d4?logo=windows&logoColor=white">
+  <a href="https://github.com/amir9480/gamenet-time-manager/issues"><img alt="Issues" src="https://img.shields.io/github/issues/amir9480/gamenet-time-manager?label=issues"></a>
 </p>
 
 <p align="center">

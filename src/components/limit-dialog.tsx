@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { requestNotificationPermission } from '@/lib/attention'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -84,6 +85,7 @@ export function LimitDialog({ open, onOpenChange, remainingMs, onSave, onRemove,
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && mins > 0) {
+                  requestNotificationPermission()
                   onSave(mins)
                   onOpenChange(false)
                 }
@@ -106,6 +108,7 @@ export function LimitDialog({ open, onOpenChange, remainingMs, onSave, onRemove,
               <Button
                 disabled={mins <= 0}
                 onClick={() => {
+                  requestNotificationPermission()
                   onSave(mins)
                   onOpenChange(false)
                 }}

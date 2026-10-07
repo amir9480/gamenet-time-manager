@@ -322,15 +322,16 @@ export function SettingsDialog({
                 </p>
               </div>
 
-              <div className="flex items-center justify-between gap-4">
-                <Label htmlFor="autostart-switch">اجرای خودکار با روشن شدن سیستم</Label>
-                <Switch
-                  id="autostart-switch"
-                  checked={draft.autostart}
-                  disabled={!isTauri()}
-                  onCheckedChange={(c) => patch({ autostart: c })}
-                />
-              </div>
+              {isTauri() && (
+                <div className="flex items-center justify-between gap-4">
+                  <Label htmlFor="autostart-switch">اجرای خودکار با روشن شدن سیستم</Label>
+                  <Switch
+                    id="autostart-switch"
+                    checked={draft.autostart}
+                    onCheckedChange={(c) => patch({ autostart: c })}
+                  />
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="rates">

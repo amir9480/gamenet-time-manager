@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AlarmClock, Pause, Plus, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { LimitDialog } from '@/components/limit-dialog'
 import { ALARM_INTERVAL_MS, playAlarm } from '@/lib/alarm'
+import { alertLimitReached } from '@/lib/attention'
 import { readSessions } from '@/lib/db'
 import { formatDuration, formatNumber } from '@/lib/format'
 import { useNow } from '@/lib/use-now'
@@ -113,6 +114,8 @@ function AlarmBody({
 
 // Sessions whose time limit ran out (most overdue first; the order stays stable over time)
 // plus the alarm: it sounds right away and then every ALARM_INTERVAL_MS while any is waiting.
+// Each newly expired session also calls the operator back to the app (window focus or a
+// system notification, see attention.ts).
 function useExpired(sessions: Session[]) {
   const watching = sessions.some((s) => s.status === 'running' && s.limitMs !== undefined)
   const now = useNow(watching)
@@ -127,6 +130,18 @@ function useExpired(sessions: Session[]) {
     const id = setInterval(playAlarm, ALARM_INTERVAL_MS)
     return () => clearInterval(id)
   }, [alarming])
+
+  const alerted = useRef(new Set<string>())
+  useEffect(() => {
+    const ids = new Set(expired.map((s) => s.id))
+    // Forget sessions that are no longer expired so a later expiry alerts again.
+    for (const id of alerted.current) if (!ids.has(id)) alerted.current.delete(id)
+    for (const s of expired) {
+      if (alerted.current.has(s.id)) continue
+      alerted.current.add(s.id)
+      alertLimitReached(s.deviceName, s.id)
+    }
+  })
 
   return { expired, now }
 }

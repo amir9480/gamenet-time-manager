@@ -47,6 +47,8 @@ export default defineConfig({
           'assets/{index,app-icon-lucide,DynamicIcon,Icon,icon-picker,virtual_pwa-register,workbox-window}*.js',
         ],
         navigateFallback: 'index.html',
+        // Notification click handler for the time-limit alert (see src/lib/attention.ts).
+        importScripts: ['notification-click.js'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
