@@ -11,6 +11,7 @@ import {
   type DeviceCategory,
   type ExtraCategory,
   type HistoryEntry,
+  type Payment,
   type RateGroup,
   type Session,
   type Settings,
@@ -30,6 +31,7 @@ class GamenetDB extends Dexie {
   meta!: Table<{ key: string; value: string }, string>
   sessions!: Table<Session, string>
   history!: Table<HistoryEntry, string>
+  payments!: Table<Payment, string>
 
   constructor() {
     super('gamenet-timer-manager')
@@ -46,6 +48,8 @@ class GamenetDB extends Dexie {
     })
     // v2: key/value flags (onboarding).
     this.version(2).stores({ meta: 'key' })
+    // v3: debt (نسیه) payments, and a customer index on history for the debt ledger.
+    this.version(3).stores({ payments: 'id, customerId, paidAt', history: 'id, endedAt, customerId' })
     this.on('populate', (tx) => {
       const d = defaultSettings()
       const seed = (table: string, rows: object[]) =>
@@ -220,6 +224,44 @@ export const readCustomerSpend = async (): Promise<Map<string, number>> => {
 
 export const deleteCustomer = (id: string) => db.customers.update(id, { deletedAt: Date.now() })
 
+// ---- debts (نسیه) ----------------------------------------------------------------
+
+export type DebtInfo = { debt: number; paid: number; balance: number }
+
+// Debt, payments and what is still owed per customer. Scans history once (like the spend totals),
+// so callers load it after the customer list.
+export const readDebts = async (): Promise<Map<string, DebtInfo>> => {
+  const out = new Map<string, DebtInfo>()
+  const at = (id: string) => {
+    let d = out.get(id)
+    if (!d) out.set(id, (d = { debt: 0, paid: 0, balance: 0 }))
+    return d
+  }
+  await db.history.each((h) => {
+    if (h.onAccount && h.customerId) at(h.customerId).debt += h.total
+  })
+  await db.payments.each((p) => {
+    at(p.customerId).paid += p.amount
+  })
+  out.forEach((d) => (d.balance = d.debt - d.paid))
+  return out
+}
+
+// Every on-account session and payment of one customer, newest first.
+export const readCustomerLedger = async (customerId: string) => {
+  const [entries, payments] = await Promise.all([
+    db.history.where('customerId').equals(customerId).toArray(),
+    db.payments.where('customerId').equals(customerId).toArray(),
+  ])
+  return {
+    debts: entries.filter((e) => e.onAccount).sort((a, b) => b.endedAt - a.endedAt),
+    payments: payments.sort((a, b) => b.paidAt - a.paidAt),
+  }
+}
+
+export const addPayment = (customerId: string, amount: number) =>
+  db.payments.add({ id: uid(), customerId, amount, paidAt: Date.now() })
+
 // ---- onboarding ---------------------------------------------------------------
 
 // True only for a brand-new database. A database that already has devices, sessions or
@@ -256,6 +298,7 @@ const BACKUP_TABLE_NAMES = [
   'meta',
   'sessions',
   'history',
+  'payments',
 ] as const
 
 export type BackupTableName = (typeof BACKUP_TABLE_NAMES)[number]
@@ -272,6 +315,7 @@ const backupTables = (): Record<BackupTableName, Table<any, string>> =>
     meta: db.meta,
     sessions: db.sessions,
     history: db.history,
+    payments: db.payments,
   })
 
 export type Backup = {

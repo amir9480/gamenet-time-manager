@@ -11,6 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -56,6 +57,12 @@ const PRESETS: { id: Preset; label: string }[] = [
 
 const toman = (n: number) => `${formatNumber(n)} تومان`
 
+const PAY_ITEMS = [
+  { value: 'all', label: 'همه (نقدی و نسیه)' },
+  { value: 'paid', label: 'پرداخت‌شده' },
+  { value: 'account', label: 'نسیه' },
+]
+
 type Pending = { kind: 'one'; entry: HistoryEntry } | { kind: 'range' } | null
 
 export function HistoryDialog({ open, onOpenChange }: Props) {
@@ -67,6 +74,8 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
   // 'all' | 'none' (no customer) | customer id; 'all' | category name
   const [customerFilter, setCustomerFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
+  // 'all' | 'paid' | 'account' (نسیه): switches the list and the stats between both kinds.
+  const [payFilter, setPayFilter] = useState('all')
 
   const rangeEntries = useLiveQuery(
     () => db.history.where('endedAt').between(range.from, range.to, true, true).reverse().toArray(),
@@ -104,10 +113,11 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
       (e) =>
         (customerFilter === 'all' ||
           (customerFilter === 'none' ? !e.customerId : e.customerId === customerFilter)) &&
-        (categoryFilter === 'all' || e.categoryNames.includes(categoryFilter)),
+        (categoryFilter === 'all' || e.categoryNames.includes(categoryFilter)) &&
+        (payFilter === 'all' || (payFilter === 'account') === !!e.onAccount),
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const entries = useMemo(() => rangeEntries && applyFilters(rangeEntries), [rangeEntries, customerFilter, categoryFilter])
+  const entries = useMemo(() => rangeEntries && applyFilters(rangeEntries), [rangeEntries, customerFilter, categoryFilter, payFilter])
 
   // Equally long range right before the selected one, for the stats comparison.
   const prevRange = previousRange(range)
@@ -119,7 +129,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
     [prevRange?.from, prevRange?.to],
   )
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const previousEntries = useMemo(() => (prevRaw ? applyFilters(prevRaw) : null), [prevRaw, customerFilter, categoryFilter])
+  const previousEntries = useMemo(() => (prevRaw ? applyFilters(prevRaw) : null), [prevRaw, customerFilter, categoryFilter, payFilter])
 
   const groups = useMemo(() => groupByDay(entries ?? []), [entries])
   const summary = useMemo(() => summarize(entries ?? []), [entries])
@@ -181,7 +191,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
           )}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">مشتری</Label>
             <FilterCombobox
@@ -202,6 +212,18 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
               value={categoryFilter}
               onChange={(v) => {
                 setCategoryFilter(v)
+                setPage(0)
+              }}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">نحوه‌ی پرداخت</Label>
+            <FilterCombobox
+              aria-label="فیلتر نحوه‌ی پرداخت"
+              options={PAY_ITEMS}
+              value={payFilter}
+              onChange={(v) => {
+                setPayFilter(v)
                 setPage(0)
               }}
             />
@@ -291,7 +313,14 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
                               {toFa(formatDuration(e.durationMs))}
                             </span>
                           </td>
-                          <td className="px-2 py-2 whitespace-nowrap">{toman(e.total)}</td>
+                          <td className="px-2 py-2 whitespace-nowrap">
+                            {toman(e.total)}
+                            {e.onAccount && (
+                              <Badge variant="destructive" className="ms-1.5">
+                                نسیه
+                              </Badge>
+                            )}
+                          </td>
                           <td className="px-1 py-1">
                             <div className="flex items-center">
                               <ChevronDown
@@ -373,7 +402,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
             <AlertDialogTitle>حذف از تاریخچه؟</AlertDialogTitle>
             <AlertDialogDescription>
               {pending?.kind === 'one'
-                ? `تایم «${pending.entry.deviceNames.join('، ')}» (${formatJalaliDate(pending.entry.endedAt)}) برای همیشه حذف می‌شود.`
+                ? `تایم «${pending.entry.deviceNames.join('، ')}» (${formatJalaliDate(pending.entry.endedAt)}) برای همیشه حذف می‌شود.${pending.entry.onAccount ? ' این تایم نسیه است و از بدهی مشتری هم کم می‌شود.' : ''}`
                 : `${toFa(summary.count)} تایم در بازه‌ی انتخاب‌شده برای همیشه حذف می‌شود.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -437,6 +466,11 @@ function Details({ entry }: { entry: HistoryEntry }) {
           <span className="shrink-0">{toman(i.price * i.qty)}</span>
         </div>
       ))}
+      {entry.onAccount && (
+        <div className="font-bold text-destructive">
+          نسیه: این مبلغ به حساب {entry.customerName} گذاشته شده است.
+        </div>
+      )}
       <div className="flex justify-between gap-4 border-t pt-1.5 font-bold">
         <span>
           زمان {formatNumber(entry.timeCost)} + زمان اضافه {formatNumber(entry.extraTimesCost)} +

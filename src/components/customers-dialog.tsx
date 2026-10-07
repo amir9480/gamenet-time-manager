@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, NotebookPen, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,10 +12,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NewCustomerDialog } from '@/components/new-customer-dialog'
+import { CustomerDebtsDialog } from '@/components/customer-debts-dialog'
 import { customerFields } from '@/components/customer-select'
 import { Tip } from '@/components/tip'
 import { buildIndex, searchIndex } from '@/lib/search'
-import { deleteCustomer, readCustomerSpend } from '@/lib/db'
+import { deleteCustomer, readCustomerSpend, readDebts } from '@/lib/db'
 import { formatNumber } from '@/lib/format'
 import type { Customer, Usage } from '@/lib/store'
 
@@ -34,14 +35,22 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
   const [page, setPage] = useState(0)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Customer | null>(null)
+  const [debtsFor, setDebtsFor] = useState<Customer | null>(null)
+  const [debtorsOnly, setDebtorsOnly] = useState(false)
 
   // Deferred: the list renders first, the totals fill in once the history has been summed
   // (undefined while loading; re-summed whenever history changes).
   const spend = useLiveQuery(() => (open ? readCustomerSpend() : undefined), [open])
+  // Outstanding debt (نسیه) per customer, loaded the same deferred way.
+  const debts = useLiveQuery(() => (open ? readDebts() : undefined), [open])
+  const owed = (id: string) => debts?.get(id)?.balance ?? 0
+  const debtors = debts ? customers.filter((c) => owed(c.id) > 0) : []
+  const totalOwed = debtors.reduce((sum, c) => sum + owed(c.id), 0)
 
   // Newest first; a query ranks the customers by relevance instead.
   const index = useMemo(() => buildIndex([...customers].reverse(), customerFields), [customers])
-  const matches = useMemo(() => searchIndex(index, q), [index, q])
+  const found = useMemo(() => searchIndex(index, q), [index, q])
+  const matches = debtorsOnly ? found.filter((c) => owed(c.id) > 0) : found
   const pages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE))
   const current = Math.min(page, pages - 1)
   const shown = matches.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
@@ -58,7 +67,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
           onOpenChange(o)
         }}
       >
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>مشتریان</DialogTitle>
             <DialogDescription>
@@ -80,10 +89,28 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                 }}
               />
             </div>
+            <Button
+              variant={debtorsOnly ? 'default' : 'outline'}
+              aria-pressed={debtorsOnly}
+              disabled={debts === undefined}
+              onClick={() => {
+                setDebtorsOnly(!debtorsOnly)
+                setPage(0)
+              }}
+            >
+              <NotebookPen /> بدهکاران{debts ? ` (${formatNumber(debtors.length)})` : ''}
+            </Button>
             <Button variant="outline" onClick={() => setAdding(true)}>
               <Plus /> مشتری جدید
             </Button>
           </div>
+
+          {debts && totalOwed > 0 && (
+            <div className="flex items-center justify-between rounded-lg bg-destructive/10 px-3 py-2 text-sm">
+              <span>مجموع نسیه‌ی مشتریان</span>
+              <b className="text-destructive">{formatNumber(totalOwed)} تومان</b>
+            </div>
+          )}
 
           {matches.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
@@ -91,16 +118,18 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
             </p>
           ) : (
             <div className="flex flex-col divide-y rounded-lg border">
-              <div className="grid grid-cols-[1fr_1fr_7rem_5rem] gap-2 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <div className="grid grid-cols-[1fr_1fr_7rem_8rem_5rem] gap-2 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                 <span>نام</span>
                 <span>شماره‌ی تماس</span>
                 <span>مجموع خرید</span>
+                <span>نسیه</span>
                 <span />
               </div>
               {shown.map((c) => {
                 const busy = usage.customerIds.has(c.id)
+                const indebted = owed(c.id) > 0
                 return (
-                  <div key={c.id} className="grid grid-cols-[1fr_1fr_7rem_5rem] items-center gap-2 px-3 py-1.5">
+                  <div key={c.id} className="grid grid-cols-[1fr_1fr_7rem_8rem_5rem] items-center gap-2 px-3 py-1.5">
                     <span className="truncate text-sm">{c.name}</span>
                     <span className="truncate text-sm text-muted-foreground" dir="ltr">
                       {c.phone || '—'}
@@ -113,6 +142,32 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                         <span className="text-xs text-muted-foreground">تومان</span>
                       </span>
                     )}
+                    {debts === undefined ? (
+                      <Skeleton className="h-4 w-20" />
+                    ) : (
+                      (() => {
+                        const info = debts.get(c.id)
+                        if (!info) return <span className="text-sm text-muted-foreground">—</span>
+                        return (
+                          <Tip label="مشاهده‌ی نسیه‌ها و پرداخت‌ها">
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              className="justify-start px-1"
+                              onClick={() => setDebtsFor(c)}
+                            >
+                              {info.balance > 0 ? (
+                                <span className="font-bold text-destructive" dir="ltr">
+                                  {formatNumber(info.balance)}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">تسویه‌شده</span>
+                              )}
+                            </Button>
+                          </Tip>
+                        )
+                      })()
+                    )}
                     <div className="flex justify-end gap-0.5">
                       <Tip label="ویرایش">
                         <Button
@@ -124,13 +179,21 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                           <Pencil />
                         </Button>
                       </Tip>
-                      <Tip label={busy ? 'این مشتری در یک تایم فعال است' : 'حذف'}>
+                      <Tip
+                        label={
+                          busy
+                            ? 'این مشتری در یک تایم فعال است'
+                            : indebted
+                              ? 'این مشتری نسیه‌ی پرداخت‌نشده دارد'
+                              : 'حذف'
+                        }
+                      >
                         <span>
                           <Button
                             variant="ghost"
                             size="icon"
                             aria-label="حذف"
-                            disabled={busy}
+                            disabled={busy || indebted}
                             onClick={() => deleteCustomer(c.id)}
                           >
                             <Trash2 />
@@ -174,6 +237,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
         </DialogContent>
       </Dialog>
 
+      {debtsFor && <CustomerDebtsDialog customer={debtsFor} onClose={() => setDebtsFor(null)} />}
       {adding && <NewCustomerDialog open onOpenChange={setAdding} />}
       {editing && (
         <NewCustomerDialog

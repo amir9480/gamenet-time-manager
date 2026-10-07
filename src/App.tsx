@@ -73,11 +73,11 @@ function Main() {
   // Wait for IndexedDB so the empty state / default settings never flash.
   if (!settings || !sessions) return null
 
-  const endSession = (id: string, finalTotal?: number) => {
+  const endSession = (id: string, finalTotal?: number, onAccount?: boolean) => {
     const session = sessions.find((s) => s.id === id)
     if (!session) return
     const customer = settings.customers.find((c) => c.id === session.customerId)
-    endSessionRow(buildHistoryEntry(session, customer, Date.now(), finalTotal))
+    endSessionRow(buildHistoryEntry(session, customer, Date.now(), finalTotal, onAccount))
   }
 
   const addSession = (
@@ -299,7 +299,7 @@ function Main() {
                       settings={settings}
                       compact={view === 'compact'}
                       onUpdate={(fn) => updateSessionRow(session.id, fn)}
-                      onEnd={(total) => endSession(session.id, total)}
+                      onEnd={(total, onAccount) => endSession(session.id, total, onAccount)}
                     />
                   ))}
                 </div>

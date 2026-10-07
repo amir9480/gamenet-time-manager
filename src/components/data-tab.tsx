@@ -102,7 +102,7 @@ export function DataTab({ activeSessions }: { activeSessions: number }) {
     <div className="flex flex-col gap-3">
       <Row
         title="خروجی گرفتن"
-        description="همه‌ی اطلاعات (نرخ‌ها، دستگاه‌ها، بوفه، مشتریان، تایم‌های در جریان، تاریخچه) و تنظیمات ظاهری در یک فایل پشتیبان ذخیره می‌شود."
+        description="همه‌ی اطلاعات (نرخ‌ها، دستگاه‌ها، بوفه، مشتریان، تایم‌های در جریان، تاریخچه، نسیه‌ها و پرداخت‌ها) و تنظیمات ظاهری در یک فایل پشتیبان ذخیره می‌شود."
       >
         <Button variant="outline" disabled={busy} onClick={exportData}>
           <Download /> خروجی گرفتن
@@ -192,7 +192,7 @@ export function DataTab({ activeSessions }: { activeSessions: number }) {
           <AlertDialogHeader>
             <AlertDialogTitle>پاک کردن تاریخچه؟</AlertDialogTitle>
             <AlertDialogDescription>
-              همه‌ی تایم‌های پایان‌یافته و آمار آن‌ها برای همیشه پاک می‌شوند. این کار قابل بازگشت
+              همه‌ی تایم‌های پایان‌یافته و آمار آن‌ها برای همیشه پاک می‌شوند؛ نسیه‌های ثبت‌شده‌ی مشتریان (که از تاریخچه محاسبه می‌شوند) هم از بین می‌روند. این کار قابل بازگشت
               نیست؛ در صورت نیاز ابتدا خروجی بگیرید.
             </AlertDialogDescription>
           </AlertDialogHeader>

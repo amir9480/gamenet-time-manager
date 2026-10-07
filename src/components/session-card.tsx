@@ -54,7 +54,7 @@ type Props = {
   sessions: Session[]
   settings: Settings
   onUpdate: (fn: (s: Session) => Session) => void
-  onEnd: (finalTotal?: number) => void
+  onEnd: (finalTotal?: number, onAccount?: boolean) => void
   compact?: boolean
 }
 
@@ -190,10 +190,11 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
           onOpenChange={setSummaryOpen}
           deviceName={customer ? `${name} (${customer.name})` : name}
           session={session}
+          customer={customer}
           now={summaryNow}
-          onConfirm={(finalTotal) => {
+          onConfirm={(finalTotal, onAccount) => {
             setSummaryOpen(false)
-            onEnd(finalTotal)
+            onEnd(finalTotal, onAccount)
           }}
         />
     </>

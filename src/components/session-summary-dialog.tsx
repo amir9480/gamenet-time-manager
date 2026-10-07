@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Coins } from 'lucide-react'
+import { Coins, NotebookPen, Wallet } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +23,7 @@ import {
   segmentCost,
   roundAmount,
   segmentMs,
+  type Customer,
   type Session,
 } from '@/lib/store'
 
@@ -34,8 +35,10 @@ type Props = {
   now: number
   // Read-only live view: no confirm button, title/labels reflect an ongoing session.
   readOnly?: boolean
-  // Receives the final amount only when it was edited.
-  onConfirm?: (finalTotal?: number) => void
+  // The session's customer; only a customer can be put on account (نسیه).
+  customer?: Customer
+  // Receives the final amount only when it was edited, and whether it goes on the customer's account.
+  onConfirm?: (finalTotal?: number, onAccount?: boolean) => void
 }
 
 const toman = (n: number) => `${formatNumber(n)} تومان`
@@ -47,6 +50,7 @@ export function SessionSummaryDialog({
   session,
   now,
   readOnly = false,
+  customer,
   onConfirm,
 }: Props) {
   const { segments, extraTimes, extraItems } = session
@@ -60,8 +64,12 @@ export function SessionSummaryDialog({
 
   // The final amount is editable when ending; it is what gets stored as the income.
   const [finalText, setFinalText] = useState('')
+  const [onAccount, setOnAccount] = useState(false)
   useEffect(() => {
-    if (open) setFinalText(String(total))
+    if (open) {
+      setFinalText(String(total))
+      setOnAccount(false)
+    }
     // Reset only when (re)opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -184,6 +192,38 @@ export function SessionSummaryDialog({
                   مجموع محاسبه‌شده: {toman(total)}
                 </span>
               )}
+
+              <div className="flex items-center justify-between gap-4 pt-1">
+                <span className="text-sm font-normal">نحوه‌ی پرداخت</span>
+                <div className="flex gap-1.5" role="group" aria-label="نحوه‌ی پرداخت">
+                  <Button
+                    size="sm"
+                    variant={onAccount ? 'outline' : 'default'}
+                    aria-pressed={!onAccount}
+                    onClick={() => setOnAccount(false)}
+                  >
+                    <Wallet /> پرداخت شد
+                  </Button>
+                  <Tip label={customer ? undefined : 'برای نسیه، ابتدا برای تایم مشتری انتخاب کنید'}>
+                    <span>
+                      <Button
+                        size="sm"
+                        variant={onAccount ? 'destructive' : 'outline'}
+                        aria-pressed={onAccount}
+                        disabled={!customer}
+                        onClick={() => setOnAccount(true)}
+                      >
+                        <NotebookPen /> نسیه
+                      </Button>
+                    </span>
+                  </Tip>
+                </div>
+              </div>
+              {onAccount && customer && (
+                <span className="text-xs text-destructive">
+                  {toman(finalAmount)} به بدهی «{customer.name}» اضافه می‌شود.
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -194,7 +234,11 @@ export function SessionSummaryDialog({
           ) : (
             <>
               <AlertDialogCancel>انصراف</AlertDialogCancel>
-              <AlertDialogAction onClick={() => onConfirm?.(edited ? finalAmount : undefined)}>تایید و اتمام تایم</AlertDialogAction>
+              <AlertDialogAction
+                onClick={() => onConfirm?.(edited ? finalAmount : undefined, onAccount && !!customer)}
+              >
+                تایید و اتمام تایم
+              </AlertDialogAction>
             </>
           )}
         </AlertDialogFooter>

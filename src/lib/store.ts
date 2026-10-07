@@ -451,7 +451,12 @@ export type HistoryEntry = {
   total: number
   // The cost as calculated before an edit; only set when `total` differs from it.
   calculatedTotal?: number
+  // نسیه: the customer did not pay when the session ended; `total` was added to their debt.
+  onAccount?: boolean
 }
+
+// Money a customer paid towards their debt (any amount, any time).
+export type Payment = { id: string; customerId: string; amount: number; paidAt: number }
 
 const distinct = (xs: string[]) => [...new Set(xs.filter(Boolean))]
 
@@ -461,6 +466,8 @@ export const buildHistoryEntry = (
   now: number,
   // Final amount typed by the user when ending; overrides the calculated cost.
   finalTotal?: number,
+  // Put the amount on the customer's account instead of being paid now (needs a customer).
+  onAccount?: boolean,
 ): HistoryEntry => {
   const closed = pauseSession(s, now)
   const timeCost = closed.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0)
@@ -487,6 +494,7 @@ export const buildHistoryEntry = (
     extraItemsCost: itemsCost,
     total,
     ...(total !== calculated ? { calculatedTotal: calculated } : {}),
+    ...(onAccount && customer ? { onAccount: true } : {}),
   }
 }
 
