@@ -1,5 +1,5 @@
 import { formatJalaliClock, formatJalaliDate, formatJalaliLong } from '@/lib/jalali'
-import { useNow } from '@/lib/useNow'
+import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
 
 export function LiveClock({ size }: { size: 'large' | 'small' }) {

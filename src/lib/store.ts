@@ -415,7 +415,10 @@ export type HistoryEntry = {
   timeCost: number
   extraTimesCost: number
   extraItemsCost: number
+  // Final income (what stats sum up). Equals the calculated cost unless it was edited when ending.
   total: number
+  // The cost as calculated before an edit; only set when `total` differs from it.
+  calculatedTotal?: number
 }
 
 const distinct = (xs: string[]) => [...new Set(xs.filter(Boolean))]
@@ -424,11 +427,15 @@ export const buildHistoryEntry = (
   s: Session,
   customer: Customer | undefined,
   now: number,
+  // Final amount typed by the user when ending; overrides the calculated cost.
+  finalTotal?: number,
 ): HistoryEntry => {
   const closed = pauseSession(s, now)
   const timeCost = closed.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0)
   const timesCost = extraTimesCost(closed)
   const itemsCost = extraItemsCost(closed)
+  const calculated = timeCost + timesCost + itemsCost
+  const total = finalTotal ?? calculated
   return {
     id: uid(),
     sessionId: s.id,
@@ -446,6 +453,55 @@ export const buildHistoryEntry = (
     timeCost,
     extraTimesCost: timesCost,
     extraItemsCost: itemsCost,
-    total: timeCost + timesCost + itemsCost,
+    total,
+    ...(total !== calculated ? { calculatedTotal: calculated } : {}),
   }
 }
+
+// ---- search -----------------------------------------------------------------
+
+// Normalises Persian/Arabic digits and letter variants so «۱۲۰» matches "120".
+export const normalizeSearch = (text: string) =>
+  text
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/[,٬]/g, '')
+    .toLowerCase()
+
+// Everything a running session can be searched by: device, type, customer, prices, extras,
+// status and the current total.
+export const sessionSearchText = (s: Session, customer: Customer | undefined, now: number) =>
+  normalizeSearch(
+    [
+      s.deviceName,
+      s.categoryName,
+      customer?.name,
+      customer?.phone,
+      s.status === 'running' ? 'در حال بازی' : 'متوقف',
+      ...s.segments.map((x) => `${x.typeName} ${x.price}`),
+      ...s.extraTimes.map((t) => `${t.name} ${t.typeName} ${t.minutes}`),
+      ...s.extraItems.map((i) => `${i.name} ${i.description ?? ''} ${i.price}`),
+      String(computeCost(s, now)),
+    ]
+      .filter(Boolean)
+      .join(' '),
+  )
+
+// ---- final-amount rounding ----------------------------------------------------
+
+export type RoundMode = 'round' | 'floor' | 'ceil'
+export type Rounding = { step: number; mode: RoundMode }
+
+export const DEFAULT_ROUNDING: Rounding = { step: 1000, mode: 'round' }
+
+export const ROUND_MODE_LABELS: Record<RoundMode, string> = {
+  round: 'نزدیک‌ترین',
+  floor: 'رو به پایین',
+  ceil: 'رو به بالا',
+}
+
+// Rounds an amount to a multiple of `step` toman.
+export const roundAmount = (amount: number, { step, mode }: Rounding) =>
+  step > 0 ? Math[mode](amount / step) * step : amount

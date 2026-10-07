@@ -9,8 +9,8 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
-import { NewCustomerDialog } from '@/components/NewCustomerDialog'
-import { Tip } from '@/components/Tip'
+import { NewCustomerDialog } from '@/components/new-customer-dialog'
+import { Tip } from '@/components/tip'
 import type { Customer } from '@/lib/store'
 
 type Props = {
@@ -43,7 +43,7 @@ export function CustomerSelect({ customers, value, onChange, id, autoFocus }: Pr
         <ComboboxInput
           id={id}
           autoFocus={autoFocus}
-          placeholder="بدون مشتری"
+          placeholder="مشتری مهمان"
           aria-label="مشتری"
           showClear={!!selected}
           className="w-full"

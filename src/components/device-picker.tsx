@@ -1,4 +1,4 @@
-import { PriceSelect } from '@/components/PriceSelect'
+import { PriceSelect } from '@/components/price-select'
 import { Label } from '@/components/ui/label'
 import {
   Select,

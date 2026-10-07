@@ -137,7 +137,9 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
     )
   }
 
-  const timeShare = k.total ? Math.round((k.timeCost / k.total) * 100) : 0
+  // Share of the calculated costs (the final income may have been edited).
+  const costs = k.timeCost + k.extrasCost
+  const timeShare = costs ? Math.round((k.timeCost / costs) * 100) : 0
 
   const dailyConfig = {
     time: { label: 'زمان بازی', color: 'var(--chart-1)' },

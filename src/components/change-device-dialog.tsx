@@ -9,8 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { DevicePicker, pickFor, type Pick } from '@/components/DevicePicker'
-import { useDiscardGuard } from '@/components/DiscardDialog'
+import { DevicePicker, pickFor, type Pick } from '@/components/device-picker'
+import { useDiscardGuard } from '@/components/discard-dialog'
 import {
   categoryName,
   flatPrices,

@@ -1,10 +1,10 @@
 import { lazy, Suspense } from 'react'
-import { DEFAULT_ICON_SRC, type AppIconValue } from '@/lib/appIcon'
+import { DEFAULT_ICON_SRC, type AppIconValue } from '@/lib/app-icon'
 import { useTheme } from '@/components/theme-provider'
 import { cn } from '@/lib/utils'
 
 // Loaded only when a Lucide icon is chosen, so the default build stays small.
-const AppIconLucide = lazy(() => import('@/components/AppIconLucide'))
+const AppIconLucide = lazy(() => import('@/components/app-icon-lucide'))
 
 // The app icon in the header / empty state; configurable in Settings.
 export function AppIcon({ className, value }: { className?: string; value?: AppIconValue }) {

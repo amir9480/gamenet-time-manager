@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useDiscardGuard } from '@/components/DiscardDialog'
+import { useDiscardGuard } from '@/components/discard-dialog'
 import { formatNumber, parseNumber } from '@/lib/format'
 
 type Props = {

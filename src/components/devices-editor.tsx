@@ -12,8 +12,8 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useDiscardGuard } from '@/components/DiscardDialog'
-import { Tip } from '@/components/Tip'
+import { useDiscardGuard } from '@/components/discard-dialog'
+import { Tip } from '@/components/tip'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { uid, type Device, type DeviceCategory, type RateGroup, type Usage } from '@/lib/store'
 

@@ -9,8 +9,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { NewCustomerDialog } from '@/components/NewCustomerDialog'
-import { Tip } from '@/components/Tip'
+import { NewCustomerDialog } from '@/components/new-customer-dialog'
+import { Tip } from '@/components/tip'
 import { deleteCustomer } from '@/lib/db'
 import type { Customer, Usage } from '@/lib/store'
 

@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { History, LayoutGrid, Moon, Plus, Rows3, Sun, Users } from 'lucide-react'
-import { AddSessionDialog } from '@/components/AddSessionDialog'
-import { AppIcon } from '@/components/AppIcon'
-import { HistoryDialog } from '@/components/HistoryDialog'
-import { LiveClock } from '@/components/LiveClock'
-import { OnboardingDialog } from '@/components/OnboardingDialog'
-import { SessionCard } from '@/components/SessionCard'
-import { CustomersDialog } from '@/components/CustomersDialog'
-import { SettingsDialog, type SettingsTab } from '@/components/SettingsDialog'
+import { History, LayoutGrid, Moon, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
+import { AddSessionDialog } from '@/components/add-session-dialog'
+import { AppIcon } from '@/components/app-icon'
+import { HistoryDialog } from '@/components/history-dialog'
+import { LiveClock } from '@/components/live-clock'
+import { OnboardingDialog } from '@/components/onboarding-dialog'
+import { SessionCard } from '@/components/session-card'
+import { CustomersDialog } from '@/components/customers-dialog'
+import { SettingsDialog, type SettingsTab } from '@/components/settings-dialog'
 import { ThemeProvider, useTheme } from '@/components/theme-provider'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { Tip } from '@/components/Tip'
+import { Tip } from '@/components/tip'
 import {
   addSessionRow,
   endSessionRow,
@@ -26,6 +27,8 @@ import {
 import {
   buildHistoryEntry,
   createSession,
+  normalizeSearch,
+  sessionSearchText,
   usageOf,
   type Device,
   type FlatPrice,
@@ -58,6 +61,7 @@ function Main() {
   const [onboarding, setOnboarding] = useState(false)
   // Device-type filter (category name); null = all types.
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   // Only a brand-new database gets the onboarding dialog.
   useEffect(() => {
@@ -68,11 +72,11 @@ function Main() {
   // Wait for IndexedDB so the empty state / default settings never flash.
   if (!settings || !sessions) return null
 
-  const endSession = (id: string) => {
+  const endSession = (id: string, finalTotal?: number) => {
     const session = sessions.find((s) => s.id === id)
     if (!session) return
     const customer = settings.customers.find((c) => c.id === session.customerId)
-    endSessionRow(buildHistoryEntry(session, customer, Date.now()))
+    endSessionRow(buildHistoryEntry(session, customer, Date.now(), finalTotal))
   }
 
   const addSession = (device: Device, category: string, price: FlatPrice, customerId?: string) =>
@@ -84,14 +88,38 @@ function Main() {
     .map((c) => c.name)
   const showTypes = grouping && typeNames.length > 1
   const activeType = showTypes && typeFilter && typeNames.includes(typeFilter) ? typeFilter : null
-  // Grouped: one section per type (settings order); otherwise a single flat list.
-  const sections: { name?: string; items: typeof sessions }[] = !showTypes
-    ? [{ items: sessions }]
-    : activeType
-      ? [{ items: sessions.filter((x) => x.categoryName === activeType) }]
-      : [...typeNames, ...new Set(sessions.map((x) => x.categoryName).filter((n) => !typeNames.includes(n)))]
-          .map((name) => ({ name, items: sessions.filter((x) => x.categoryName === name) }))
-          .filter((g) => g.items.length > 0)
+  // Search over every parameter of the running sessions.
+  const needle = normalizeSearch(query.trim())
+  const found = needle
+    ? sessions.filter((x) =>
+        sessionSearchText(
+          x,
+          settings.customers.find((c) => c.id === x.customerId),
+          Date.now(),
+        ).includes(needle),
+      )
+    : sessions
+  // Grouped: one section per type (settings order). A chosen type is shown alone, or first
+  // with the other types dimmed while searching; otherwise a single flat list.
+  const allTypes = [
+    ...typeNames,
+    ...new Set(sessions.map((x) => x.categoryName).filter((n) => !typeNames.includes(n))),
+  ]
+  // Other types only appear (dimmed) while searching.
+  const ordered = !activeType
+    ? allTypes
+    : needle
+      ? [activeType, ...allTypes.filter((t) => t !== activeType)]
+      : [activeType]
+  const sections: { name?: string; dim?: boolean; items: typeof sessions }[] = !showTypes
+    ? [{ items: found }]
+    : ordered
+        .map((name) => ({
+          name,
+          dim: activeType !== null && name !== activeType,
+          items: found.filter((x) => x.categoryName === name),
+        }))
+        .filter((g) => g.items.length > 0)
 
   const openSettings = (tab: SettingsTab) => {
     setSettingsTab(tab)
@@ -176,7 +204,7 @@ function Main() {
                       aria-pressed={activeType === null}
                       onClick={() => setTypeFilter(null)}
                     >
-                      همه ({sessions.length})
+                      همه ({found.length})
                     </Button>
                     {typeNames.map((t) => (
                       <Button
@@ -186,13 +214,33 @@ function Main() {
                         aria-pressed={activeType === t}
                         onClick={() => setTypeFilter(activeType === t ? null : t)}
                       >
-                        {t} ({sessions.filter((x) => x.categoryName === t).length})
+                        {t} ({found.filter((x) => x.categoryName === t).length})
                       </Button>
                     ))}
                   </>
                 )}
               </div>
               <div className="flex items-center gap-1">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute start-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    aria-label="جستجوی تایم‌ها"
+                    placeholder="جستجو در تایم‌ها…"
+                    className="h-7 w-44 ps-7 pe-7 text-sm"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                  {query && (
+                    <button
+                      type="button"
+                      aria-label="پاک کردن جستجو"
+                      className="absolute end-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      onClick={() => setQuery('')}
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
+                </div>
                 <Tip label="نمای کامل">
                   <Button
                     size="icon-sm"
@@ -220,8 +268,14 @@ function Main() {
                 </Button>
               </div>
             </div>
+            {found.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted-foreground">تایمی پیدا نشد.</p>
+            )}
             {sections.map((sec) => (
-              <section key={sec.name ?? 'all'} className="flex flex-col gap-2">
+              <section
+                key={sec.name ?? 'all'}
+                className={`flex flex-col gap-2 ${sec.dim ? 'opacity-50' : ''}`}
+              >
                 {sec.name && (
                   <h2 className="text-sm font-bold text-muted-foreground">
                     {sec.name} ({sec.items.length})
@@ -242,7 +296,7 @@ function Main() {
                       settings={settings}
                       compact={view === 'compact'}
                       onUpdate={(fn) => updateSessionRow(session.id, fn)}
-                      onEnd={() => endSession(session.id)}
+                      onEnd={(total) => endSession(session.id, total)}
                     />
                   ))}
                 </div>

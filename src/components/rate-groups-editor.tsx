@@ -2,7 +2,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Tip } from '@/components/Tip'
+import { Tip } from '@/components/tip'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { uid, type Device, type RateGroup, type Usage } from '@/lib/store'
 

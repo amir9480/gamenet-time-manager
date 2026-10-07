@@ -11,16 +11,18 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Tip } from '@/components/Tip'
+import { Tip } from '@/components/tip'
 import { Label } from '@/components/ui/label'
-import { useDiscardGuard } from '@/components/DiscardDialog'
-import { PriceSelect } from '@/components/PriceSelect'
+import { useDiscardGuard } from '@/components/discard-dialog'
+import { PriceSelect } from '@/components/price-select'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { flatPrices, type ExtraTime, type RateGroup } from '@/lib/store'
 
 type Props = {
   // Rate groups of the session's device.
   groups: RateGroup[]
+  // Every rate group; the ones not on the device are offered after the device's own.
+  allGroups: RateGroup[]
   currentTypeId: string
   onAdd: (time: Omit<ExtraTime, 'id'>) => void
   // Small icon-only trigger for the compact session card.
@@ -29,14 +31,23 @@ type Props = {
 
 export const DEFAULT_EXTRA_TIME_NAME = 'زمان اضافه'
 
-export function ExtraTimeDialog({ groups, currentTypeId, onAdd, compact }: Props) {
+export function ExtraTimeDialog({ groups, allGroups, currentTypeId, onAdd, compact }: Props) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [minutes, setMinutes] = useState('')
   const [typeId, setTypeId] = useState(currentTypeId)
 
   const mins = Math.floor(parseNumber(minutes))
-  const prices = flatPrices(groups)
+  // The device's own groups first (marked), then every other rate group.
+  const own = new Set(groups.map((g) => g.id))
+  const options =
+    allGroups.length > own.size
+      ? [
+          ...groups.map((g) => ({ ...g, name: `${g.name} (دستگاه فعلی)` })),
+          ...allGroups.filter((g) => !own.has(g.id) && g.prices.length > 0),
+        ]
+      : groups
+  const prices = flatPrices(options)
   const type = prices.find((t) => t.id === typeId) ?? prices[0]
 
   const dirty = name !== '' || minutes !== '' || typeId !== currentTypeId
@@ -101,7 +112,7 @@ export function ExtraTimeDialog({ groups, currentTypeId, onAdd, compact }: Props
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>نرخ (ساعتی)</Label>
-              <PriceSelect groups={groups} value={type?.id ?? ''} onChange={setTypeId} />
+              <PriceSelect groups={options} value={type?.id ?? ''} onChange={setTypeId} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="extra-time-minutes">مدت (دقیقه)</Label>

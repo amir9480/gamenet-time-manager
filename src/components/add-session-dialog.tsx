@@ -17,14 +17,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { CustomerSelect } from '@/components/CustomerSelect'
-import { pickFor, type Pick } from '@/components/DevicePicker'
-import { useDiscardGuard } from '@/components/DiscardDialog'
+import { CustomerSelect } from '@/components/customer-select'
+import type { Pick } from '@/components/device-picker'
+import { useDiscardGuard } from '@/components/discard-dialog'
 import { formatNumber } from '@/lib/format'
 import { toFa } from '@/lib/jalali'
 import {
   categoryName,
-  defaultPriceFor,
   devicePriceGroups,
   devicePrices,
   flatPrices,
@@ -35,16 +34,6 @@ import {
   type Settings,
 } from '@/lib/store'
 import { cn } from '@/lib/utils'
-
-const LAST_CATEGORY_KEY = 'gamenet-last-category'
-
-const readLastCategory = () => {
-  try {
-    return localStorage.getItem(LAST_CATEGORY_KEY) ?? undefined
-  } catch {
-    return undefined
-  }
-}
 
 type StepKey = 'category' | 'device' | 'rate' | 'customer'
 const ORDER: StepKey[] = ['category', 'device', 'rate', 'customer']
@@ -115,21 +104,40 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
     const inCategory = devicesOf(p.categoryId)
     const device = settings.devices.find((d) => d.id === p.deviceId)
     const prices = devicePrices(device, settings.rateGroups)
+    // Until an earlier step is answered, later steps are assumed to be needed.
     return ORDER.filter(
       (k) =>
         k === 'customer' ||
         (k === 'category' && categories.length > 1) ||
         (k === 'device' &&
-          (inCategory.length > 1 || (inCategory.length === 1 && busyIds.has(inCategory[0].id)))) ||
-        (k === 'rate' && prices.length > 1),
+          (!p.categoryId ||
+            inCategory.length > 1 ||
+            (inCategory.length === 1 && busyIds.has(inCategory[0].id)))) ||
+        (k === 'rate' && (!p.deviceId || prices.length > 1)),
     )
   }
+
+  // Nothing is preselected; only choices with a single option are filled in (their step is skipped).
+  const resolve = (p: Pick): Pick => {
+    let { categoryId, deviceId, priceId } = p
+    if (!categoryId && categories.length === 1) categoryId = categories[0].id
+    if (categoryId && !deviceId) {
+      const inCategory = devicesOf(categoryId)
+      if (inCategory.length === 1 && !busyIds.has(inCategory[0].id)) deviceId = inCategory[0].id
+    }
+    if (deviceId && !priceId) {
+      const prices = devicePrices(settings.devices.find((d) => d.id === deviceId), settings.rateGroups)
+      if (prices.length === 1) priceId = prices[0].id
+    }
+    return { categoryId, deviceId, priceId }
+  }
+  const EMPTY: Pick = { categoryId: '', deviceId: '', priceId: '' }
   const after = (steps: StepKey[], from: StepKey) =>
     steps.find((k) => ORDER.indexOf(k) > ORDER.indexOf(from)) ?? 'customer'
   const before = (steps: StepKey[], from: StepKey) =>
     [...steps].reverse().find((k) => ORDER.indexOf(k) < ORDER.indexOf(from))
 
-  const [pick, setPick] = useState<Pick>(() => pickFor(settings, free, readLastCategory()))
+  const [pick, setPick] = useState<Pick>(() => resolve(EMPTY))
   const [initial, setInitial] = useState(pick)
   const [step, setStep] = useState<StepKey>(() => stepsFor(pick)[0])
   const [customerId, setCustomerId] = useState<string | undefined>()
@@ -138,7 +146,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
   // Start from the last used type each time the dialog opens.
   useEffect(() => {
     if (!open) return
-    const p = pickFor(settings, free, readLastCategory())
+    const p = resolve(EMPTY)
     setPick(p)
     setInitial(p)
     setStep(stepsFor(p)[0])
@@ -159,26 +167,21 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
 
   const stepValid =
     step === 'category'
-      ? freeIn(pick.categoryId).length > 0
+      ? !!pick.categoryId && freeIn(pick.categoryId).length > 0
       : step === 'device'
         ? !!device
         : step === 'rate'
           ? !!price
           : !!device && !!price
 
-  const pickCategory = (categoryId: string) => {
-    const d = freeIn(categoryId)[0]
-    return {
-      categoryId,
-      deviceId: d?.id ?? '',
-      priceId: defaultPriceFor(d, settings.rateGroups)?.id ?? '',
-    }
+  const pickCategory = (categoryId: string): Pick => resolve({ categoryId, deviceId: '', priceId: '' })
+  const pickDevice = (d: Device): Pick => resolve({ categoryId: d.categoryId, deviceId: d.id, priceId: '' })
+
+  // Choosing a card moves on to the next step that still needs input.
+  const choose = (p: Pick, from: StepKey) => {
+    setPick(p)
+    setStep(after(stepsFor(p), from))
   }
-  const pickDevice = (d: Device): Pick => ({
-    categoryId: d.categoryId,
-    deviceId: d.id,
-    priceId: defaultPriceFor(d, settings.rateGroups)?.id ?? '',
-  })
 
   // Quick search entries. When a device (or a whole type) offers more than one price, there is
   // one entry per price, so the price can be picked straight from the search results.
@@ -236,8 +239,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
         (x) => !item.priceId || devicePrices(x, settings.rateGroups).some((y) => y.id === item.priceId),
       )
       if (!d) return
-      p = { ...pickDevice(d), ...(item.priceId ? { priceId: item.priceId } : {}) }
-      if (!item.priceId) p = pickCategory(item.categoryId)
+      p = item.priceId ? { ...pickDevice(d), priceId: item.priceId } : pickCategory(item.categoryId)
     } else {
       const d = settings.devices.find((x) => x.id === item.deviceId)
       if (!d) return
@@ -249,11 +251,6 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
 
   const submit = () => {
     if (!device || !price) return
-    try {
-      localStorage.setItem(LAST_CATEGORY_KEY, device.categoryId)
-    } catch {
-      // storage unavailable
-    }
     onCreate(device, categoryName(settings, device), price, customerId)
     onOpenChange(false)
   }
@@ -317,7 +314,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
             <RadioGroup
               className="sm:grid-cols-2"
               value={pick.categoryId}
-              onValueChange={(v) => setPick(pickCategory(v as string))}
+              onValueChange={(v) => choose(pickCategory(v as string), 'category')}
             >
               {categories.map((c) => {
                 const n = freeIn(c.id).length
@@ -344,7 +341,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
               value={pick.deviceId}
               onValueChange={(v) => {
                 const d = settings.devices.find((x) => x.id === v)
-                if (d) setPick(pickDevice(d))
+                if (d) choose(pickDevice(d), 'device')
               }}
             >
               {devicesOf(pick.categoryId).map((d) => {
@@ -368,7 +365,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
             <RadioGroup
               className="gap-3"
               value={pick.priceId}
-              onValueChange={(v) => setPick({ ...pick, priceId: v as string })}
+              onValueChange={(v) => choose({ ...pick, priceId: v as string }, 'rate')}
             >
               {devicePriceGroups(device, settings.rateGroups).map((g) => (
                 <div key={g.id} className="flex flex-col gap-2">

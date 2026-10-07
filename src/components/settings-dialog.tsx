@@ -12,23 +12,36 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Tip } from '@/components/Tip'
+import { Tip } from '@/components/tip'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useDiscardGuard } from '@/components/DiscardDialog'
-import { DevicesEditor } from '@/components/DevicesEditor'
-import { ExtraItemsEditor } from '@/components/ExtraItemsEditor'
-import { RateGroupsEditor } from '@/components/RateGroupsEditor'
+import { useDiscardGuard } from '@/components/discard-dialog'
+import { DevicesEditor } from '@/components/devices-editor'
+import { ExtraItemsEditor } from '@/components/extra-items-editor'
+import { RateGroupsEditor } from '@/components/rate-groups-editor'
 import { DEFAULT_TITLE, useTheme, type Theme } from '@/components/theme-provider'
 import { ACCENTS, type Accent } from '@/lib/accents'
-import type { AppIconValue } from '@/lib/appIcon'
-import type { Settings, Usage } from '@/lib/store'
+import type { AppIconValue } from '@/lib/app-icon'
+import { formatNumber, parseNumber } from '@/lib/format'
+import {
+  ROUND_MODE_LABELS,
+  type Rounding,
+  type RoundMode,
+  type Settings,
+  type Usage,
+} from '@/lib/store'
 import { cn } from '@/lib/utils'
 
 // The picker pulls in the whole Lucide icon list, so it is only downloaded when Settings opens.
 const IconPicker = lazy(() =>
-  import('@/components/IconPicker').then((m) => ({ default: m.IconPicker })),
+  import('@/components/icon-picker').then((m) => ({ default: m.IconPicker })),
 )
+
+const ROUND_ITEMS = (Object.keys(ROUND_MODE_LABELS) as RoundMode[]).map((value) => ({
+  value,
+  label: ROUND_MODE_LABELS[value],
+}))
 
 export type SettingsTab = 'general' | 'rates' | 'devices' | 'extras'
 
@@ -49,6 +62,7 @@ type Draft = Settings & {
   title: string
   icon: AppIconValue
   grouping: boolean
+  rounding: Rounding
 }
 
 const isTauri = () => '__TAURI_INTERNALS__' in window
@@ -61,12 +75,12 @@ export function SettingsDialog({
   onOpenChange,
   initialTab = 'general',
 }: Props) {
-  const { theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, grouping, setGrouping } =
+  const { theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, grouping, setGrouping, rounding, setRounding } =
     useTheme()
   const [autostartSaved, setAutostartSaved] = useState(false)
   const [tab, setTab] = useState<SettingsTab>(initialTab)
 
-  const saved: Draft = { ...settings, theme, accent, autostart: autostartSaved, title, icon, grouping }
+  const saved: Draft = { ...settings, theme, accent, autostart: autostartSaved, title, icon, grouping, rounding }
   const [draft, setDraft] = useState<Draft>(saved)
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }))
@@ -112,7 +126,8 @@ export function SettingsDialog({
     named(draft.extraCategories) &&
     named(draft.extraItems) &&
     draft.extraItems.every((i) => i.price > 0)
-  const valid = ratesValid && devicesValid && extrasValid
+  const roundingValid = draft.rounding.step > 0
+  const valid = ratesValid && devicesValid && extrasValid && roundingValid
 
   const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
 
@@ -137,6 +152,7 @@ export function SettingsDialog({
     setTitle(draft.title.trim() || DEFAULT_TITLE)
     setIcon(draft.icon)
     setGrouping(draft.grouping)
+    setRounding(draft.rounding)
     if (isTauri() && draft.autostart !== autostartSaved) {
       try {
         const m = await import('@tauri-apps/plugin-autostart')
@@ -255,6 +271,44 @@ export function SettingsDialog({
                 </p>
               </div>
 
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="round-step">رند کردن مبلغ نهایی</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    items={ROUND_ITEMS}
+                    value={draft.rounding.mode}
+                    onValueChange={(m) => patch({ rounding: { ...draft.rounding, mode: m as RoundMode } })}
+                  >
+                    <SelectTrigger className="w-36" aria-label="نوع رند کردن">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROUND_ITEMS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-muted-foreground">مضرب</span>
+                  <Input
+                    id="round-step"
+                    dir="ltr"
+                    inputMode="numeric"
+                    aria-invalid={!roundingValid}
+                    className="w-32"
+                    value={draft.rounding.step > 0 ? formatNumber(draft.rounding.step) : ''}
+                    onChange={(e) =>
+                      patch({ rounding: { ...draft.rounding, step: parseNumber(e.target.value) } })
+                    }
+                  />
+                  <span className="text-sm text-muted-foreground">تومان</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  دکمه‌ی «رند کردن» هنگام اتمام تایم، مبلغ نهایی را به این صورت گرد می‌کند.
+                </p>
+              </div>
+
               <div className="flex items-center justify-between gap-4">
                 <Label htmlFor="autostart-switch">اجرای خودکار با روشن شدن سیستم</Label>
                 <Switch
@@ -296,7 +350,9 @@ export function SettingsDialog({
 
           <DialogFooter className="items-center sm:justify-between">
             <span className="text-sm text-destructive">
-              {valid ? '' : 'نام‌ها باید تکمیل و قیمت‌ها بیشتر از صفر باشند و هر دستگاه یک نرخ داشته باشد.'}
+              {valid ? '' : roundingValid
+                ? 'نام‌ها باید تکمیل و قیمت‌ها بیشتر از صفر باشند و هر دستگاه یک نرخ داشته باشد.'
+                : 'مضرب رند کردن باید بیشتر از صفر باشد.'}
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={requestClose}>

@@ -8,8 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { CustomerSelect } from '@/components/CustomerSelect'
-import { useDiscardGuard } from '@/components/DiscardDialog'
+import { CustomerSelect } from '@/components/customer-select'
+import { useDiscardGuard } from '@/components/discard-dialog'
 import type { Customer } from '@/lib/store'
 
 type Props = {

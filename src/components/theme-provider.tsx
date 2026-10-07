@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import type { Accent } from '@/lib/accents'
-import { DEFAULT_ICON, type AppIconValue } from '@/lib/appIcon'
-import { useLocalStorage } from '@/lib/store'
+import { DEFAULT_ICON, type AppIconValue } from '@/lib/app-icon'
+import { DEFAULT_ROUNDING, useLocalStorage, type Rounding } from '@/lib/store'
 
 export type Theme = 'light' | 'dark'
 
@@ -26,6 +26,9 @@ const ThemeContext = createContext<{
   // Group / filter timers by device type (edited in Settings).
   grouping: boolean
   setGrouping: (g: boolean) => void
+  // How the «رند کردن» button rounds the final amount when ending a timer.
+  rounding: Rounding
+  setRounding: (r: Rounding) => void
 }>({
   theme: 'light',
   setTheme: () => {},
@@ -39,6 +42,8 @@ const ThemeContext = createContext<{
   setView: () => {},
   grouping: true,
   setGrouping: () => {},
+  rounding: DEFAULT_ROUNDING,
+  setRounding: () => {},
 })
 
 export const useTheme = () => useContext(ThemeContext)
@@ -56,6 +61,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const [view, setView] = useLocalStorage<ViewMode>('gamenet-view', () => 'detailed')
   const [grouping, setGrouping] = useLocalStorage<boolean>('gamenet-grouping', () => true)
+
+  const [rounding, setRounding] = useLocalStorage<Rounding>('gamenet-rounding', () => DEFAULT_ROUNDING)
 
   useEffect(() => {
     document.title = title
@@ -75,5 +82,5 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
-  return <ThemeContext.Provider value={{ theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, view, setView, grouping, setGrouping }}>{children}</ThemeContext.Provider>
+  return <ThemeContext.Provider value={{ theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, view, setView, grouping, setGrouping, rounding, setRounding }}>{children}</ThemeContext.Provider>
 }

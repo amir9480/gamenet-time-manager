@@ -20,16 +20,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { StatsPanel } from '@/components/StatsPanel'
+import { FilterCombobox } from '@/components/filter-combobox'
+import { StatsPanel } from '@/components/stats-panel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { JalaliDatePicker } from '@/components/JalaliDatePicker'
+import { JalaliDatePicker } from '@/components/jalali-date-picker'
 import { db } from '@/lib/db'
 import { previousRange } from '@/lib/stats'
 import { formatDuration, formatNumber } from '@/lib/format'
@@ -91,7 +85,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
       seen.set(customerFilter, '—')
     return [
       { value: 'all', label: 'همه‌ی مشتریان' },
-      { value: 'none', label: 'بدون مشتری' },
+      { value: 'none', label: 'مشتری مهمان' },
       ...[...seen].map(([value, label]) => ({ value, label })),
     ]
   }, [rangeEntries, customerFilter])
@@ -190,47 +184,27 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">مشتری</Label>
-            <Select
-              items={customerItems}
+            <FilterCombobox
+              aria-label="فیلتر مشتری"
+              options={customerItems}
               value={customerFilter}
-              onValueChange={(v) => {
-                setCustomerFilter(v as string)
+              onChange={(v) => {
+                setCustomerFilter(v)
                 setPage(0)
               }}
-            >
-              <SelectTrigger className="w-full" aria-label="فیلتر مشتری">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {customerItems.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">نوع دستگاه</Label>
-            <Select
-              items={categoryItems}
+            <FilterCombobox
+              aria-label="فیلتر نوع دستگاه"
+              options={categoryItems}
               value={categoryFilter}
-              onValueChange={(v) => {
-                setCategoryFilter(v as string)
+              onChange={(v) => {
+                setCategoryFilter(v)
                 setPage(0)
               }}
-            >
-              <SelectTrigger className="w-full" aria-label="فیلتر نوع دستگاه">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {categoryItems.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
         </div>
 
@@ -468,8 +442,14 @@ function Details({ entry }: { entry: HistoryEntry }) {
           زمان {formatNumber(entry.timeCost)} + زمان اضافه {formatNumber(entry.extraTimesCost)} +
           موارد {formatNumber(entry.extraItemsCost)}
         </span>
-        <span className="shrink-0">{toman(entry.total)}</span>
+        <span className="shrink-0">{toman(entry.calculatedTotal ?? entry.total)}</span>
       </div>
+      {entry.calculatedTotal !== undefined && (
+        <div className="flex justify-between gap-4 font-bold">
+          <span>مبلغ نهایی (ویرایش‌شده هنگام اتمام)</span>
+          <span className="shrink-0">{toman(entry.total)}</span>
+        </div>
+      )}
     </div>
   )
 }

@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tip } from '@/components/Tip'
+import { Tip } from '@/components/tip'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { uid, type CatalogItem, type ExtraCategory } from '@/lib/store'
 

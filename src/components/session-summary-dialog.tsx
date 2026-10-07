@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+import { Coins } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -8,12 +10,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { formatClock, formatDuration, formatNumber } from '@/lib/format'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useTheme } from '@/components/theme-provider'
+import { Tip } from '@/components/tip'
+import { formatClock, formatDuration, formatNumber, parseNumber } from '@/lib/format'
 import {
+  ROUND_MODE_LABELS,
   extraItemsCost,
   extraTimeCost,
   extraTimesCost,
   segmentCost,
+  roundAmount,
   segmentMs,
   type Session,
 } from '@/lib/store'
@@ -26,7 +34,8 @@ type Props = {
   now: number
   // Read-only live view: no confirm button, title/labels reflect an ongoing session.
   readOnly?: boolean
-  onConfirm?: () => void
+  // Receives the final amount only when it was edited.
+  onConfirm?: (finalTotal?: number) => void
 }
 
 const toman = (n: number) => `${formatNumber(n)} تومان`
@@ -41,12 +50,23 @@ export function SessionSummaryDialog({
   onConfirm,
 }: Props) {
   const { segments, extraTimes, extraItems } = session
+  const { rounding } = useTheme()
   const start = segments[0]?.from
   const end = segments.length ? (segments[segments.length - 1].to ?? now) : undefined
   const timeTotal = segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0)
   const timesCost = extraTimesCost(session)
   const itemsCost = extraItemsCost(session)
   const total = timeTotal + timesCost + itemsCost
+
+  // The final amount is editable when ending; it is what gets stored as the income.
+  const [finalText, setFinalText] = useState('')
+  useEffect(() => {
+    if (open) setFinalText(String(total))
+    // Reset only when (re)opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+  const finalAmount = parseNumber(finalText)
+  const edited = finalAmount !== total
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -128,10 +148,44 @@ export function SessionSummaryDialog({
             ))}
           </div>
 
-          <div className="flex items-center justify-between border-t pt-2 text-base font-bold">
-            <span>مجموع</span>
-            <span>{toman(total)}</span>
-          </div>
+          {readOnly ? (
+            <div className="flex items-center justify-between border-t pt-2 text-base font-bold">
+              <span>مجموع</span>
+              <span>{toman(total)}</span>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5 border-t pt-2">
+              <div className="flex items-center justify-between gap-4 text-base font-bold">
+                <label htmlFor="final-total">مبلغ نهایی</label>
+                <div className="flex items-center gap-2">
+                  <Tip label={`رند کردن (${ROUND_MODE_LABELS[rounding.mode]} ${formatNumber(rounding.step)} تومان)`}>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="رند کردن"
+                      onClick={() => setFinalText(String(roundAmount(finalAmount, rounding)))}
+                    >
+                      <Coins />
+                    </Button>
+                  </Tip>
+                  <Input
+                    id="final-total"
+                    dir="ltr"
+                    inputMode="numeric"
+                    className="w-40 font-bold"
+                    value={finalAmount > 0 ? formatNumber(finalAmount) : finalText}
+                    onChange={(e) => setFinalText(e.target.value)}
+                  />
+                  <span className="text-sm font-normal text-muted-foreground">تومان</span>
+                </div>
+              </div>
+              {edited && (
+                <span className="text-xs text-muted-foreground">
+                  مجموع محاسبه‌شده: {toman(total)}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <AlertDialogFooter>
@@ -140,7 +194,7 @@ export function SessionSummaryDialog({
           ) : (
             <>
               <AlertDialogCancel>انصراف</AlertDialogCancel>
-              <AlertDialogAction onClick={onConfirm}>تایید و اتمام تایم</AlertDialogAction>
+              <AlertDialogAction onClick={() => onConfirm?.(edited ? finalAmount : undefined)}>تایید و اتمام تایم</AlertDialogAction>
             </>
           )}
         </AlertDialogFooter>

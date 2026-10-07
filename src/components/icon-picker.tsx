@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react'
 import { RotateCcw, Search, Upload } from 'lucide-react'
 import { DynamicIcon, iconNames } from 'lucide-react/dynamic'
-import { AppIcon } from '@/components/AppIcon'
+import { AppIcon } from '@/components/app-icon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Tip } from '@/components/Tip'
-import { DEFAULT_ICON, imageToIcon, type AppIconValue } from '@/lib/appIcon'
+import { Tip } from '@/components/tip'
+import { DEFAULT_ICON, imageToIcon, type AppIconValue } from '@/lib/app-icon'
 import { cn } from '@/lib/utils'
 
 type Props = { value: AppIconValue; onChange: (v: AppIconValue) => void }

@@ -16,18 +16,18 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ChangeDeviceDialog } from '@/components/ChangeDeviceDialog'
-import { CustomerPickerDialog } from '@/components/CustomerPickerDialog'
-import { PriceSelect } from '@/components/PriceSelect'
-import { ExtraItemPicker } from '@/components/ExtraItemPicker'
-import { ExtraItemsManageDialog } from '@/components/ExtraItemsManageDialog'
-import { ExtraTimeDialog } from '@/components/ExtraTimeDialog'
-import { SessionSummaryDialog } from '@/components/SessionSummaryDialog'
-import { Timer } from '@/components/Timer'
-import { Tip } from '@/components/Tip'
+import { ChangeDeviceDialog } from '@/components/change-device-dialog'
+import { CustomerPickerDialog } from '@/components/customer-picker-dialog'
+import { PriceSelect } from '@/components/price-select'
+import { ExtraItemPicker } from '@/components/extra-item-picker'
+import { ExtraItemsManageDialog } from '@/components/extra-items-manage-dialog'
+import { ExtraTimeDialog } from '@/components/extra-time-dialog'
+import { SessionSummaryDialog } from '@/components/session-summary-dialog'
+import { Timer } from '@/components/timer'
+import { Tip } from '@/components/tip'
 import { formatNumber } from '@/lib/format'
 import { formatJalaliDateTime } from '@/lib/jalali'
-import { useNow } from '@/lib/useNow'
+import { useNow } from '@/lib/use-now'
 import {
   addExtraItem,
   addExtraTime,
@@ -50,7 +50,7 @@ type Props = {
   sessions: Session[]
   settings: Settings
   onUpdate: (fn: (s: Session) => Session) => void
-  onEnd: () => void
+  onEnd: (finalTotal?: number) => void
   compact?: boolean
 }
 
@@ -171,9 +171,9 @@ ${last.to ? `پایان: ${formatJalaliDateTime(last.to)}` : `اکنون: ${form
           deviceName={customer ? `${name} (${customer.name})` : name}
           session={session}
           now={summaryNow}
-          onConfirm={() => {
+          onConfirm={(finalTotal) => {
             setSummaryOpen(false)
-            onEnd()
+            onEnd(finalTotal)
           }}
         />
     </>
@@ -269,6 +269,7 @@ ${last.to ? `پایان: ${formatJalaliDateTime(last.to)}` : `اکنون: ${form
             <ExtraTimeDialog
               compact
               groups={groups}
+              allGroups={settings.rateGroups}
               currentTypeId={type.id}
               onAdd={(t) => onUpdate((s) => addExtraTime(s, t))}
             />
@@ -333,7 +334,7 @@ ${last.to ? `پایان: ${formatJalaliDateTime(last.to)}` : `اکنون: ${form
                 aria-label="تغییر مشتری"
                 onClick={() => setCustomerOpen(true)}
               >
-                <Pencil /> {customer ? customer.name : 'بدون مشتری'}
+                <Pencil /> {customer ? customer.name : 'مشتری مهمان'}
               </Button>
             </Tip>
           </div>
@@ -350,6 +351,7 @@ ${last.to ? `پایان: ${formatJalaliDateTime(last.to)}` : `اکنون: ${form
             <Label>زمان اضافه</Label>
             <ExtraTimeDialog
               groups={groups}
+              allGroups={settings.rateGroups}
               currentTypeId={type.id}
               onAdd={(t) => onUpdate((s) => addExtraTime(s, t))}
             />

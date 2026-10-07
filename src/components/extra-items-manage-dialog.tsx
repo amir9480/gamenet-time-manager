@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { useDiscardGuard } from '@/components/DiscardDialog'
+import { useDiscardGuard } from '@/components/discard-dialog'
 import { formatNumber } from '@/lib/format'
 import { extraTimeCost, type ExtraItem, type ExtraTime } from '@/lib/store'
 

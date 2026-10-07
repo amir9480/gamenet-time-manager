@@ -129,7 +129,7 @@ export const weekdaySeries = (entries: HistoryEntry[]): WeekdayPoint[] => {
 
 export type NamePoint = { name: string; sessions: number; income: number }
 
-export const NO_CUSTOMER = 'بدون مشتری'
+export const NO_CUSTOMER = 'مشتری مهمان'
 
 export const topCustomers = (entries: HistoryEntry[], limit = 10): NamePoint[] => {
   const map = new Map<string, NamePoint>()

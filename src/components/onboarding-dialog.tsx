@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { OnboardingItemDialog } from '@/components/OnboardingItemDialog'
+import { OnboardingItemDialog } from '@/components/onboarding-item-dialog'
 import { useTheme } from '@/components/theme-provider'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { toFa } from '@/lib/jalali'
