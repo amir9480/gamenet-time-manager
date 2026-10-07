@@ -20,7 +20,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { CustomerSelect } from '@/components/customer-select'
 import type { Pick } from '@/components/device-picker'
 import { useDiscardGuard } from '@/components/discard-dialog'
-import { formatNumber } from '@/lib/format'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { formatNumber, parseNumber } from '@/lib/format'
 import { toFa } from '@/lib/jalali'
 import {
   categoryName,
@@ -49,7 +51,13 @@ type Props = {
   onOpenChange: (open: boolean) => void
   settings: Settings
   sessions: Session[]
-  onCreate: (device: Device, category: string, price: FlatPrice, customerId?: string) => void
+  onCreate: (
+    device: Device,
+    category: string,
+    price: FlatPrice,
+    customerId?: string,
+    limitMinutes?: number,
+  ) => void
 }
 
 type SearchItem = {
@@ -142,6 +150,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
   const [step, setStep] = useState<StepKey>(() => stepsFor(pick)[0])
   const [customerId, setCustomerId] = useState<string | undefined>()
   const [query, setQuery] = useState('')
+  const [limit, setLimit] = useState('')
 
   // Start from the last used type each time the dialog opens.
   useEffect(() => {
@@ -151,6 +160,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
     setInitial(p)
     setStep(stepsFor(p)[0])
     setCustomerId(undefined)
+    setLimit('')
     setQuery('')
     // Only when the dialog opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -162,7 +172,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
   const prevStep = before(steps, step)
   const last = step === 'customer'
 
-  const dirty = JSON.stringify(pick) !== JSON.stringify(initial) || customerId !== undefined
+  const dirty = JSON.stringify(pick) !== JSON.stringify(initial) || customerId !== undefined || limit !== ''
   const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
 
   const stepValid =
@@ -251,7 +261,8 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
 
   const submit = () => {
     if (!device || !price) return
-    onCreate(device, categoryName(settings, device), price, customerId)
+    const limitMinutes = Math.floor(parseNumber(limit))
+    onCreate(device, categoryName(settings, device), price, customerId, limitMinutes || undefined)
     onOpenChange(false)
   }
 
@@ -406,6 +417,17 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
                 value={customerId}
                 onChange={setCustomerId}
               />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="new-limit">محدودیت زمانی (اختیاری، دقیقه)</Label>
+                <Input
+                  id="new-limit"
+                  dir="ltr"
+                  inputMode="numeric"
+                  placeholder="بدون محدودیت"
+                  value={parseNumber(limit) > 0 ? formatNumber(Math.floor(parseNumber(limit))) : limit}
+                  onChange={(e) => setLimit(e.target.value)}
+                />
+              </div>
             </div>
           )}
 

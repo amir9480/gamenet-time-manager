@@ -80,6 +80,9 @@ export type Session = {
   segments: Segment[]
   extraTimes: ExtraTime[]
   extraItems: ExtraItem[]
+  // Optional time limit: total running time (ms) the customer may use. The countdown is
+  // `limitMs - elapsedMs`, so pausing freezes it.
+  limitMs?: number
 }
 
 export const OTHER_ITEM_NAME = 'موارد دیگر'
@@ -174,6 +177,7 @@ export const createSession = (
   price: FlatPrice,
   customerId: string | undefined,
   now: number,
+  limitMinutes?: number,
 ): Session => ({
   id: uid(),
   deviceId: device.id,
@@ -185,6 +189,7 @@ export const createSession = (
   segments: [openSegment(price, device.id, device.name, category, now)],
   extraTimes: [],
   extraItems: [],
+  ...(limitMinutes && limitMinutes > 0 ? { limitMs: limitMinutes * MINUTE_MS } : {}),
 })
 
 const closeOpen = (segments: Segment[], now: number): Segment[] =>
@@ -265,6 +270,32 @@ export const segmentMs = (seg: Segment, now: number) => Math.max(0, (seg.to ?? n
 
 export const elapsedMs = (s: Session, now: number) =>
   s.segments.reduce((sum, seg) => sum + segmentMs(seg, now), 0)
+
+// ---- time limit -----------------------------------------------------------------
+
+export const MINUTE_MS = 60_000
+
+// Time left before the limit (negative once exceeded); undefined without a limit.
+export const remainingMs = (s: Session, now: number): number | undefined =>
+  s.limitMs === undefined ? undefined : s.limitMs - elapsedMs(s, now)
+
+// A running session that used up its limit (a paused one is not alarming).
+export const limitReached = (s: Session, now: number) =>
+  s.status === 'running' && (remainingMs(s, now) ?? 1) <= 0
+
+// Sets the limit so that `minutes` remain from now (the edit dialog shows the remaining time).
+export const setLimit = (s: Session, minutes: number, now: number): Session => ({
+  ...s,
+  limitMs: elapsedMs(s, now) + minutes * MINUTE_MS,
+})
+
+// Adds time to the limit; an already exceeded limit extends from now, not from when it ended.
+export const extendLimit = (s: Session, minutes: number, now: number): Session => {
+  if (s.limitMs === undefined) return s
+  return { ...s, limitMs: Math.max(s.limitMs, elapsedMs(s, now)) + minutes * MINUTE_MS }
+}
+
+export const clearLimit = ({ limitMs: _limit, ...s }: Session): Session => s
 
 // Billed per whole second; any started toman counts (rounded up).
 export const segmentCost = (seg: Segment, now: number) =>

@@ -14,14 +14,16 @@ export function DiscardDialog({
   open,
   onOpenChange,
   onConfirm,
+  raised,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
+  raised?: boolean
 }) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent raised={raised}>
         <AlertDialogHeader>
           <AlertDialogTitle>تغییرات ذخیره نشده</AlertDialogTitle>
           <AlertDialogDescription>
@@ -44,11 +46,13 @@ export function DiscardDialog({
 export function useDiscardGuard(
   dirty: boolean,
   close: () => void,
+  raised?: boolean,
 ): { requestClose: () => void; dialog: ReactNode } {
   const [open, setOpen] = useState(false)
   const requestClose = () => (dirty ? setOpen(true) : close())
   const dialog = (
     <DiscardDialog
+      raised={raised}
       open={open}
       onOpenChange={setOpen}
       onConfirm={() => {

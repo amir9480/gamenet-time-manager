@@ -4,6 +4,7 @@ import { History, LayoutGrid, Moon, Plus, Rows3, Search, Sun, Users, X } from 'l
 import { AddSessionDialog } from '@/components/add-session-dialog'
 import { AppIcon } from '@/components/app-icon'
 import { HistoryDialog } from '@/components/history-dialog'
+import { LimitAlarmDialog } from '@/components/limit-alarm-dialog'
 import { LiveClock } from '@/components/live-clock'
 import { OnboardingDialog } from '@/components/onboarding-dialog'
 import { SessionCard } from '@/components/session-card'
@@ -79,8 +80,13 @@ function Main() {
     endSessionRow(buildHistoryEntry(session, customer, Date.now(), finalTotal))
   }
 
-  const addSession = (device: Device, category: string, price: FlatPrice, customerId?: string) =>
-    addSessionRow(createSession(device, category, price, customerId, Date.now()))
+  const addSession = (
+    device: Device,
+    category: string,
+    price: FlatPrice,
+    customerId?: string,
+    limitMinutes?: number,
+  ) => addSessionRow(createSession(device, category, price, customerId, Date.now(), limitMinutes))
 
   // Device types that have devices; the filter / grouping UI needs more than one.
   const typeNames = settings.deviceCategories
@@ -128,7 +134,7 @@ function Main() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 p-4 md:p-6">
-      <header className="flex items-center justify-between">
+      <header className="sticky top-0 z-40 -mx-4 -mt-4 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:-mt-6 md:px-6">
         <div className="flex items-center gap-3">
           <AppIcon className="size-10" />
           <h1 className="text-2xl font-bold">{title}</h1>
@@ -331,6 +337,12 @@ function Main() {
         settings={settings}
         sessions={sessions}
         onCreate={addSession}
+      />
+
+      <LimitAlarmDialog
+        sessions={sessions}
+        settings={settings}
+        onUpdate={(id, fn) => updateSessionRow(id, fn)}
       />
     </div>
   )

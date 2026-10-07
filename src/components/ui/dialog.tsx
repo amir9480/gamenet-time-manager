@@ -42,14 +42,17 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  raised = false,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  // Stack above every normal dialog (used by the time-limit alarm and what it opens).
+  raised?: boolean
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
-      <div className="fixed inset-0 z-50 overflow-y-auto">
+      <DialogOverlay className={raised ? "z-100" : undefined} />
+      <div className={cn("fixed inset-0 z-50 overflow-y-auto", raised && "z-100")}>
         <div className="flex min-h-full items-center justify-center p-4">
       <DialogPrimitive.Popup
         data-slot="dialog-content"

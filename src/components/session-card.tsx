@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock, Pause, Pencil, Play, Square } from 'lucide-react'
+import { AlarmClock, Clock, Pause, Pencil, Play, Square } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,24 +22,28 @@ import { PriceSelect } from '@/components/price-select'
 import { ExtraItemPicker } from '@/components/extra-item-picker'
 import { ExtraItemsManageDialog } from '@/components/extra-items-manage-dialog'
 import { ExtraTimeDialog } from '@/components/extra-time-dialog'
+import { LimitDialog } from '@/components/limit-dialog'
 import { SessionSummaryDialog } from '@/components/session-summary-dialog'
 import { Timer } from '@/components/timer'
 import { Tip } from '@/components/tip'
-import { formatNumber } from '@/lib/format'
+import { formatDuration, formatNumber } from '@/lib/format'
 import { formatJalaliDateTime } from '@/lib/jalali'
 import { useNow } from '@/lib/use-now'
 import {
   addExtraItem,
   addExtraTime,
   changeType,
+  clearLimit,
   computeCost,
   deviceOf,
   devicePriceGroups,
   elapsedMs,
   flatPrices,
   pauseSession,
+  remainingMs,
   resumeSession,
   selectedPrice,
+  setLimit,
   switchDevice,
   type Session,
   type Settings,
@@ -65,6 +69,7 @@ export function SessionCard({ session, sessions, settings, onUpdate, onEnd, comp
   const [customerOpen, setCustomerOpen] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [limitOpen, setLimitOpen] = useState(false)
   const [pendingTypeId, setPendingTypeId] = useState<string | null>(null)
   const running = session.status === 'running'
 
@@ -78,9 +83,16 @@ export function SessionCard({ session, sessions, settings, onUpdate, onEnd, comp
   const name = session.deviceName
   const first = session.segments[0]
   const last = session.segments[session.segments.length - 1]
+  const remaining = remainingMs(session, time)
+  const exceeded = remaining !== undefined && remaining <= 0
+  const limitLine =
+    remaining === undefined
+      ? ''
+      : `
+${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌مانده تا محدودیت: ${formatDuration(remaining)}`}`
   const rangeTitle = first
-    ? `شروع: ${formatJalaliDateTime(first.from)}
-${last.to ? `پایان: ${formatJalaliDateTime(last.to)}` : `اکنون: ${formatJalaliDateTime(time)}`}`
+    ? `شروع: ${formatJalaliDateTime(first.from)}${last.to ? `
+پایان: ${formatJalaliDateTime(last.to)}` : ''}${limitLine}`
     : undefined
 
   const resume = () => onUpdate((s) => resumeSession(settings, s, Date.now()))
@@ -126,6 +138,14 @@ ${last.to ? `پایان: ${formatJalaliDateTime(last.to)}` : `اکنون: ${form
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <LimitDialog
+          open={limitOpen}
+          onOpenChange={setLimitOpen}
+          remainingMs={remaining}
+          onSave={(minutes) => onUpdate((x) => setLimit(x, minutes, Date.now()))}
+          onRemove={() => onUpdate(clearLimit)}
+        />
 
         <CustomerPickerDialog
           open={customerOpen}
@@ -266,6 +286,16 @@ ${last.to ? `پایان: ${formatJalaliDateTime(last.to)}` : `اکنون: ${form
                 </Tip>
               </>
             )}
+            <Tip label={remaining === undefined ? 'تعیین محدودیت زمانی' : 'ویرایش محدودیت زمانی'}>
+              <Button
+                variant={exceeded ? 'destructive' : remaining === undefined ? 'outline' : 'secondary'}
+                size="icon-sm"
+                aria-label="محدودیت زمانی"
+                onClick={() => setLimitOpen(true)}
+              >
+                <AlarmClock />
+              </Button>
+            </Tip>
             <ExtraTimeDialog
               compact
               groups={groups}
@@ -346,7 +376,7 @@ ${last.to ? `پایان: ${formatJalaliDateTime(last.to)}` : `اکنون: ${form
           </Tip>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex flex-col gap-1.5">
             <Label>زمان اضافه</Label>
             <ExtraTimeDialog
@@ -355,6 +385,12 @@ ${last.to ? `پایان: ${formatJalaliDateTime(last.to)}` : `اکنون: ${form
               currentTypeId={type.id}
               onAdd={(t) => onUpdate((s) => addExtraTime(s, t))}
             />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>محدودیت زمانی</Label>
+            <Button variant="outline" onClick={() => setLimitOpen(true)}>
+              <AlarmClock /> {remaining === undefined ? 'تعیین محدودیت' : 'ویرایش محدودیت'}
+            </Button>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>بوفه</Label>

@@ -42,14 +42,17 @@ function AlertDialogOverlay({
 function AlertDialogContent({
   className,
   size = "default",
+  raised = false,
   ...props
 }: AlertDialogPrimitive.Popup.Props & {
   size?: "default" | "sm"
+  // Stack above every normal dialog (used on top of the time-limit alarm).
+  raised?: boolean
 }) {
   return (
     <AlertDialogPortal>
-      <AlertDialogOverlay />
-      <div className="fixed inset-0 z-50 overflow-y-auto">
+      <AlertDialogOverlay className={raised ? "z-100" : undefined} />
+      <div className={cn("fixed inset-0 z-50 overflow-y-auto", raised && "z-100")}>
         <div className="flex min-h-full items-center justify-center p-4">
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
