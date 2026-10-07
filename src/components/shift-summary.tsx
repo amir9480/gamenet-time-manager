@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react'
+import { CalendarClock, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDuration, formatNumber } from '@/lib/format'
@@ -26,10 +26,12 @@ function Stat({ label, value, unit }: { label: string; value: string; unit?: str
 export function ShiftSummary({
   entries,
   onAdd,
+  onReserve,
   active = 0,
 }: {
   entries: HistoryEntry[]
   onAdd: () => void
+  onReserve: () => void
   // Running sessions; when any, the summary is an on-demand view (the toolbar already has add).
   active?: number
 }) {
@@ -60,9 +62,14 @@ export function ShiftSummary({
         </div>
         <div className="flex items-center gap-4">
           {active === 0 && (
-            <Button size="lg" onClick={onAdd}>
-              <Plus /> افزودن تایم
-            </Button>
+            <div className="flex gap-2">
+              <Button size="lg" variant="outline" onClick={onReserve}>
+                <CalendarClock /> رزرو
+              </Button>
+              <Button size="lg" onClick={onAdd}>
+                <Plus /> افزودن تایم
+              </Button>
+            </div>
           )}
         </div>
       </div>

@@ -84,6 +84,8 @@ export type Session = {
   // Optional time limit: total running time (ms) the customer may use. The countdown is
   // `limitMs - elapsedMs`, so pausing freezes it.
   limitMs?: number
+  // Set for a reservation (created paused, no segments); orders it among the running sessions.
+  reservedAt?: number
 }
 
 export const OTHER_ITEM_NAME = 'موارد دیگر'
@@ -179,15 +181,18 @@ export const createSession = (
   customerId: string | undefined,
   now: number,
   limitMinutes?: number,
+  // Reserve the device: the session starts paused with an empty timer.
+  reserve = false,
 ): Session => ({
   id: uid(),
   deviceId: device.id,
   deviceName: device.name,
   categoryName: category,
   customerId,
-  status: 'running',
+  status: reserve ? 'paused' : 'running',
   typeId: price.id,
-  segments: [openSegment(price, device.id, device.name, category, now)],
+  segments: reserve ? [] : [openSegment(price, device.id, device.name, category, now)],
+  ...(reserve ? { reservedAt: now } : {}),
   extraTimes: [],
   extraItems: [],
   ...(limitMinutes && limitMinutes > 0 ? { limitMs: limitMinutes * MINUTE_MS } : {}),
@@ -215,6 +220,10 @@ const openSegment = (
 
 const openOnSession = (s: Session, price: Price, now: number) =>
   openSegment(price, s.deviceId, s.deviceName, s.categoryName, now)
+
+// A paused session whose timer never ran (or is still at zero) counts as a reservation.
+export const isReserved = (s: Session) =>
+  s.status === 'paused' && s.segments.every((seg) => seg.to !== null && seg.to <= seg.from)
 
 export const resumeSession = (settings: Settings, s: Session, now: number): Session => {
   const price = selectedPrice(settings, s)
@@ -511,7 +520,7 @@ export const sessionSearchFields = (
   { text: s.categoryName, weight: 2 },
   { text: customer?.name ?? '', weight: 3 },
   customer?.phone ?? '',
-  s.status === 'running' ? 'در حال بازی' : 'متوقف',
+  s.status === 'running' ? 'در حال بازی' : isReserved(s) ? 'رزرو' : 'متوقف',
   ...s.segments.map((x) => `${x.typeName} ${x.price}`),
   ...s.extraTimes.map((t) => `${t.name} ${t.typeName} ${t.minutes}`),
   ...s.extraItems.map((i) => `${i.name} ${i.description ?? ''} ${i.price}`),

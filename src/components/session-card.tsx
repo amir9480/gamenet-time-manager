@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlarmClock, Clock, Pause, Pencil, Play, Square } from 'lucide-react'
+import { AlarmClock, Clock, Pause, Pencil, Play, Square, X } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +39,7 @@ import {
   devicePriceGroups,
   elapsedMs,
   flatPrices,
+  isReserved,
   pauseSession,
   remainingMs,
   resumeSession,
@@ -55,14 +56,16 @@ type Props = {
   settings: Settings
   onUpdate: (fn: (s: Session) => Session) => void
   onEnd: (finalTotal?: number, onAccount?: boolean) => void
+  // Drops a reservation (no history entry).
+  onCancel: () => void
   compact?: boolean
 }
 
-const statusLabel = { running: 'در حال بازی', paused: 'متوقف' } as const
+const statusLabel = { running: 'در حال بازی', paused: 'متوقف', reserved: 'رزرو' } as const
 
 const SWITCH_DEVICE = '__switch_device__'
 
-export function SessionCard({ session, sessions, settings, onUpdate, onEnd, compact }: Props) {
+export function SessionCard({ session, sessions, settings, onUpdate, onEnd, onCancel, compact }: Props) {
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [summaryNow, setSummaryNow] = useState(0)
   const [manageOpen, setManageOpen] = useState(false)
@@ -72,6 +75,9 @@ export function SessionCard({ session, sessions, settings, onUpdate, onEnd, comp
   const [limitOpen, setLimitOpen] = useState(false)
   const [pendingTypeId, setPendingTypeId] = useState<string | null>(null)
   const running = session.status === 'running'
+  const reserved = isReserved(session)
+  const statusKey = reserved ? 'reserved' : session.status
+  const [cancelOpen, setCancelOpen] = useState(false)
 
   const now = useNow(running)
 
@@ -135,6 +141,21 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
             <AlertDialogFooter>
               <AlertDialogCancel>انصراف</AlertDialogCancel>
               <AlertDialogAction onClick={confirmType}>تایید تغییر</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>لغو رزرو؟</AlertDialogTitle>
+              <AlertDialogDescription>
+                رزرو «{name}» حذف می‌شود و در تاریخچه ثبت نمی‌شود.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>انصراف</AlertDialogCancel>
+              <AlertDialogAction onClick={onCancel}>لغو رزرو</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -206,9 +227,9 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
         <CardContent className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
-              <Tip label={statusLabel[session.status]}>
+              <Tip label={statusLabel[statusKey]}>
                 <span
-                  className={`size-2.5 shrink-0 rounded-full ${running ? 'animate-pulse bg-green-500' : 'bg-muted-foreground/50'}`}
+                  className={`size-2.5 shrink-0 rounded-full ${running ? 'animate-pulse bg-green-500' : reserved ? 'bg-amber-500' : 'bg-muted-foreground/50'}`}
                 />
               </Tip>
               <Tip label={name}>
@@ -277,16 +298,29 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
               </Tip>
             ) : (
               <>
-                <Tip label="ادامه‌ی تایم">
+                <Tip label={reserved ? 'شروع تایم' : 'ادامه‌ی تایم'}>
                   <Button size="sm" className="flex-1" onClick={resume}>
-                    <Play /> ادامه
+                    <Play /> {reserved ? 'شروع' : 'ادامه'}
                   </Button>
                 </Tip>
-                <Tip label="پایان تایم و مشاهده صورت‌حساب">
-                  <Button size="sm" variant="destructive" className="flex-1" onClick={openSummary}>
-                    <Square /> اتمام
-                  </Button>
-                </Tip>
+                {reserved ? (
+                  <Tip label="لغو رزرو">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="flex-1"
+                      onClick={() => setCancelOpen(true)}
+                    >
+                      <X /> لغو
+                    </Button>
+                  </Tip>
+                ) : (
+                  <Tip label="پایان تایم و مشاهده صورت‌حساب">
+                    <Button size="sm" variant="destructive" className="flex-1" onClick={openSummary}>
+                      <Square /> اتمام
+                    </Button>
+                  </Tip>
+                )}
               </>
             )}
             <Tip label={remaining === undefined ? 'تعیین محدودیت زمانی' : 'ویرایش محدودیت زمانی'}>
@@ -361,7 +395,7 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
                 </Tip>
               }
             />
-            <Badge variant={running ? 'default' : 'secondary'}>{statusLabel[session.status]}</Badge>
+            <Badge variant={running ? 'default' : 'secondary'}>{statusLabel[statusKey]}</Badge>
             <Tip label="تغییر مشتری">
               <Button
                 variant="ghost"
@@ -459,16 +493,24 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
             </Tip>
           ) : (
             <>
-              <Tip label="ادامه‌ی تایم">
+              <Tip label={reserved ? 'شروع تایم' : 'ادامه‌ی تایم'}>
                 <Button className="flex-1" onClick={resume}>
-                  <Play /> ادامه
+                  <Play /> {reserved ? 'شروع' : 'ادامه'}
                 </Button>
               </Tip>
-              <Tip label="پایان تایم و مشاهده صورت‌حساب">
-                <Button className="flex-1" variant="destructive" onClick={openSummary}>
-                  <Square /> اتمام
-                </Button>
-              </Tip>
+              {reserved ? (
+                <Tip label="لغو رزرو">
+                  <Button className="flex-1" variant="destructive" onClick={() => setCancelOpen(true)}>
+                    <X /> لغو رزرو
+                  </Button>
+                </Tip>
+              ) : (
+                <Tip label="پایان تایم و مشاهده صورت‌حساب">
+                  <Button className="flex-1" variant="destructive" onClick={openSummary}>
+                    <Square /> اتمام
+                  </Button>
+                </Tip>
+              )}
             </>
           )}
         </div>

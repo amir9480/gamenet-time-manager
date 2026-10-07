@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ChartNoAxesColumn, History, LayoutGrid, Moon, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
+import { CalendarClock, ChartNoAxesColumn, History, LayoutGrid, Moon, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
 import { AddSessionDialog } from '@/components/add-session-dialog'
 import { AppIcon } from '@/components/app-icon'
 import { HistoryDialog } from '@/components/history-dialog'
@@ -20,6 +20,7 @@ import { currentShift, SHIFT_VISIBLE_MS } from '@/lib/history'
 import { rank } from '@/lib/search'
 import {
   addSessionRow,
+  deleteSessionRow,
   endSessionRow,
   markOnboarded,
   needsOnboarding,
@@ -59,6 +60,7 @@ function Main() {
   const settings = useLiveQuery(readSettings)
   const sessions = useLiveQuery(readSessions)
   const [addOpen, setAddOpen] = useState(false)
+  const [reserveOpen, setReserveOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [customersOpen, setCustomersOpen] = useState(false)
@@ -104,7 +106,11 @@ function Main() {
     price: FlatPrice,
     customerId?: string,
     limitMinutes?: number,
-  ) => addSessionRow(createSession(device, category, price, customerId, Date.now(), limitMinutes))
+    reserve?: boolean,
+  ) =>
+    addSessionRow(
+      createSession(device, category, price, customerId, Date.now(), limitMinutes, reserve),
+    )
 
   // Device types that have devices; the filter / grouping UI needs more than one.
   const typeNames = settings.deviceCategories
@@ -197,7 +203,11 @@ function Main() {
 
       <main className="flex flex-1 flex-col gap-3">
         {shift ? (
-          <ShiftSummary entries={shift} onAdd={() => setAddOpen(true)} />
+          <ShiftSummary
+            entries={shift}
+            onAdd={() => setAddOpen(true)}
+            onReserve={() => setReserveOpen(true)}
+          />
         ) : sessions.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6 rounded-xl border border-dashed p-10 text-center">
             <LiveClock size="large" />
@@ -215,9 +225,14 @@ function Main() {
                 <Plus /> افزودن دستگاه
               </Button>
             ) : (
-              <Button size="lg" onClick={() => setAddOpen(true)}>
-                <Plus /> افزودن تایم
-              </Button>
+              <div className="flex gap-2">
+                <Button size="lg" variant="outline" onClick={() => setReserveOpen(true)}>
+                  <CalendarClock /> رزرو
+                </Button>
+                <Button size="lg" onClick={() => setAddOpen(true)}>
+                  <Plus /> افزودن تایم
+                </Button>
+              </div>
             )}
           </div>
         ) : (
@@ -314,6 +329,9 @@ function Main() {
                   </Button>
                 </Tip>
                 </div>
+                <Button size="sm" variant="outline" onClick={() => setReserveOpen(true)}>
+                  <CalendarClock /> رزرو
+                </Button>
                 <Button size="sm" onClick={() => setAddOpen(true)}>
                   <Plus /> افزودن تایم
                 </Button>
@@ -324,6 +342,7 @@ function Main() {
                 entries={manualShift}
                 active={sessions.length}
                 onAdd={() => setAddOpen(true)}
+                onReserve={() => setReserveOpen(true)}
               />
             )}
             {!summaryOn && found.length === 0 && (
@@ -355,6 +374,7 @@ function Main() {
                       compact={view === 'compact'}
                       onUpdate={(fn) => updateSessionRow(session.id, fn)}
                       onEnd={(total, onAccount) => endSession(session.id, total, onAccount)}
+                      onCancel={() => deleteSessionRow(session.id)}
                     />
                   ))}
                 </div>
@@ -386,6 +406,15 @@ function Main() {
       <AddSessionDialog
         open={addOpen}
         onOpenChange={setAddOpen}
+        settings={settings}
+        sessions={sessions}
+        onCreate={addSession}
+      />
+
+      <AddSessionDialog
+        reserve
+        open={reserveOpen}
+        onOpenChange={setReserveOpen}
         settings={settings}
         sessions={sessions}
         onCreate={addSession}

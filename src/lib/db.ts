@@ -96,7 +96,7 @@ export const readSettings = async (): Promise<Settings> => {
 
 export const readSessions = async (): Promise<Session[]> =>
   (await db.sessions.toArray()).sort(
-    (a, b) => (a.segments[0]?.from ?? 0) - (b.segments[0]?.from ?? 0),
+    (a, b) => (a.segments[0]?.from ?? a.reservedAt ?? 0) - (b.segments[0]?.from ?? b.reservedAt ?? 0),
   )
 
 // Latest ended sessions, newest first (enough to cover the current shift).
@@ -193,6 +193,9 @@ export const updateSessionRow = (id: string, fn: (s: Session) => Session) =>
     const cur = await db.sessions.get(id)
     if (cur) await db.sessions.put(fn(cur))
   })
+
+// Cancels a reservation: removed without a history entry.
+export const deleteSessionRow = (id: string) => db.sessions.delete(id)
 
 export const endSessionRow = (entry: HistoryEntry) =>
   db.transaction('rw', [db.sessions, db.history], async () => {

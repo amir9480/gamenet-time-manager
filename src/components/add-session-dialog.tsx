@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowLeft, ArrowRight, Play } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CalendarClock, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Combobox,
@@ -52,12 +52,15 @@ type Props = {
   onOpenChange: (open: boolean) => void
   settings: Settings
   sessions: Session[]
+  // Reserve: the same flow, but the timer is not started (the session is created paused).
+  reserve?: boolean
   onCreate: (
     device: Device,
     category: string,
     price: FlatPrice,
     customerId?: string,
     limitMinutes?: number,
+    reserve?: boolean,
   ) => void
 }
 
@@ -101,7 +104,7 @@ function RadioCard({
   )
 }
 
-export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCreate }: Props) {
+export function AddSessionDialog({ open, onOpenChange, settings, sessions, reserve, onCreate }: Props) {
   const busyIds = new Set(sessions.map((s) => s.deviceId))
   const free = freeDevices(settings.devices, sessions)
   const devicesOf = (categoryId: string) => settings.devices.filter((d) => d.categoryId === categoryId)
@@ -286,7 +289,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
   const submit = () => {
     if (!device || !price) return
     const limitMinutes = Math.floor(parseNumber(limit))
-    onCreate(device, categoryName(settings, device), price, customerId, limitMinutes || undefined)
+    onCreate(device, categoryName(settings, device), price, customerId, limitMinutes || undefined, reserve)
     onOpenChange(false)
   }
 
@@ -303,7 +306,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>افزودن تایم</DialogTitle>
+            <DialogTitle>{reserve ? 'رزرو تایم' : 'افزودن تایم'}</DialogTitle>
           </DialogHeader>
 
           <Combobox
@@ -469,7 +472,7 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
             )}
             {last ? (
               <Button disabled={!stepValid} onClick={submit}>
-                <Play /> شروع تایم
+                {reserve ? <CalendarClock /> : <Play />} {reserve ? 'ثبت رزرو' : 'شروع تایم'}
               </Button>
             ) : (
               <Button disabled={!stepValid} onClick={() => setStep(after(steps, step))}>
