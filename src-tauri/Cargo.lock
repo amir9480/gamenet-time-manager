@@ -1202,7 +1202,7 @@ dependencies = [
 
 [[package]]
 name = "gamenet-time-manager"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "futures-util",
  "log",
