@@ -2,7 +2,7 @@ name: Warm build caches
 
 # Tag runs (deploy.yml) can only restore caches saved on their own tag or on the default branch,
 # so a cache saved by one release is invisible to the next. This builds the same things on main,
-# which every tag run can read; deploy.yml waits for a running warm-up before its desktop build.
+# which every tag run can read.
 # The weekly run keeps the caches from being evicted (GitHub drops caches unused for 7 days).
 on:
   push:
@@ -16,20 +16,13 @@ on:
     - cron: '23 3 * * 1'
   workflow_dispatch:
 
-jobs:
-  web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+# Same group as deploy.yml: a release cancels a running warm-up; a warm-up started during a
+# release waits for it to finish (a newer warm-up replaces a waiting one).
+concurrency:
+  group: release
+  cancel-in-progress: false
 
+jobs:
   desktop:
     runs-on: windows-latest
     defaults:

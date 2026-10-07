@@ -10,64 +10,20 @@ on:
 
 permissions:
   contents: write
-  # wait-cache reads the runs of cache.yml.
-  actions: read
   pages: write
   id-token: write
 
+# Shared with cache.yml: a new release cancels a running release or cache warm-up (the warm-up
+# would only compete for runners; the next one refreshes the cache), while cache.yml never
+# cancels a release (it waits for it instead).
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: release
+  cancel-in-progress: true
 
 jobs:
-  web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: npm pkg set version="${GITHUB_REF_NAME#v}"
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-        env:
-          # Project sites are served from /<repo>/; user/org sites (<user>.github.io) from /.
-          BASE_PATH: ${{ endsWith(github.repository, '.github.io') && '/' || format('/{0}/', github.event.repository.name) }}
-      - run: cd dist && zip -r ../gamenet-time-manager-web-${{ github.ref_name }}.zip .
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: web-zip
-          path: gamenet-time-manager-web-*.zip
-
-  # A tag pushed together with a lockfile change on main starts cache.yml at the same time; the
-  # desktop build waits for it (on a cheap Linux runner) so it restores the fresh cache.
-  wait-cache:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for running cache.yml runs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Give a run triggered by the same push time to show up.
-          sleep 20
-          for _ in $(seq 120); do
-            busy=$(gh run list -R "$GITHUB_REPOSITORY" --workflow cache.yml --limit 20 \
-              --json status --jq '[.[] | select(.status != "completed")] | length')
-            [ "$busy" = 0 ] && exit 0
-            echo "Waiting for $busy cache.yml run(s)..."
-            sleep 30
-          done
-          echo "Gave up waiting after an hour; building with the cache that exists."
-
-  desktop:
-    needs: wait-cache
+  # One Windows job builds both: the web PWA first (its `dist` is moved aside, because the Tauri
+  # build rebuilds `dist` without the PWA), then the installer.
+  build:
     runs-on: windows-latest
     defaults:
       run:
@@ -96,19 +52,30 @@ jobs:
           # tauri.conf.json reads package.json; keep Cargo.toml in step too.
           sed -i "0,/^version = .*/s//version = \"$VERSION\"/" src-tauri/Cargo.toml
       - run: pnpm install --frozen-lockfile
+
+      - name: Build web
+        run: pnpm build && mv dist web-dist
+        env:
+          # Project sites are served from /<repo>/; user/org sites (<user>.github.io) from /.
+          BASE_PATH: ${{ endsWith(github.repository, '.github.io') && '/' || format('/{0}/', github.event.repository.name) }}
+      - name: Zip web
+        run: mkdir -p out && cd web-dist && 7z a -tzip "../out/gamenet-time-manager-web-${GITHUB_REF_NAME}.zip" . > /dev/null
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web-dist
+
       - run: pnpm tauri build --bundles nsis
       - name: Name the installer
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          mkdir out
           cp src-tauri/target/release/bundle/nsis/*-setup.exe "out/gamenet-time-manager_${VERSION}_x64-setup.exe"
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-installer
-          path: out/*-setup.exe
+          name: release-files
+          path: out/*
 
   release:
-    needs: [web, desktop]
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
