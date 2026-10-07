@@ -21,8 +21,11 @@ export type Segment = {
   price: number
 }
 
+// `catalogId` links an item to its catalog entry so Settings edits propagate to live
+// sessions (see `applyExtraItems`); absent for the free-form «موارد دیگر».
 export type ExtraItem = {
   id: string
+  catalogId?: string
   name: string
   price: number
   qty: number
@@ -193,15 +196,32 @@ export const applyPriceTypes = (sessions: Session[], types: PriceType[]): Sessio
   }))
 }
 
+// Propagate edited catalog items (name/price) to extra items on existing sessions.
+// Items whose catalog entry was deleted keep their last values.
+export const applyExtraItems = (sessions: Session[], catalog: CatalogItem[]): Session[] => {
+  const byId = new Map(catalog.map((c) => [c.id, c]))
+  return sessions.map((s) => ({
+    ...s,
+    extraItems: s.extraItems.map((i) => {
+      const c = i.catalogId ? byId.get(i.catalogId) : undefined
+      return c ? { ...i, name: c.name, price: c.price } : i
+    }),
+  }))
+}
+
 export const addExtraTime = (s: Session, time: Omit<ExtraTime, 'id'>): Session => ({
   ...s,
   extraTimes: [...s.extraTimes, { ...time, id: uid() }],
 })
 
 export const addExtraItem = (s: Session, item: Omit<ExtraItem, 'id'>): Session => {
-  const existing = s.extraItems.find(
-    (i) =>
-      i.name === item.name && i.price === item.price && (i.description ?? '') === (item.description ?? ''),
+  const existing = s.extraItems.find((i) =>
+    item.catalogId
+      ? i.catalogId === item.catalogId
+      : !i.catalogId &&
+        i.name === item.name &&
+        i.price === item.price &&
+        (i.description ?? '') === (item.description ?? ''),
   )
   if (existing) {
     return {
@@ -241,3 +261,46 @@ export function useLocalStorage<T>(key: string, initial: () => T) {
 
   return [value, setValue] as const
 }
+
+// ---- history --------------------------------------------------------------
+
+// Immutable snapshot of an ended session (costs frozen at the moment of ending).
+export type HistoryEntry = {
+  id: string
+  sessionId: string
+  name: string
+  startedAt: number
+  endedAt: number
+  durationMs: number
+  segments: Segment[]
+  extraTimes: ExtraTime[]
+  extraItems: ExtraItem[]
+  timeCost: number
+  extraTimesCost: number
+  extraItemsCost: number
+  total: number
+}
+
+export const buildHistoryEntry = (s: Session, now: number): HistoryEntry => {
+  const closed = pauseSession(s, now)
+  const timeCost = closed.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0)
+  const timesCost = extraTimesCost(closed)
+  const itemsCost = extraItemsCost(closed)
+  return {
+    id: uid(),
+    sessionId: s.id,
+    name: displayName(s),
+    startedAt: closed.segments[0]?.from ?? now,
+    endedAt: now,
+    durationMs: elapsedMs(closed, now),
+    segments: closed.segments,
+    extraTimes: closed.extraTimes,
+    extraItems: closed.extraItems,
+    timeCost,
+    extraTimesCost: timesCost,
+    extraItemsCost: itemsCost,
+    total: timeCost + timesCost + itemsCost,
+  }
+}
+
+export const isDefaultName = (name: string) => /^دستگاه \d+$/.test(name)

@@ -1,6 +1,6 @@
 # gamenet-reza (گیم نت رضا)
 
-Single-page Persian (RTL, Vazirmatn) game-net session/cost tracker. React + Vite + TypeScript + Tailwind v4 + shadcn/ui (Base UI based "base-nova" style), wrapped as a Tauri v2 desktop app. All data lives in `localStorage`.
+Single-page Persian (RTL, Vazirmatn) game-net session/cost tracker. React + Vite + TypeScript + Tailwind v4 + shadcn/ui (Base UI based "base-nova" style), wrapped as a Tauri v2 desktop app. Data (price types, extra items, sessions, history) lives in IndexedDB via Dexie; only theme/accent live in `localStorage`.
 
 ## Commands (pnpm only)
 - `pnpm dev` — Vite on `0.0.0.0:3000` (strictPort; Tauri `devUrl` points at `localhost:3000`).
@@ -24,6 +24,7 @@ Single-page Persian (RTL, Vazirmatn) game-net session/cost tracker. React + Vite
 - Style: single quotes, no semicolons, ~100 col, trailing commas. Do **not** run prettier with defaults on files (it rewrites quotes/semicolons).
 - UI is RTL (`<html lang="fa" dir="rtl">`). Use logical classes (`ms-/me-/ps-/pe-/start-/end-`), not `left/right`. Keep numeric inputs `dir="ltr"`. The Switch forces `dir="ltr"`; the Dialog close button is at the top-left.
 - shadcn here is Base UI: triggers use the `render` prop (e.g. `<DialogTrigger render={<Button />}>`), not `asChild`; `Select` takes `items` for label lookup. Dialog/AlertDialog content scrolls with the whole viewport (wrapper `fixed inset-0 overflow-y-auto`), never inside the dialog — don't add `max-h/overflow` to dialog contents.
-- Persistence: no migrations (app unpublished). When the stored shape changes, bump the storage keys in `App.tsx` (currently `gamenet-settings-v5`, `gamenet-sessions-v6`; theme: `gamenet-theme`, `gamenet-accent`).
+- Persistence: Dexie db `gamenet` (`src/lib/db.ts`; tables `priceTypes`, `extraItems`, `meta`, `sessions`, `history`). Components read via `useLiveQuery`; writes go through the helpers in db.ts. On a schema change add a new `version(n)` with `.upgrade()` (never edit an existing one). Theme keys: `gamenet-theme`, `gamenet-accent`.
+- Ending a session (اتمام) writes a `HistoryEntry` snapshot (`buildHistoryEntry`) and deletes the session in one transaction. History UI: `HistoryDialog` (shared presets + Jalali range + name filter above two tabs: «تاریخچه» grouped by day, 7 days/page; «آمار» = `StatsPanel` KPIs + charts). Stats math is pure in `src/lib/stats.ts`; charts use the shadcn `chart` component (Recharts) with hued `--chart-1..5` vars in `index.css`, each chart wrapped in `dir="ltr"`. Dates/clock use Persian digits via `src/lib/jalali.ts` (Intl-based, no date lib); money stays English digits.
 - Timestamps drive timers (`segments[].from/to`), so running sessions survive reloads; cards re-render once per second only while running.
 - TypeScript 6: don't add `baseUrl` (deprecated); the `@/*` alias is configured via `paths` and `vite.config.ts` (`import.meta.dirname`).

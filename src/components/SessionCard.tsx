@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Clock, Pause, Pencil, Play, RotateCcw } from 'lucide-react'
+import { useState } from 'react'
+import { Clock, Pause, Pencil, Play, Square } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +28,10 @@ import { ExtraTimeDialog } from '@/components/ExtraTimeDialog'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { SessionSummaryDialog } from '@/components/SessionSummaryDialog'
 import { Timer } from '@/components/Timer'
+import { Tip } from '@/components/Tip'
 import { formatNumber } from '@/lib/format'
+import { formatJalaliDateTime } from '@/lib/jalali'
+import { useNow } from '@/lib/useNow'
 import {
   addExtraItem,
   addExtraTime,
@@ -50,10 +53,9 @@ type Props = {
   onEnd: () => void
 }
 
-const statusLabel = { running: 'در حال اجرا', paused: 'متوقف' } as const
+const statusLabel = { running: 'در حال بازی', paused: 'متوقف' } as const
 
 export function SessionCard({ session, settings, onUpdate, onEnd }: Props) {
-  const [now, setNow] = useState(() => Date.now())
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [summaryNow, setSummaryNow] = useState(0)
   const [manageOpen, setManageOpen] = useState(false)
@@ -62,31 +64,27 @@ export function SessionCard({ session, settings, onUpdate, onEnd }: Props) {
   const [pendingTypeId, setPendingTypeId] = useState<string | null>(null)
   const running = session.status === 'running'
 
-  useEffect(() => {
-    if (!running) return
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [running])
+  const now = useNow(running)
 
   const time = running ? now : Date.now()
   const type = selectedType(settings, session)
   const total = computeCost(session, time)
   const name = displayName(session)
+  const first = session.segments[0]
+  const last = session.segments[session.segments.length - 1]
+  const rangeTitle = first
+    ? `شروع: ${formatJalaliDateTime(first.from)}
+${last.to ? `پایان: ${formatJalaliDateTime(last.to)}` : `اکنون: ${formatJalaliDateTime(time)}`}`
+    : undefined
 
-  const resume = () => {
-    const t = Date.now()
-    setNow(t)
-    onUpdate((s) => resumeSession(settings, s, t))
-  }
+  const resume = () => onUpdate((s) => resumeSession(settings, s, Date.now()))
   const pause = () => onUpdate((s) => pauseSession(s, Date.now()))
   const requestType = (id: string) => {
     if (id !== type.id) setPendingTypeId(id)
   }
   const confirmType = () => {
     if (!pendingTypeId) return
-    const t = Date.now()
-    setNow(t)
-    onUpdate((s) => changeType(settings, s, pendingTypeId, t))
+    onUpdate((s) => changeType(settings, s, pendingTypeId, Date.now()))
     setPendingTypeId(null)
   }
   const pendingType = settings.priceTypes.find((t) => t.id === pendingTypeId)
@@ -104,9 +102,9 @@ export function SessionCard({ session, settings, onUpdate, onEnd }: Props) {
     <Card>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-48 flex-col gap-1.5 sm:w-64">
-            <div className="flex items-center gap-2">
-              <span className="truncate text-lg font-bold">{name}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-lg font-bold">{name}</span>
+            <Tip label="تغییر نام">
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -115,14 +113,13 @@ export function SessionCard({ session, settings, onUpdate, onEnd }: Props) {
               >
                 <Pencil />
               </Button>
-              <Badge variant={running ? 'default' : 'secondary'}>
-                {statusLabel[session.status]}
-              </Badge>
-            </div>
+            </Tip>
             <Select items={typeItems} value={type.id} onValueChange={(v) => requestType(v as string)}>
-              <SelectTrigger className="w-full" aria-label="نوع نرخ">
-                <SelectValue />
-              </SelectTrigger>
+              <Tip label="تغییر نوع نرخ">
+                <SelectTrigger className="w-auto min-w-44" aria-label="نوع نرخ">
+                  <SelectValue />
+                </SelectTrigger>
+              </Tip>
               <SelectContent>
                 {typeItems.map((t) => (
                   <SelectItem key={t.value} value={t.value}>
@@ -131,11 +128,14 @@ export function SessionCard({ session, settings, onUpdate, onEnd }: Props) {
                 ))}
               </SelectContent>
             </Select>
+            <Badge variant={running ? 'default' : 'secondary'}>{statusLabel[session.status]}</Badge>
           </div>
 
-          <div>
-            <Timer ms={elapsedMs(session, time)} />
-          </div>
+          <Tip label={rangeTitle}>
+            <div>
+              <Timer ms={elapsedMs(session, time)} />
+            </div>
+          </Tip>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -157,14 +157,15 @@ export function SessionCard({ session, settings, onUpdate, onEnd }: Props) {
           <div className="flex flex-col gap-1.5">
             <Label>مجموع هزینه نشست</Label>
             <div className="flex items-center gap-2">
-              <Input
-                readOnly
-                dir="ltr"
-                className="cursor-pointer font-bold"
-                title="مشاهده جزئیات هزینه"
-                value={formatNumber(total)}
-                onClick={() => setDetailOpen(true)}
-              />
+              <Tip label="مشاهده جزئیات هزینه">
+                <Input
+                  readOnly
+                  dir="ltr"
+                  className="cursor-pointer font-bold"
+                  value={formatNumber(total)}
+                  onClick={() => setDetailOpen(true)}
+                />
+              </Tip>
               <span className="shrink-0 text-sm text-muted-foreground">تومان</span>
             </div>
           </div>
@@ -173,48 +174,50 @@ export function SessionCard({ session, settings, onUpdate, onEnd }: Props) {
         {(session.extraTimes.length > 0 || session.extraItems.length > 0) && (
           <div className="flex flex-wrap gap-2">
             {session.extraTimes.map((t) => (
-              <Badge
-                key={t.id}
-                variant="outline"
-                className="h-auto cursor-pointer py-1 hover:bg-muted"
-                render={<button type="button" title="مدیریت" onClick={() => setManageOpen(true)} />}
-              >
-                <Clock /> {t.name}: {formatNumber(t.minutes)} دقیقه
-              </Badge>
+              <Tip key={t.id} label="تغییر">
+                <Badge
+                  variant="outline"
+                  className="h-auto cursor-pointer py-1 hover:bg-muted"
+                  render={<button type="button" onClick={() => setManageOpen(true)} />}
+                >
+                  <Clock /> {t.name}: {formatNumber(t.minutes)} دقیقه
+                </Badge>
+              </Tip>
             ))}
             {session.extraItems.map((i) => (
-              <Badge
-                key={i.id}
-                variant="secondary"
-                className="h-auto cursor-pointer py-1 hover:bg-secondary/70"
-                render={
-                  <button
-                    type="button"
-                    title={i.description || 'مدیریت'}
-                    onClick={() => setManageOpen(true)}
-                  />
-                }
-              >
-                {i.name}
-                {i.description ? ` (${i.description})` : ''} × {formatNumber(i.qty)} ={' '}
-                {formatNumber(i.price * i.qty)}
-              </Badge>
+              <Tip key={i.id} label={i.description || 'تغییر'}>
+                <Badge
+                  variant="secondary"
+                  className="h-auto cursor-pointer py-1 hover:bg-secondary/70"
+                  render={<button type="button" onClick={() => setManageOpen(true)} />}
+                >
+                  {i.name}
+                  {i.description ? ` (${i.description})` : ''} × {formatNumber(i.qty)} ={' '}
+                  {formatNumber(i.price * i.qty)}
+                </Badge>
+              </Tip>
             ))}
           </div>
         )}
         <div className="flex gap-2">
           {running ? (
-            <Button className="flex-1" variant="secondary" onClick={pause}>
-              <Pause /> توقف
-            </Button>
+            <Tip label="توقف موقت نشست">
+              <Button className="flex-1" onClick={pause}>
+                <Pause /> توقف
+              </Button>
+            </Tip>
           ) : (
             <>
-              <Button className="flex-1" onClick={resume}>
-                <Play /> ادامه
-              </Button>
-              <Button className="flex-1" variant="destructive" onClick={openSummary}>
-                <RotateCcw /> اتمام
-              </Button>
+              <Tip label="ادامه‌ی نشست">
+                <Button className="flex-1" onClick={resume}>
+                  <Play /> ادامه
+                </Button>
+              </Tip>
+              <Tip label="پایان نشست و مشاهده صورت‌حساب">
+                <Button className="flex-1" variant="destructive" onClick={openSummary}>
+                  <Square /> اتمام
+                </Button>
+              </Tip>
             </>
           )}
         </div>

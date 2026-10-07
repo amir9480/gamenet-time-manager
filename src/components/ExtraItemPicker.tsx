@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Tip } from '@/components/Tip'
 import { Label } from '@/components/ui/label'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { OTHER_ITEM_NAME, type CatalogItem, type ExtraItem } from '@/lib/store'
@@ -59,7 +60,7 @@ export function ExtraItemPicker({ catalog, onAdd }: Props) {
   const lines = [
     ...catalog
       .filter((c) => (counts[c.id] ?? 0) > 0)
-      .map((c) => ({ name: c.name, price: c.price, qty: counts[c.id] })),
+      .map((c) => ({ catalogId: c.id, name: c.name, price: c.price, qty: counts[c.id] })),
     ...(otherValid
       ? [
           {
@@ -87,9 +88,11 @@ export function ExtraItemPicker({ catalog, onAdd }: Props) {
         if (!o) reset()
       }}
     >
-      <DialogTrigger render={<Button variant="outline" />}>
-        <Plus /> افزودن هزینه
-      </DialogTrigger>
+      <Tip label="افزودن هزینه‌ی اضافه به نشست">
+        <DialogTrigger render={<Button variant="outline" />}>
+          <Plus /> افزودن هزینه
+        </DialogTrigger>
+      </Tip>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>افزودن هزینه اضافه</DialogTitle>

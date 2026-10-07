@@ -2,6 +2,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Tip } from '@/components/Tip'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { uid, type PriceType } from '@/lib/store'
 
@@ -32,7 +33,9 @@ export function PriceTypeEditor({ types, defaultId, onChange }: Props) {
   return (
     <div className="flex flex-col gap-2">
       <div className="grid grid-cols-[1.5rem_1fr_1fr_2rem] items-center gap-2 text-xs text-muted-foreground">
-        <span title="پیش‌فرض">پ</span>
+        <Tip label="پیش‌فرض">
+          <span>پ</span>
+        </Tip>
         <span>نام نوع</span>
         <span>نرخ ساعتی (تومان)</span>
         <span />

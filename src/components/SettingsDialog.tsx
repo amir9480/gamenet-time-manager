@@ -21,6 +21,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Tip } from '@/components/Tip'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ExtraItemsEditor } from '@/components/ExtraItemsEditor'
@@ -167,21 +168,21 @@ export function SettingsDialog({ settings, onChange }: Props) {
                 <Label>رنگ تم</Label>
                 <div className="flex flex-wrap gap-2">
                   {ACCENTS.map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      title={a.label}
-                      aria-label={a.label}
-                      aria-pressed={draft.accent === a.id}
-                      onClick={() => patch({ accent: a.id })}
-                      className={cn(
-                        'flex size-8 items-center justify-center rounded-full text-white ring-offset-2 ring-offset-popover transition',
-                        draft.accent === a.id ? 'ring-2 ring-foreground' : 'hover:scale-110',
-                      )}
-                      style={{ backgroundColor: a.swatch }}
-                    >
-                      {draft.accent === a.id && <Check className="size-4" />}
-                    </button>
+                    <Tip key={a.id} label={a.label}>
+                      <button
+                        type="button"
+                        aria-label={a.label}
+                        aria-pressed={draft.accent === a.id}
+                        onClick={() => patch({ accent: a.id })}
+                        className={cn(
+                          'flex size-8 items-center justify-center rounded-full text-white ring-offset-2 ring-offset-popover transition',
+                          draft.accent === a.id ? 'ring-2 ring-foreground' : 'hover:scale-110',
+                        )}
+                        style={{ backgroundColor: a.swatch }}
+                      >
+                        {draft.accent === a.id && <Check className="size-4" />}
+                      </button>
+                    </Tip>
                   ))}
                 </div>
               </div>
@@ -198,10 +199,6 @@ export function SettingsDialog({ settings, onChange }: Props) {
             </TabsContent>
 
             <TabsContent value="rates" className="flex flex-col gap-3">
-              <p className="text-sm text-muted-foreground">
-                تغییر نام یا قیمت یک نوع نرخ روی همه نشست‌های موجود (زمان گذشته، نشست در حال اجرا و
-                نشست‌های بعدی) اعمال می‌شود.
-              </p>
               <PriceTypeEditor
                 types={draft.priceTypes}
                 defaultId={draft.defaultTypeId}

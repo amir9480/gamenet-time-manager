@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Tip } from '@/components/Tip'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -65,9 +66,11 @@ export function ExtraTimeDialog({ priceTypes, currentTypeId, onAdd }: Props) {
         setTypeId(currentTypeId)
       }}
     >
-      <DialogTrigger render={<Button variant="outline" />}>
-        <Clock /> افزودن زمان
-      </DialogTrigger>
+      <Tip label="افزودن زمان اضافه به نشست">
+        <DialogTrigger render={<Button variant="outline" />}>
+          <Clock /> افزودن زمان
+        </DialogTrigger>
+      </Tip>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>افزودن زمان اضافه</DialogTitle>

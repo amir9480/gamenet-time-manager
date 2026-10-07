@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -18,6 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { NameCombobox } from '@/components/NameCombobox'
+import { readPreviousNames } from '@/lib/db'
 import { formatNumber } from '@/lib/format'
 import {
   defaultSessionName,
@@ -39,6 +41,7 @@ type Props = {
 export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCreate }: Props) {
   const [typeId, setTypeId] = useState('')
   const [name, setName] = useState('')
+  const previousNames = useLiveQuery(readPreviousNames) ?? []
 
   useEffect(() => {
     if (open) {
@@ -87,12 +90,13 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, onCre
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="new-session-name">نام (اختیاری)</Label>
-            <Input
+            <NameCombobox
               id="new-session-name"
               placeholder={placeholder}
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && submit()}
+              onChange={setName}
+              suggestions={previousNames}
+              onEnter={submit}
             />
           </div>
         </div>
