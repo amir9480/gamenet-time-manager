@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ChevronDown, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Trash2 } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +20,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import { FilterCombobox } from '@/components/filter-combobox'
 import { StatsPanel } from '@/components/stats-panel'
@@ -27,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { JalaliDatePicker } from '@/components/jalali-date-picker'
 import { db } from '@/lib/db'
 import { previousRange } from '@/lib/stats'
+import { exportCsv, exportXlsx, printReport, rangeLabel } from '@/lib/report-export'
 import { formatDuration, formatNumber } from '@/lib/format'
 import { groupByDay, pageCount, pageGroups, summarize } from '@/lib/history'
 import {
@@ -137,6 +144,23 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
   const current = Math.min(page, pages - 1)
   const visible = pageGroups(groups, current)
 
+  const exportPdf = () => {
+    const label = (items: { value: string; label: string }[], v: string) =>
+      items.find((i) => i.value === v)?.label
+    printReport(
+      {
+        title: 'گزارش تایم‌ها',
+        rangeLabel: rangeLabel(range),
+        filters: [
+          customerFilter !== 'all' && `مشتری: ${label(customerItems, customerFilter)}`,
+          categoryFilter !== 'all' && `نوع دستگاه: ${categoryFilter}`,
+          payFilter !== 'all' && `پرداخت: ${label(PAY_ITEMS, payFilter)}`,
+        ].filter((f): f is string => !!f),
+      },
+      entries ?? [],
+    )
+  }
+
   const choosePreset = (p: Preset) => {
     setPreset(p)
     setRange(presetRange(p))
@@ -175,8 +199,23 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
               {p.label}
             </Button>
           ))}
+          <div className="ms-auto flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button size="sm" variant="outline" disabled={!entries?.length} />}
+              >
+                <Download /> خروجی گزارش
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => exportXlsx(entries ?? [])}>
+                  اکسل (XLSX)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportCsv(entries ?? [])}>CSV</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportPdf}>PDF (چاپ)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           {preset !== 'all' && (
-            <div className="ms-auto flex flex-wrap items-center gap-2">
+            <>
               <JalaliDatePicker
                 label="از"
                 value={startOfDay(range.from)}
@@ -187,8 +226,9 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
                 value={startOfDay(range.to)}
                 onChange={(d) => setCustom(Math.min(range.from, d), endOfDay(d))}
               />
-            </div>
+            </>
           )}
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">

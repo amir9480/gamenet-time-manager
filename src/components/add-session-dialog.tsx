@@ -314,7 +314,9 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
             items={searchItems}
             // Ranked multi-word search instead of the built-in contiguous-substring filter.
             filter={null}
-            filteredItems={rank(searchItems, query, (it) => it.fields)}
+            filteredItems={rank(searchItems, query, (it) => it.fields).sort(
+              (a, b) => Number(a.busy) - Number(b.busy),
+            )}
             value={null}
             onValueChange={(it) => quickSelect(it as SearchItem | null)}
             inputValue={query}
@@ -386,7 +388,9 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
                 if (d) choose(pickDevice(d), 'device')
               }}
             >
-              {devicesOf(pick.categoryId).map((d) => {
+              {[...devicesOf(pick.categoryId)]
+                .sort((a, b) => Number(busyIds.has(a.id)) - Number(busyIds.has(b.id)))
+                .map((d) => {
                 const busy = busyIds.has(d.id)
                 return (
                   <RadioCard key={d.id} value={d.id} checked={pick.deviceId === d.id} disabled={busy}>
