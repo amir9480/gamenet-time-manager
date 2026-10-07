@@ -54,10 +54,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build web
-        run: pnpm build && mv dist web-dist
+        # Not bash: Git Bash (MSYS) rewrites path-like env vars for Windows programs, turning
+        # BASE_PATH=/repo/ into C:/Program Files/Git/repo/.
+        shell: pwsh
+        run: pnpm build
         env:
           # Project sites are served from /<repo>/; user/org sites (<user>.github.io) from /.
           BASE_PATH: ${{ endsWith(github.repository, '.github.io') && '/' || format('/{0}/', github.event.repository.name) }}
+      - run: mv dist web-dist
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web-dist
