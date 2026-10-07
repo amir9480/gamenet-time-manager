@@ -1,0 +1,55 @@
+name: Warm build caches
+
+# Tag runs (deploy.yml) can only restore caches saved on their own tag or on the default branch,
+# so a cache saved by one release is invisible to the next. This builds the same things on main,
+# which every tag run can read; deploy.yml waits for a running warm-up before its desktop build.
+# The weekly run keeps the caches from being evicted (GitHub drops caches unused for 7 days).
+on:
+  push:
+    branches: [main]
+    paths:
+      - pnpm-lock.yaml
+      - src-tauri/Cargo.lock
+      - src-tauri/Cargo.toml
+      - .github/workflows/cache.yml
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+  desktop:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          # Same key as the desktop job in deploy.yml.
+          shared-key: desktop
+      - run: pnpm install --frozen-lockfile
+      # Same build as the release (tauri enables its release features), minus the installer.
+      - run: pnpm tauri build --no-bundle

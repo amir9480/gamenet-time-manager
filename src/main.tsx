@@ -4,8 +4,10 @@ import './index.css'
 import App from './App.tsx'
 import { initAutostart } from '@/lib/autostart'
 import { watchInstall } from '@/lib/install'
+import { startSingleInstance } from '@/lib/single-instance'
 import { registerPwa } from '@/lib/update'
 
+startSingleInstance()
 watchInstall()
 registerPwa()
 void initAutostart()

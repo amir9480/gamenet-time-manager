@@ -6,6 +6,7 @@ import { AppIcon } from '@/components/app-icon'
 import { InstallDialog } from '@/components/install-dialog'
 import { HistoryDialog } from '@/components/history-dialog'
 import { LimitAlarmDialog, LockedLimitAlarm } from '@/components/limit-alarm-dialog'
+import { InstanceScreen } from '@/components/instance-screen'
 import { LiveClock } from '@/components/live-clock'
 import { LockScreen } from '@/components/lock-screen'
 import { NoticeDialog } from '@/components/notice-dialog'
@@ -26,6 +27,7 @@ import { rank } from '@/lib/search'
 import { installSeen, markInstallSeen, useInstall } from '@/lib/install'
 import { APP_VERSION, REPO_URL } from '@/lib/platform'
 import { lockNow, useSecurity } from '@/lib/security'
+import { useInstance } from '@/lib/single-instance'
 import { useIdleLock } from '@/lib/use-idle-lock'
 import {
   addSessionRow,
@@ -513,10 +515,18 @@ function Main() {
 export default function App() {
   // Locking unmounts the whole app, so nothing stays in the DOM until the PIN is entered.
   const { epoch, locked } = useSecurity()
+  // Only one window runs the app; any other shows just the "open elsewhere" screen.
+  const instance = useInstance()
   return (
     <ThemeProvider>
       <TooltipProvider>
-        {locked ? (
+        {instance !== 'active' ? (
+          instance === 'other' ? (
+            <InstanceScreen />
+          ) : (
+            <div className="min-h-screen bg-background" />
+          )
+        ) : locked ? (
           // Locked: nothing of the app is rendered, only the lock page (and a silent alarm).
           <>
             <LockScreen />

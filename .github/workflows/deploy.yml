@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: write
+  # wait-cache reads the runs of cache.yml.
+  actions: read
   pages: write
   id-token: write
 
@@ -44,7 +46,28 @@ jobs:
           name: web-zip
           path: gamenet-time-manager-web-*.zip
 
+  # A tag pushed together with a lockfile change on main starts cache.yml at the same time; the
+  # desktop build waits for it (on a cheap Linux runner) so it restores the fresh cache.
+  wait-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for running cache.yml runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Give a run triggered by the same push time to show up.
+          sleep 20
+          for _ in $(seq 120); do
+            busy=$(gh run list -R "$GITHUB_REPOSITORY" --workflow cache.yml --limit 20 \
+              --json status --jq '[.[] | select(.status != "completed")] | length')
+            [ "$busy" = 0 ] && exit 0
+            echo "Waiting for $busy cache.yml run(s)..."
+            sleep 30
+          done
+          echo "Gave up waiting after an hour; building with the cache that exists."
+
   desktop:
+    needs: wait-cache
     runs-on: windows-latest
     defaults:
       run:
@@ -62,6 +85,10 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          # Restores the cache warmed on main by cache.yml (tag runs can't read other tags'
+          # caches, so saving one here would only waste space).
+          shared-key: desktop
+          save-if: false
       - name: Sync version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"

@@ -1,5 +1,6 @@
 import font400 from '@fontsource/vazirmatn/files/vazirmatn-arabic-400-normal.woff2?url'
 import font700 from '@fontsource/vazirmatn/files/vazirmatn-arabic-700-normal.woff2?url'
+import { saveFile } from '@/lib/download'
 import { groupByDay, summarize } from '@/lib/history'
 import { dayKey, formatJalaliClock, toFa, type Range } from '@/lib/jalali'
 import { itemsSold, topCustomers } from '@/lib/stats'
@@ -300,25 +301,14 @@ export const printReport = (meta: ReportMeta, entries: HistoryEntry[]): Promise<
 
 // ---- download ---------------------------------------------------------------
 
-export const download = (name: string, data: BlobPart, type: string) => {
-  const url = URL.createObjectURL(new Blob([data], { type }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  document.body.append(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 10_000)
-}
-
 export const exportFileName = (ext: string) =>
   `gamenet-report-${dayKey(Date.now()).replace(/\//g, '-')}.${ext}`
 
 export const exportCsv = (entries: HistoryEntry[]) =>
-  download(exportFileName('csv'), toCsv(sessionsTable(entries)), 'text/csv;charset=utf-8')
+  saveFile(exportFileName('csv'), toCsv(sessionsTable(entries)), 'text/csv;charset=utf-8')
 
 export const exportXlsx = (entries: HistoryEntry[]) =>
-  download(
+  saveFile(
     exportFileName('xlsx'),
     toXlsx(buildTables(entries)),
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

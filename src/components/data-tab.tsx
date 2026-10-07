@@ -20,6 +20,7 @@ import {
   resetAllData,
   type Backup,
 } from '@/lib/db'
+import { saveFile } from '@/lib/download'
 import { formatNumber } from '@/lib/format'
 import { formatJalaliDateTime } from '@/lib/jalali'
 
@@ -73,16 +74,11 @@ export function DataTab({ activeSessions }: { activeSessions: number }) {
   const exportData = () =>
     run(async () => {
       const backup = await exportBackup()
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(backup)], { type: 'application/json' }),
+      await saveFile(
+        `gamenet-backup-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify(backup),
+        'application/json',
       )
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `gamenet-backup-${new Date().toISOString().slice(0, 10)}.json`
-      document.body.append(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 10_000)
     })
 
   const pickFile = async (file: File | undefined) => {

@@ -65,12 +65,70 @@ fn run_installer(path: String) -> Result<(), String> {
   cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+// Web-style download: asks where to save (native Save dialog, starting in Downloads) and writes
+// the raw request body there. The file name comes URI-encoded in the `x-file-name` header.
+// Returns false when the user cancels.
+#[tauri::command]
+async fn save_file(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<bool, String> {
+  use tauri::Manager;
+  use tauri_plugin_dialog::DialogExt;
+  let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+    return Err("expected raw file data".into());
+  };
+  let name = request
+    .headers()
+    .get("x-file-name")
+    .and_then(|v| v.to_str().ok())
+    .and_then(|v| percent_decode(v))
+    .ok_or("missing file name")?;
+  let mut dialog = app.dialog().file().set_file_name(&name);
+  if let Some(ext) = std::path::Path::new(&name).extension().and_then(|e| e.to_str()) {
+    dialog = dialog.add_filter(ext.to_uppercase(), &[ext]);
+  }
+  if let Ok(dir) = app.path().download_dir() {
+    dialog = dialog.set_directory(dir);
+  }
+  let Some(path) = dialog.blocking_save_file() else {
+    return Ok(false);
+  };
+  let path = path.into_path().map_err(|e| e.to_string())?;
+  std::fs::write(path, data).map_err(|e| e.to_string())?;
+  Ok(true)
+}
+
+// Decodes `encodeURIComponent` output (UTF-8 percent escapes).
+fn percent_decode(s: &str) -> Option<String> {
+  let bytes = s.as_bytes();
+  let mut out = Vec::with_capacity(bytes.len());
+  let mut i = 0;
+  while i < bytes.len() {
+    if bytes[i] == b'%' {
+      let hex = s.get(i + 1..i + 3)?;
+      out.push(u8::from_str_radix(hex, 16).ok()?);
+      i += 3;
+    } else {
+      out.push(bytes[i]);
+      i += 1;
+    }
+  }
+  String::from_utf8(out).ok()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let mut builder = tauri::Builder::default();
 
   #[cfg(desktop)]
   {
+    // Must be the first plugin: a second launch exits right away and focuses the running window.
+    builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+      use tauri::Manager;
+      if let Some(win) = app.get_webview_window("main") {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+      }
+    }));
     builder = builder.plugin(tauri_plugin_autostart::init(
       tauri_plugin_autostart::MacosLauncher::LaunchAgent,
       None,
@@ -78,7 +136,8 @@ pub fn run() {
   }
 
   builder
-    .invoke_handler(tauri::generate_handler![download_installer, run_installer])
+    .plugin(tauri_plugin_dialog::init())
+    .invoke_handler(tauri::generate_handler![download_installer, run_installer, save_file])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

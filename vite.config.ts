@@ -31,6 +31,8 @@ export default defineConfig({
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
+        // Launching the installed app again focuses its open window (Chromium).
+        launch_handler: { client_mode: ['focus-existing', 'auto'] },
         start_url: '.',
         scope: '.',
         icons: [
