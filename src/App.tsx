@@ -288,33 +288,33 @@ function Main() {
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {showTypes && (
-                  <>
+            {/* Type filters and the controls always sit on separate rows, so the layout doesn't jump
+                when the number of device types changes. */}
+            <div className="flex flex-col gap-2">
+              {showTypes && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Button
+                    size="lg"
+                    variant={activeType === null ? 'default' : 'outline'}
+                    aria-pressed={activeType === null}
+                    onClick={() => setTypeFilter(null)}
+                  >
+                    همه ({found.length})
+                  </Button>
+                  {typeNames.map((t) => (
                     <Button
+                      key={t}
                       size="lg"
-                      variant={activeType === null ? 'default' : 'outline'}
-                      aria-pressed={activeType === null}
-                      onClick={() => setTypeFilter(null)}
+                      variant={activeType === t ? 'default' : 'outline'}
+                      aria-pressed={activeType === t}
+                      onClick={() => setTypeFilter(activeType === t ? null : t)}
                     >
-                      همه ({found.length})
+                      {t} ({found.filter((x) => x.categoryName === t).length})
                     </Button>
-                    {typeNames.map((t) => (
-                      <Button
-                        key={t}
-                        size="lg"
-                        variant={activeType === t ? 'default' : 'outline'}
-                        aria-pressed={activeType === t}
-                        onClick={() => setTypeFilter(activeType === t ? null : t)}
-                      >
-                        {t} ({found.filter((x) => x.categoryName === t).length})
-                      </Button>
-                    ))}
-                  </>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-1">
                 <div className="relative">
                   <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input

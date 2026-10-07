@@ -48,6 +48,8 @@ export default defineConfig({
           '**/*.{html,css,woff2,svg,png}',
           'assets/{index,app-icon-lucide,DynamicIcon,Icon,icon-picker,virtual_pwa-register,workbox-window}*.js',
         ],
+        // The social-preview banner (index.html og:image, README) is never shown in the app.
+        globIgnores: ['img/**'],
         navigateFallback: 'index.html',
         // Notification click handler for the time-limit alert (see src/lib/attention.ts).
         importScripts: ['notification-click.js'],

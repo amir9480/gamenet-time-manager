@@ -55,6 +55,10 @@ fn run_installer(path: String) -> Result<(), String> {
     .filter(|p| p == std::path::Path::new(&path) && p.is_file())
     .ok_or("invalid installer path")?;
   let mut cmd = std::process::Command::new(installer);
+  // Same flags Tauri's own updater uses with its NSIS template: /UPDATE skips the "uninstall the
+  // existing version" page (installs over it, keeping app data), /P shows only the progress
+  // window without any prompt, /R relaunches the app when it is done.
+  cmd.args(["/P", "/UPDATE", "/R"]);
   #[cfg(windows)]
   {
     use std::os::windows::process::CommandExt;

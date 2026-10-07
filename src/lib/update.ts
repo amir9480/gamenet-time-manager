@@ -7,7 +7,8 @@ import { APP_VERSION, isTauri } from '@/lib/platform'
 import { compareVersions, fetchLatestRelease, type ReleaseInfo } from '@/lib/release'
 
 const SKIP_KEY = 'gn-skipped-update'
-const CHECK_EVERY = 6 * 60 * 60_000
+// Update checks run at startup and then every CHECK_EVERY.
+const CHECK_EVERY = 10 * 60_000
 
 const skippedVersion = () => {
   try {
@@ -35,7 +36,8 @@ export const registerPwa = () => {
         listeners.forEach((fn) => fn())
       },
       onRegisteredSW(_url, reg) {
-        if (reg) setInterval(() => reg.update(), 60 * 60_000)
+        // Registering already checked once at startup.
+        if (reg) setInterval(() => void reg.update(), CHECK_EVERY)
       },
     })
   })
