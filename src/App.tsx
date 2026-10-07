@@ -265,7 +265,7 @@ function Main() {
                 {showTypes && (
                   <>
                     <Button
-                      size="sm"
+                      size="lg"
                       variant={activeType === null ? 'default' : 'outline'}
                       aria-pressed={activeType === null}
                       onClick={() => setTypeFilter(null)}
@@ -275,7 +275,7 @@ function Main() {
                     {typeNames.map((t) => (
                       <Button
                         key={t}
-                        size="sm"
+                        size="lg"
                         variant={activeType === t ? 'default' : 'outline'}
                         aria-pressed={activeType === t}
                         onClick={() => setTypeFilter(activeType === t ? null : t)}
@@ -288,11 +288,11 @@ function Main() {
               </div>
               <div className="flex items-center gap-1">
                 <div className="relative">
-                  <Search className="pointer-events-none absolute start-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     aria-label="جستجوی تایم‌ها"
                     placeholder="جستجو در تایم‌ها…"
-                    className="h-7 w-44 ps-7 pe-7 text-sm"
+                    className="h-9 w-52 ps-8 pe-8 text-sm"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
@@ -310,7 +310,7 @@ function Main() {
                 <div role="radiogroup" aria-label="نحوه‌ی نمایش" className="flex items-center gap-1">
                 <Tip label="نمای کامل">
                   <Button
-                    size="icon-sm"
+                    size="icon-lg"
                     variant={!summaryOn && view === 'detailed' ? 'secondary' : 'ghost'}
                     role="radio"
                     aria-label="نمای کامل"
@@ -325,7 +325,7 @@ function Main() {
                 </Tip>
                 <Tip label="نمای فشرده">
                   <Button
-                    size="icon-sm"
+                    size="icon-lg"
                     variant={!summaryOn && view === 'compact' ? 'secondary' : 'ghost'}
                     role="radio"
                     aria-label="نمای فشرده"
@@ -340,7 +340,7 @@ function Main() {
                 </Tip>
                 <Tip label="خلاصه‌ی شیفت">
                   <Button
-                    size="icon-sm"
+                    size="icon-lg"
                     variant={summaryOn ? 'secondary' : 'ghost'}
                     role="radio"
                     aria-label="خلاصه‌ی شیفت"
@@ -352,10 +352,10 @@ function Main() {
                   </Button>
                 </Tip>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setReserveOpen(true)}>
+                <Button size="lg" variant="outline" onClick={() => setReserveOpen(true)}>
                   <CalendarClock /> رزرو
                 </Button>
-                <Button size="sm" onClick={() => setAddOpen(true)}>
+                <Button size="lg" onClick={() => setAddOpen(true)}>
                   <Plus /> افزودن تایم
                 </Button>
               </div>

@@ -187,7 +187,31 @@ export const saveSettings = (next: Omit<Settings, 'customers'>) =>
     },
   )
 
-export const addSessionRow = (s: Session) => db.sessions.add(s)
+// Adds one item to the extra items catalog (optionally creating its category first) and returns
+// the stored row (its id may be a restored soft-deleted one).
+export const addCatalogItem = async (
+  settings: Settings,
+  item: { name: string; price: number; categoryId?: string; newCategoryName?: string },
+): Promise<CatalogItem | undefined> => {
+  const { customers: _customers, ...rest } = settings
+  const newCategory = item.newCategoryName ? { id: uid(), name: item.newCategoryName.trim() } : undefined
+  const categoryId = newCategory?.id ?? item.categoryId ?? ''
+  await saveSettings({
+    ...rest,
+    extraCategories: newCategory ? [...settings.extraCategories, newCategory] : settings.extraCategories,
+    extraItems: [
+      ...settings.extraItems,
+      { id: uid(), name: item.name.trim(), price: item.price, categoryId },
+    ],
+  })
+  const fresh = await readSettings()
+  const catId = newCategory
+    ? fresh.extraCategories.find((c) => norm(c.name) === norm(newCategory.name))?.id
+    : categoryId
+  return fresh.extraItems.find((i) => norm(i.name) === norm(item.name) && i.categoryId === catId)
+}
+
+export const addSessionRow =(s: Session) => db.sessions.add(s)
 
 export const updateSessionRow = (id: string, fn: (s: Session) => Session) =>
   db.transaction('rw', db.sessions, async () => {

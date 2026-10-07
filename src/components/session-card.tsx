@@ -361,8 +361,7 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
             />
             <ExtraItemPicker
               compact
-              categories={settings.extraCategories}
-              catalog={settings.extraItems}
+              settings={settings}
               onAdd={(item) => onUpdate((s) => addExtraItem(s, item))}
             />
           </div>
@@ -454,8 +453,7 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
           <div className="flex flex-col gap-1.5">
             <Label>بوفه</Label>
             <ExtraItemPicker
-              categories={settings.extraCategories}
-              catalog={settings.extraItems}
+              settings={settings}
               onAdd={(item) => onUpdate((s) => addExtraItem(s, item))}
             />
           </div>

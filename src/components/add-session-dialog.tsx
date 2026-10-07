@@ -77,10 +77,10 @@ type SearchItem = {
   fields: Field[] // everything this entry can be found by, shown or not
 }
 
-const RedDot = () => <span className="size-2 shrink-0 rounded-full bg-destructive" aria-hidden />
+export const RedDot = () => <span className="size-2 shrink-0 rounded-full bg-destructive" aria-hidden />
 
 // One selectable card inside a RadioGroup; busy cards stay visible but disabled.
-function RadioCard({
+export function RadioCard({
   value,
   checked,
   disabled,
