@@ -210,7 +210,9 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
                   className={`size-2.5 shrink-0 rounded-full ${running ? 'animate-pulse bg-green-500' : 'bg-muted-foreground/50'}`}
                 />
               </Tip>
-              <span className="truncate text-base font-bold">{name}</span>
+              <Tip label={name}>
+                <span className="truncate text-base font-bold">{name}</span>
+              </Tip>
               {session.categoryName && (
                 <Badge variant="outline" className="shrink-0">
                   {session.categoryName}
@@ -340,7 +342,9 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-lg font-bold">{name}</span>
+            <Tip label={name}>
+              <span className="truncate text-lg font-bold">{name}</span>
+            </Tip>
             {session.categoryName && <Badge variant="outline">{session.categoryName}</Badge>}
             <PriceSelect
               groups={groups}

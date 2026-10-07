@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Coins, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -164,21 +165,19 @@ function AddManyDialog({
   onAdd: (devices: Device[]) => void
   onClose: () => void
 }) {
-  const firstRates = rateGroups.slice(0, 1).map((g) => g.id)
-  const [prefix, setPrefix] = useState(category.name.trim() || 'دستگاه')
+  // Nothing is preselected: the rate groups must be chosen on purpose.
+  const defaultPrefix = `${category.name.trim() || 'دستگاه'} شماره`
+  const [prefix, setPrefix] = useState(defaultPrefix)
   const [count, setCount] = useState('')
   const [start, setStart] = useState('')
-  const [rateIds, setRateIds] = useState(firstRates)
+  const [rateIds, setRateIds] = useState<string[]>([])
 
   const n = Math.min(50, Math.floor(parseNumber(count)))
   const first = start ? Math.floor(parseNumber(start)) : nextNumber(devices, prefix)
   const valid = prefix.trim() !== '' && n >= 1 && first >= 1 && rateIds.length > 0
 
   const dirty =
-    prefix !== (category.name.trim() || 'دستگاه') ||
-    count !== '' ||
-    start !== '' ||
-    JSON.stringify(rateIds) !== JSON.stringify(firstRates)
+    prefix !== defaultPrefix || count !== '' || start !== '' || rateIds.length > 0
   const { requestClose, dialog } = useDiscardGuard(dirty, onClose)
 
   const submit = () => {
@@ -240,10 +239,16 @@ function AddManyDialog({
               <RateGroupPicker groups={rateGroups} value={rateIds} onChange={setRateIds} />
             </div>
             {valid && (
-              <p className="text-xs text-muted-foreground">
-                نمونه: {prefix.trim()} {first}
-                {n > 1 ? ` … ${prefix.trim()} ${first + n - 1}` : ''}
-              </p>
+              <div className="flex flex-col gap-1.5">
+                <Label>دستگاه‌هایی که ساخته می‌شوند ({formatNumber(n)})</Label>
+                <div className="flex flex-wrap gap-1.5 rounded-lg border bg-muted/30 p-2">
+                  {Array.from({ length: n }, (_, i) => `${prefix.trim()} ${first + i}`).map((name) => (
+                    <Badge key={name} variant="outline" className="bg-background">
+                      {name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
           <DialogFooter>
@@ -478,7 +483,7 @@ export function DevicesEditor({ categories, devices, rateGroups, usage, onChange
         <DeviceFormDialog
           title={`افزودن دستگاه به «${dialog.category.name}»`}
           description="نام دستگاه و نرخ‌های قابل استفاده برای آن را مشخص کنید."
-          initial={{ name: '', rateIds: rateGroups.slice(0, 1).map((g) => g.id) }}
+          initial={{ name: '', rateIds: [] }}
           placeholder={`${dialog.category.name} ${nextNumber(
             devices.filter((d) => d.categoryId === dialog.category.id),
             dialog.category.name,

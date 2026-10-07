@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDiscardGuard } from '@/components/discard-dialog'
+import { DataTab } from '@/components/data-tab'
 import { DevicesEditor } from '@/components/devices-editor'
 import { ExtraItemsEditor } from '@/components/extra-items-editor'
 import { RateGroupsEditor } from '@/components/rate-groups-editor'
@@ -43,7 +44,7 @@ const ROUND_ITEMS = (Object.keys(ROUND_MODE_LABELS) as RoundMode[]).map((value) 
   label: ROUND_MODE_LABELS[value],
 }))
 
-export type SettingsTab = 'general' | 'rates' | 'devices' | 'extras'
+export type SettingsTab = 'general' | 'rates' | 'devices' | 'extras' | 'data'
 
 type Props = {
   settings: Settings
@@ -194,6 +195,7 @@ export function SettingsDialog({
               <TabsTrigger value="rates">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
               <TabsTrigger value="devices">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
               <TabsTrigger value="extras">بوفه {dot(extrasValid)}</TabsTrigger>
+              <TabsTrigger value="data">داده‌ها</TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="flex flex-col gap-4">
@@ -346,21 +348,27 @@ export function SettingsDialog({
                 onChange={(extraCategories, extraItems) => patch({ extraCategories, extraItems })}
               />
             </TabsContent>
+
+            <TabsContent value="data">
+              <DataTab activeSessions={usage.deviceIds.size} />
+            </TabsContent>
           </Tabs>
 
           <DialogFooter className="items-center sm:justify-between">
             <span className="text-sm text-destructive">
-              {valid ? '' : roundingValid
+              {valid || tab === 'data' ? '' : roundingValid
                 ? 'نام‌ها باید تکمیل و قیمت‌ها بیشتر از صفر باشند و هر دستگاه یک نرخ داشته باشد.'
                 : 'مضرب رند کردن باید بیشتر از صفر باشد.'}
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={requestClose}>
-                انصراف
+                {tab === 'data' && !dirty ? 'بستن' : 'انصراف'}
               </Button>
-              <Button disabled={!valid || !dirty} onClick={save}>
-                ذخیره
-              </Button>
+              {tab !== 'data' && (
+                <Button disabled={!valid || !dirty} onClick={save}>
+                  ذخیره
+                </Button>
+              )}
             </div>
           </DialogFooter>
         </DialogContent>

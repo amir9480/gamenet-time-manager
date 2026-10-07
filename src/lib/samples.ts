@@ -90,6 +90,9 @@ export const EXTRA_SAMPLES: ExtraSample[] = [
 
 export const DEFAULT_HOURLY_PRICE = 100_000
 
+// A device type that offers this price uses it as its default; otherwise the first price is.
+export const PREFERRED_DEFAULT_PRICE = 'دو دسته'
+
 export type OnboardingItem = { id: string; name: string; price: number }
 
 export type OnboardingChoice = {
@@ -122,7 +125,7 @@ export const defaultChoice = (): OnboardingChoice => ({
 
 // Replaces device categories/devices and extra categories/items with the user's choice;
 // customers are kept. Each chosen device type gets its own rate group («نرخ <type>») with one
-// list of hourly prices (the first is the default), used by all devices of that type. Without any device type the rate groups stay.
+// list of hourly prices (the default is «دو دسته» when offered, else the first), used by all devices of that type. Without any device type the rate groups stay.
 export const settingsFromChoice = (base: Settings, choice: OnboardingChoice): Settings => {
   const rateGroups: Settings['rateGroups'] = []
 
@@ -134,7 +137,13 @@ export const settingsFromChoice = (base: Settings, choice: OnboardingChoice): Se
     const category = { id: uid(), name: d.name }
     deviceCategories.push(category)
     const prices = c.prices.map((p) => ({ id: uid(), name: p.name.trim(), price: p.price }))
-    const group = { id: uid(), name: `نرخ ${d.name}`, prices, defaultPriceId: prices[0].id }
+    const preferred = prices.find((p) => p.name === PREFERRED_DEFAULT_PRICE)
+    const group = {
+      id: uid(),
+      name: `نرخ ${d.name}`,
+      prices,
+      defaultPriceId: (preferred ?? prices[0]).id,
+    }
     rateGroups.push(group)
     for (let n = 1; n <= c.count; n++) {
       devices.push({ id: uid(), categoryId: category.id, name: `${d.prefix} ${n}`, rateIds: [group.id] })

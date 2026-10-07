@@ -239,3 +239,130 @@ export const needsOnboarding = async (): Promise<boolean> => {
 }
 
 export const markOnboarded = () => db.meta.put({ key: 'onboarded', value: '1' })
+
+// ---- backup: export / import / clear ----------------------------------------------
+
+const BACKUP_APP = 'gamenet-timer-manager'
+const PREF_PREFIX = 'gamenet-'
+
+// Every table, soft-deleted catalog rows included, so ids stay linked to history.
+const BACKUP_TABLE_NAMES = [
+  'rateGroups',
+  'deviceCategories',
+  'devices',
+  'extraCategories',
+  'extraItems',
+  'customers',
+  'meta',
+  'sessions',
+  'history',
+] as const
+
+export type BackupTableName = (typeof BACKUP_TABLE_NAMES)[number]
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const backupTables = (): Record<BackupTableName, Table<any, string>> =>
+  ({
+    rateGroups: db.rateGroups,
+    deviceCategories: db.deviceCategories,
+    devices: db.devices,
+    extraCategories: db.extraCategories,
+    extraItems: db.extraItems,
+    customers: db.customers,
+    meta: db.meta,
+    sessions: db.sessions,
+    history: db.history,
+  })
+
+export type Backup = {
+  app: typeof BACKUP_APP
+  version: 1
+  exportedAt: number
+  tables: Record<BackupTableName, object[]>
+  // Per-viewer settings from localStorage (theme, accent, title, icon, view, grouping, rounding).
+  prefs: Record<string, string>
+}
+
+const readPrefs = (): Record<string, string> => {
+  const prefs: Record<string, string> = {}
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith(PREF_PREFIX)) prefs[key] = localStorage.getItem(key) ?? ''
+    }
+  } catch {
+    // storage unavailable: export the data without preferences
+  }
+  return prefs
+}
+
+const clearPrefs = () => {
+  try {
+    Object.keys(readPrefs()).forEach((k) => localStorage.removeItem(k))
+  } catch {
+    // ignore
+  }
+}
+
+export const exportBackup = async (): Promise<Backup> => {
+  const tables = backupTables()
+  const names = [...BACKUP_TABLE_NAMES]
+  const rows = await Promise.all(names.map((n) => tables[n].toArray()))
+  return {
+    app: BACKUP_APP,
+    version: 1,
+    exportedAt: Date.now(),
+    tables: Object.fromEntries(names.map((n, i) => [n, rows[i]])) as Backup['tables'],
+    prefs: readPrefs(),
+  }
+}
+
+// Checks the shape of a parsed file; throws Error('invalid') when it is not one of our backups.
+export const parseBackup = (value: unknown): Backup => {
+  const b = value as Partial<Backup> | null
+  if (!b || typeof b !== 'object' || b.app !== BACKUP_APP || b.version !== 1) throw new Error('invalid')
+  const names = [...BACKUP_TABLE_NAMES]
+  const tables = {} as Backup['tables']
+  for (const n of names) {
+    const rows = b.tables?.[n]
+    if (rows === undefined) {
+      tables[n] = []
+      continue
+    }
+    const keyOf = n === 'meta' ? 'key' : 'id'
+    if (!Array.isArray(rows) || rows.some((r) => !r || typeof (r as Record<string, unknown>)[keyOf] !== 'string'))
+      throw new Error('invalid')
+    tables[n] = rows
+  }
+  const prefs = b.prefs && typeof b.prefs === 'object' ? b.prefs : {}
+  return { app: BACKUP_APP, version: 1, exportedAt: Number(b.exportedAt) || 0, tables, prefs }
+}
+
+// Replaces everything (data and preferences) with the backup's content in one transaction.
+export const importBackup = async (backup: Backup) => {
+  const tables = backupTables()
+  const names = [...BACKUP_TABLE_NAMES]
+  await db.transaction('rw', names.map((n) => tables[n]), async () => {
+    for (const n of names) {
+      await tables[n].clear()
+      await tables[n].bulkAdd(backup.tables[n] as never[])
+    }
+    await db.meta.put({ key: 'onboarded', value: '1' })
+  })
+  clearPrefs()
+  try {
+    for (const [k, v] of Object.entries(backup.prefs))
+      if (k.startsWith(PREF_PREFIX) && typeof v === 'string') localStorage.setItem(k, v)
+  } catch {
+    // preferences are optional
+  }
+}
+
+export const clearHistory = () => db.history.clear()
+
+// Factory reset: drops the database (it is re-created with the default catalog on reload) and
+// the saved preferences.
+export const resetAllData = async () => {
+  clearPrefs()
+  await db.delete()
+}
