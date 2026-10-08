@@ -29,7 +29,7 @@ type Props = {
   onSaved?: (item: CatalogItem) => void
 }
 
-// Saves a one-off «موارد دیگر» item into the extra items catalog.
+// Saves a one-off «سایر هزینه‌ها» item into the extra items catalog.
 export function SaveExtraItemDialog({ open, onOpenChange, settings, initialName, initialPrice, onSaved }: Props) {
   const noCategories = settings.extraCategories.length === 0
   const [name, setName] = useState(initialName)

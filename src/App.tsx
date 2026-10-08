@@ -48,6 +48,7 @@ import {
   usageOf,
   type Device,
   type FlatPrice,
+  type Session,
 } from '@/lib/store'
 
 function ThemeToggle() {
@@ -122,9 +123,9 @@ function Main() {
   // Wait for IndexedDB so the empty state / default settings never flash.
   if (!settings || !sessions) return null
 
-  const endSession = (id: string, finalTotal?: number, onAccount?: boolean) => {
-    const session = sessions.find((s) => s.id === id)
-    if (!session) return
+  // `session` is the (possibly edited in the end-session dialog) session to close, not a
+  // lookup by id, so any corrections made right before ending are included in the history.
+  const endSession = (session: Session, finalTotal?: number, onAccount?: boolean) => {
     const customer = settings.customers.find((c) => c.id === session.customerId)
     endSessionRow(buildHistoryEntry(session, customer, Date.now(), finalTotal, onAccount))
   }
@@ -424,7 +425,7 @@ function Main() {
                       settings={settings}
                       compact={view === 'compact'}
                       onUpdate={(fn) => updateSessionRow(session.id, fn)}
-                      onEnd={(total, onAccount) => endSession(session.id, total, onAccount)}
+                      onEnd={(edited, total, onAccount) => endSession(edited, total, onAccount)}
                       onCancel={() => deleteSessionRow(session.id)}
                     />
                   ))}

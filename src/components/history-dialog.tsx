@@ -46,7 +46,7 @@ import {
   toFa,
   type Preset,
 } from '@/lib/jalali'
-import { extraTimeCost, segmentCost, segmentMs, type HistoryEntry } from '@/lib/store'
+import { segmentCost, segmentMs, type HistoryEntry } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -572,15 +572,6 @@ function Details({ entry }: { entry: HistoryEntry }) {
           <span className="shrink-0">{toman(segmentCost(seg, now))}</span>
         </div>
       ))}
-      {entry.extraTimes.map((t) => (
-        <div key={t.id} className="flex justify-between gap-4">
-          <span>
-            {t.name}: {formatNumber(t.minutes)} دقیقه × {t.typeName} ({formatNumber(t.price)} در
-            ساعت)
-          </span>
-          <span className="shrink-0">{toman(extraTimeCost(t))}</span>
-        </div>
-      ))}
       {entry.extraItems.map((i) => (
         <div key={i.id} className="flex justify-between gap-4">
           <span>
@@ -598,8 +589,7 @@ function Details({ entry }: { entry: HistoryEntry }) {
       )}
       <div className="flex justify-between gap-4 border-t pt-1.5 font-bold">
         <span>
-          زمان {formatNumber(entry.timeCost)} + زمان اضافه {formatNumber(entry.extraTimesCost)} +
-          موارد {formatNumber(entry.extraItemsCost)}
+          زمان {formatNumber(entry.timeCost)} + موارد {formatNumber(entry.extraItemsCost)}
         </span>
         <span className="shrink-0">{toman(entry.calculatedTotal ?? entry.total)}</span>
       </div>

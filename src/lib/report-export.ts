@@ -36,7 +36,6 @@ const sessionsTable = (entries: HistoryEntry[]): Table => {
     e.customerName ?? '',
     e.customerPhone ?? '',
     e.timeCost,
-    e.extraTimesCost,
     e.extraItemsCost,
     e.calculatedTotal ?? e.total,
     e.total,
@@ -47,10 +46,10 @@ const sessionsTable = (entries: HistoryEntry[]): Table => {
     name: 'تایم‌ها',
     header: [
       'تاریخ', 'شروع', 'پایان', 'مدت (دقیقه)', 'دستگاه', 'نوع دستگاه', 'مشتری', 'تلفن',
-      'هزینه زمان', 'زمان اضافه', 'بوفه', 'مبلغ محاسبه‌شده', 'مبلغ نهایی', 'نحوه پرداخت',
+      'هزینه زمان', 'بوفه', 'مبلغ محاسبه‌شده', 'مبلغ نهایی', 'نحوه پرداخت',
     ],
     rows,
-    total: ['مجموع', '', '', sum(3), '', '', '', '', sum(8), sum(9), sum(10), sum(11), sum(12), ''],
+    total: ['مجموع', '', '', sum(3), '', '', '', '', sum(8), sum(9), sum(10), sum(11), ''],
   }
 }
 

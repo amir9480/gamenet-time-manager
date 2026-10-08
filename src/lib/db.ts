@@ -1,4 +1,5 @@
 import { resetSecurity } from '@/lib/security'
+import { emitSessionUpdated } from '@/lib/session-events'
 import Dexie, { type Table } from 'dexie'
 import {
   applyDevices,
@@ -216,7 +217,10 @@ export const addSessionRow =(s: Session) => db.sessions.add(s)
 export const updateSessionRow = (id: string, fn: (s: Session) => Session) =>
   db.transaction('rw', db.sessions, async () => {
     const cur = await db.sessions.get(id)
-    if (cur) await db.sessions.put(fn(cur))
+    if (!cur) return
+    const next = fn(cur)
+    await db.sessions.put(next)
+    emitSessionUpdated(next)
   })
 
 // Cancels a reservation: removed without a history entry.

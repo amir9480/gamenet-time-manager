@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Coins, NotebookPen, Wallet } from 'lucide-react'
+import { Coins, NotebookPen, Pause, Plus, Trash2, Wallet } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,20 +11,60 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { BackdateTimeDialog } from '@/components/backdate-time-dialog'
+import { useDiscardGuard } from '@/components/discard-dialog'
+import { ExtraItemPicker } from '@/components/extra-item-picker'
+import { JalaliDatePicker } from '@/components/jalali-date-picker'
+import { PriceSelect } from '@/components/price-select'
 import { useTheme } from '@/components/theme-provider'
 import { Tip } from '@/components/tip'
 import { formatClock, formatDuration, formatNumber, parseNumber } from '@/lib/format'
+import { startOfDay } from '@/lib/jalali'
+import { onSessionUpdated } from '@/lib/session-events'
 import {
+  EMPTY_PRICE,
+  MIN_BILLABLE_MS,
   ROUND_MODE_LABELS,
+  addBackdatedTime,
+  addExtraItem,
+  addSegment,
+  categoryName,
+  defaultPriceFor,
+  devicePriceGroups,
   extraItemsCost,
-  extraTimeCost,
-  extraTimesCost,
-  segmentCost,
+  flatPrices,
+  pauseSession,
+  removeExtraItem,
+  removeSegment,
   roundAmount,
+  segmentCost,
   segmentMs,
+  selectedPrice,
+  setExtraItemQty,
+  updateSegment,
   type Customer,
+  type Segment,
   type Session,
+  type Settings,
 } from '@/lib/store'
 
 type Props = {
@@ -32,220 +72,570 @@ type Props = {
   onOpenChange: (open: boolean) => void
   deviceName: string
   session: Session
+  settings: Settings
   now: number
-  // Read-only live view: no confirm button, title/labels reflect an ongoing session.
-  readOnly?: boolean
+  // 'view': correct a live session, saved via onUpdate. 'end': same editing plus the final
+  // amount/payment section; confirming ends the session (onConfirm), onUpdate is not used.
+  mode: 'view' | 'end'
   // The session's customer; only a customer can be put on account (نسیه).
   customer?: Customer
-  // Receives the final amount only when it was edited, and whether it goes on the customer's account.
-  onConfirm?: (finalTotal?: number, onAccount?: boolean) => void
+  onUpdate: (fn: (s: Session) => Session) => void
+  // Receives the edited session, the final amount (only when it was edited), and whether it
+  // goes on the customer's account.
+  onConfirm?: (session: Session, finalTotal?: number, onAccount?: boolean) => void
 }
 
 const toman = (n: number) => `${formatNumber(n)} تومان`
+
+// Keeps the existing clock time, moves only the calendar day.
+const withDay = (ts: number, dayStart: number) => {
+  const d = new Date(ts)
+  return new Date(dayStart).setHours(d.getHours(), d.getMinutes(), d.getSeconds(), 0)
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+// Native time input (shadcn's pattern: https://ui.shadcn.com/docs/components/base/date-picker#time-picker) —
+// the browser handles typing/stepping; this only converts to/from a full timestamp.
+function TimeOfDayInput({ value, onChange }: { value: number; onChange: (ts: number) => void }) {
+  const d = new Date(value)
+  return (
+    <Input
+      type="time"
+      step="1"
+      dir="ltr"
+      aria-label="ساعت"
+      className="w-28 appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+      value={`${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`}
+      onChange={(e) => {
+        const [h, m, s] = e.target.value.split(':').map(Number)
+        if (Number.isNaN(h) || Number.isNaN(m)) return
+        const next = new Date(value)
+        next.setHours(h, m, s || 0, 0)
+        onChange(next.getTime())
+      }}
+    />
+  )
+}
+
+// A plain non-negative count; only commits on blur/Enter so clearing the field to retype a
+// value doesn't momentarily commit 0 (which removes the row for items).
+function CountInput({
+  value,
+  onCommit,
+  className,
+  label,
+}: {
+  value: number
+  onCommit: (n: number) => void
+  className?: string
+  label: string
+}) {
+  const [text, setText] = useState(() => (value > 0 ? formatNumber(value) : String(value)))
+  useEffect(() => setText(value > 0 ? formatNumber(value) : String(value)), [value])
+  const commit = () => onCommit(Math.floor(parseNumber(text)))
+  return (
+    <Input
+      dir="ltr"
+      inputMode="numeric"
+      aria-label={label}
+      className={className}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && commit()}
+    />
+  )
+}
 
 export function SessionSummaryDialog({
   open,
   onOpenChange,
   deviceName,
   session,
+  settings,
   now,
-  readOnly = false,
+  mode,
   customer,
+  onUpdate,
   onConfirm,
 }: Props) {
-  const { segments, extraTimes, extraItems } = session
   const { rounding } = useTheme()
+
+  // Local, not the `mode` prop: pausing from the open time range's row switches the dialog into
+  // end mode in place (no close/reopen), reusing the same dialog instance/state.
+  const [localMode, setLocalMode] = useState(mode)
+  const ending = localMode === 'end'
+
+  const [draft, setDraft] = useState<Session>(session)
+  // What's already committed to the DB (the `session` prop lags behind it until the next
+  // live-query render), so "unsaved changes" is judged against this, not the prop directly.
+  const [baseline, setBaseline] = useState<Session>(session)
+  const [finalText, setFinalText] = useState('')
+  const [onAccount, setOnAccount] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<
+    { kind: 'segment'; index: number } | { kind: 'item'; id: string; name: string } | null
+  >(null)
+
+  useEffect(() => {
+    if (!open) return
+    setDraft(session)
+    setBaseline(session)
+    setLocalMode(mode)
+    const seedTotal =
+      session.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0) + extraItemsCost(session)
+    setFinalText(String(rounding.auto ? roundAmount(seedTotal, rounding) : seedTotal))
+    setOnAccount(false)
+    // Only (re)seed when opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  // The time-limit alarm can extend/clear a limit or pause this exact session while this dialog
+  // is open, writing straight to the DB. Without this, `draft` (seeded once on open) wouldn't
+  // know, and saving would silently overwrite that change with the stale draft.
+  useEffect(() => {
+    if (!open) return
+    return onSessionUpdated(session.id, (updated) => {
+      const patch = {
+        limitMs: updated.limitMs,
+        costLimit: updated.costLimit,
+        ...(updated.status === 'paused' ? { status: updated.status, segments: updated.segments } : {}),
+      }
+      setDraft((d) => ({ ...d, ...patch }))
+      setBaseline((b) => ({ ...b, ...patch }))
+      if (updated.status === 'paused') setLocalMode('end')
+    })
+  }, [open, session.id])
+
+  const { segments, extraItems } = draft
   const start = segments[0]?.from
   const end = segments.length ? (segments[segments.length - 1].to ?? now) : undefined
   const timeTotal = segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0)
-  const timesCost = extraTimesCost(session)
-  const itemsCost = extraItemsCost(session)
-  const total = timeTotal + timesCost + itemsCost
+  const itemsCost = extraItemsCost(draft)
+  const total = timeTotal + itemsCost
 
-  // The final amount is editable when ending; it is what gets stored as the income.
-  const [finalText, setFinalText] = useState('')
-  const [onAccount, setOnAccount] = useState(false)
-  useEffect(() => {
-    if (open) {
-      setFinalText(String(rounding.auto ? roundAmount(total, rounding) : total))
-      setOnAccount(false)
-    }
-    // Reset only when (re)opened.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
   const finalAmount = parseNumber(finalText)
   const edited = finalAmount !== total
 
+  const dirty = open && (JSON.stringify(draft) !== JSON.stringify(baseline) || (ending && edited))
+  const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
+
+  const save = () => {
+    onUpdate(() => draft)
+    setBaseline(draft)
+    onOpenChange(false)
+  }
+  const confirmEnd = () => {
+    onConfirm?.(draft, edited ? finalAmount : undefined, onAccount && !!customer)
+  }
+
+  // Closes the open segment in place and switches the dialog into end mode, without closing and
+  // reopening it.
+  const pauseNow = () => {
+    const ts = Date.now()
+    const paused = pauseSession(draft, ts)
+    onUpdate(() => paused)
+    setDraft(paused)
+    setBaseline(paused)
+    const seedTotal = paused.segments.reduce((sum, seg) => sum + segmentCost(seg, ts), 0) + extraItemsCost(paused)
+    setFinalText(String(rounding.auto ? roundAmount(seedTotal, rounding) : seedTotal))
+    setLocalMode('end')
+  }
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return
+    if (pendingDelete.kind === 'segment') setDraft((d) => removeSegment(d, pendingDelete.index))
+    else setDraft((d) => removeExtraItem(d, pendingDelete.id))
+    setPendingDelete(null)
+  }
+
+  // The currently open segment (none if the session is paused/ended): its device/price are
+  // mirrored onto the session's own fields so the rest of the app stays in sync.
+  const activeIndex = draft.status === 'running' ? draft.segments.length - 1 : -1
+  const isActive = (i: number) => i === activeIndex && draft.segments[i]?.to === null
+
+  const patchSegment = (index: number, patch: Partial<Segment>) => {
+    setDraft((d) => {
+      const withSeg = updateSegment(d, index, patch)
+      if (!isActive(index)) return withSeg
+      return {
+        ...withSeg,
+        ...(patch.typeId !== undefined ? { typeId: patch.typeId } : {}),
+        ...(patch.deviceId !== undefined
+          ? { deviceId: patch.deviceId, deviceName: patch.deviceName, categoryName: patch.categoryName }
+          : {}),
+      }
+    })
+  }
+
+  const pickSegmentDevice = (index: number, seg: Segment, deviceId: string) => {
+    const device = settings.devices.find((x) => x.id === deviceId)
+    if (!device) return
+    const prices = flatPrices(devicePriceGroups(device, settings.rateGroups))
+    const price = prices.find((p) => p.id === seg.typeId) ?? defaultPriceFor(device, settings.rateGroups)
+    patchSegment(index, {
+      deviceId: device.id,
+      deviceName: device.name,
+      categoryName: categoryName(settings, device),
+      ...(price ? { typeId: price.id, typeName: price.name, price: price.price } : {}),
+    })
+  }
+
+  const pickSegmentPrice = (index: number, seg: Segment, priceId: string) => {
+    const device = settings.devices.find((x) => x.id === seg.deviceId)
+    const price = flatPrices(devicePriceGroups(device, settings.rateGroups)).find((p) => p.id === priceId)
+    if (!price) return
+    patchSegment(index, { typeId: price.id, typeName: price.name, price: price.price })
+  }
+
+  const addNewSegment = () => {
+    // A 5-minute block ending right as the running segment started (or now, if nothing is
+    // running) — never clamped to `now` itself, which would create a zero-length segment that
+    // the <3s filter would immediately hide.
+    const openSeg = draft.segments.find((seg) => seg.to === null)
+    const to = openSeg ? openSeg.from : now
+    const from = to - 5 * 60_000
+    const price = selectedPrice(settings, draft)
+    setDraft((d) =>
+      addSegment(d, {
+        from,
+        to,
+        typeId: price.id,
+        typeName: price.name,
+        price: price.price,
+        deviceId: d.deviceId,
+        deviceName: d.deviceName,
+        categoryName: d.categoryName,
+      }),
+    )
+  }
+
+  // Skipped while closed: the dialog isn't mounted elsewhere, but this component always is
+  // (session-card.tsx), re-rendering every second for a running session even when closed.
+  const deviceItems = open ? settings.devices.map((d) => ({ value: d.id, label: d.name })) : []
+  const devicesByCategory = open
+    ? settings.deviceCategories
+        .map((c) => ({ category: c, devices: settings.devices.filter((d) => d.categoryId === c.id) }))
+        .filter((g) => g.devices.length > 0)
+    : []
+
+  const visibleSegments = open
+    ? segments
+        .map((seg, index) => ({ seg, index }))
+        .filter(({ seg }) => segmentMs(seg, now) >= MIN_BILLABLE_MS)
+    : []
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="data-[size=default]:max-w-[calc(100%-2rem)] data-[size=default]:sm:max-w-3xl">
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            {readOnly ? `جزئیات هزینه ${deviceName}` : `اتمام تایم ${deviceName}`}
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {readOnly
-              ? 'هزینه‌ها به‌صورت زنده محاسبه می‌شوند.'
-              : 'با تایید، تایم پایان می‌یابد و زمان و هزینه‌ها صفر می‌شوند.'}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : requestClose())}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{ending ? `اتمام تایم ${deviceName}` : `جزییات هزینه ${deviceName}`}</DialogTitle>
+            <DialogDescription>
+              {ending
+                ? 'می‌توانید پیش از اتمام مواردی را اصلاح کنید؛ با تایید، تایم پایان می‌یابد و زمان و هزینه‌ها صفر می‌شوند.'
+                : 'می‌توانید بازه‌های زمانی، نرخ، دستگاه و بوفه را اصلاح، حذف یا اضافه کنید.'}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="flex flex-col gap-3 text-sm">
-          <div className="flex justify-between gap-4">
-            <span>شروع: <b dir="ltr">{start ? formatClock(start) : '—'}</b></span>
-            <span>{readOnly ? 'اکنون' : 'پایان'}: <b dir="ltr">{end ? formatClock(end) : '—'}</b></span>
-          </div>
-
-          <table className="w-full table-fixed text-start">
-            <colgroup>
-              <col className="w-[32%]" />
-              <col className="w-[16%]" />
-              <col className="w-[30%]" />
-              <col className="w-[22%]" />
-            </colgroup>
-            <thead className="text-xs text-muted-foreground">
-              <tr className="border-b">
-                <th className="px-2 py-1.5 text-start font-normal">بازه</th>
-                <th className="px-2 py-1.5 text-start font-normal">مدت</th>
-                <th className="px-2 py-1.5 text-start font-normal">نوع نرخ</th>
-                <th className="px-2 py-1.5 text-start font-normal">هزینه</th>
-              </tr>
-            </thead>
-            <tbody>
-              {segments.map((seg, i) => (
-                <tr key={i} className="border-b align-top last:border-0">
-                  <td className="px-2 py-2 text-start">
-                    <span dir="ltr" className="inline-block whitespace-nowrap">
-                      {formatClock(seg.from)} – {formatClock(seg.to ?? now)}
-                    </span>
-                  </td>
-                  <td className="px-2 py-2 text-start">
-                    <span dir="ltr" className="inline-block whitespace-nowrap">
-                      {formatDuration(segmentMs(seg, now))}
-                    </span>
-                  </td>
-                  <td className="px-2 py-2 text-start">
-                    <div>{seg.deviceName ? `${seg.deviceName} · ${seg.typeName}` : seg.typeName}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatNumber(seg.price)} در ساعت
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 text-start whitespace-nowrap">
-                    {toman(segmentCost(seg, now))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="flex flex-col gap-1.5 border-t pt-2">
-            <Row label="جمع هزینه زمان" value={toman(timeTotal)} />
-            {extraTimes.map((t) => (
-              <Row
-                key={t.id}
-                label={`${t.name}: ${formatNumber(t.minutes)} دقیقه × ${t.typeName} (${formatNumber(t.price)} در ساعت)`}
-                value={toman(extraTimeCost(t))}
-              />
-            ))}
-            {extraItems.map((i) => (
-              <Row
-                key={i.id}
-                label={`${i.name}${i.description ? ` (${i.description})` : ''}: ${formatNumber(i.qty)} × ${formatNumber(i.price)}`}
-                value={toman(i.price * i.qty)}
-              />
-            ))}
-          </div>
-
-          {readOnly ? (
-            <div className="flex items-center justify-between border-t pt-2 text-base font-bold">
-              <span>مجموع</span>
-              <span>{toman(total)}</span>
+          <div className="flex flex-col gap-4 text-sm">
+            <div className="flex justify-between gap-4">
+              <span>
+                شروع: <b dir="ltr">{start ? formatClock(start) : '—'}</b>
+              </span>
+              <span>
+                {draft.status === 'running' ? 'اکنون' : 'پایان'}:{' '}
+                <b dir="ltr">{end ? formatClock(end) : '—'}</b>
+              </span>
             </div>
-          ) : (
-            <div className="flex flex-col gap-1.5 border-t pt-2">
-              <div className="flex items-center justify-between gap-4 text-base font-bold">
-                <label htmlFor="final-total">مبلغ نهایی</label>
+
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <Label>بازه‌های زمانی</Label>
                 <div className="flex items-center gap-2">
-                  {!rounding.auto && (
-                    <Tip label={`رند کردن (${ROUND_MODE_LABELS[rounding.mode]} ${formatNumber(rounding.step)} تومان)`}>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        aria-label="رند کردن"
-                        onClick={() => setFinalText(String(roundAmount(finalAmount, rounding)))}
-                      >
-                        <Coins />
-                      </Button>
-                    </Tip>
-                  )}
-                  <Input
-                    id="final-total"
-                    dir="ltr"
-                    inputMode="numeric"
-                    className="w-40 font-bold"
-                    value={finalAmount > 0 ? formatNumber(finalAmount) : finalText}
-                    onChange={(e) => setFinalText(e.target.value)}
-                  />
-                  <span className="text-sm font-normal text-muted-foreground">تومان</span>
-                </div>
-              </div>
-              {edited && (
-                <span className="text-xs text-muted-foreground">
-                  مجموع محاسبه‌شده: {toman(total)}
-                </span>
-              )}
-
-              <div className="flex items-center justify-between gap-4 pt-1">
-                <span className="text-sm font-normal">نحوه‌ی پرداخت</span>
-                <div className="flex gap-1.5" role="group" aria-label="نحوه‌ی پرداخت">
-                  <Button
+                  <BackdateTimeDialog
+                    session={draft}
+                    settings={settings}
                     size="sm"
-                    variant={onAccount ? 'outline' : 'default'}
-                    aria-pressed={!onAccount}
-                    onClick={() => setOnAccount(false)}
-                  >
-                    <Wallet /> پرداخت شد
-                  </Button>
-                  <Tip label={customer ? undefined : 'برای نسیه، ابتدا برای تایم مشتری انتخاب کنید'}>
-                    <span>
-                      <Button
-                        size="sm"
-                        variant={onAccount ? 'destructive' : 'outline'}
-                        aria-pressed={onAccount}
-                        disabled={!customer}
-                        onClick={() => setOnAccount(true)}
-                      >
-                        <NotebookPen /> نسیه
-                      </Button>
-                    </span>
-                  </Tip>
+                    onAdd={(device, category, minutes) =>
+                      setDraft((d) =>
+                        addBackdatedTime(
+                          d,
+                          device,
+                          category,
+                          defaultPriceFor(device, settings.rateGroups) ?? EMPTY_PRICE,
+                          minutes,
+                        ),
+                      )
+                    }
+                  />
+                  {session.status !== 'running' && (
+                    <Button variant="outline" size="sm" onClick={addNewSegment}>
+                      <Plus /> افزودن بازه
+                    </Button>
+                  )}
                 </div>
               </div>
-              {onAccount && customer && (
-                <span className="text-xs text-destructive">
-                  {toman(finalAmount)} به بدهی «{customer.name}» اضافه می‌شود.
-                </span>
+
+              {visibleSegments.length === 0 ? (
+                <p className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground">
+                  بازه‌ای ثبت نشده است.
+                </p>
+              ) : (
+                visibleSegments.map(({ seg, index: i }) => {
+                  const device = settings.devices.find((x) => x.id === seg.deviceId)
+                  const groups = devicePriceGroups(device, settings.rateGroups)
+                  const priceOptions = flatPrices(groups)
+                  const priceFallback = priceOptions.some((p) => p.id === seg.typeId)
+                    ? undefined
+                    : { value: seg.typeId, label: `${seg.typeName} (حذف‌شده)` }
+                  const deviceFallback = deviceItems.some((d) => d.value === seg.deviceId)
+                    ? undefined
+                    : { value: seg.deviceId, label: `${seg.deviceName} (حذف‌شده)` }
+                  const open_ = seg.to === null
+
+                  return (
+                    <div key={i} className="flex flex-col gap-2 rounded-lg border p-2.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground">شروع</span>
+                          <JalaliDatePicker
+                            label=""
+                            value={startOfDay(seg.from)}
+                            onChange={(d) => patchSegment(i, { from: withDay(seg.from, d) })}
+                          />
+                          <TimeOfDayInput value={seg.from} onChange={(ts) => patchSegment(i, { from: ts })} />
+                        </div>
+                        {open_ ? (
+                          <span className="text-xs text-muted-foreground">در حال بازی</span>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground">پایان</span>
+                            <JalaliDatePicker
+                              label=""
+                              value={startOfDay(seg.to!)}
+                              onChange={(d) => patchSegment(i, { to: withDay(seg.to!, d) })}
+                            />
+                            <TimeOfDayInput value={seg.to!} onChange={(ts) => patchSegment(i, { to: ts })} />
+                          </div>
+                        )}
+                        <span className="ms-auto text-xs text-muted-foreground">
+                          {formatDuration(segmentMs(seg, now))}
+                        </span>
+                        {open_ && (
+                          <Tip label="توقف موقت تایم">
+                            <Button variant="outline" size="icon-sm" aria-label="توقف موقت تایم" onClick={pauseNow}>
+                              <Pause />
+                            </Button>
+                          </Tip>
+                        )}
+                        <Button
+                          variant="destructive"
+                          size="icon-sm"
+                          aria-label="حذف بازه"
+                          onClick={() => setPendingDelete({ kind: 'segment', index: i })}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Select
+                          items={deviceFallback ? [...deviceItems, deviceFallback] : deviceItems}
+                          value={seg.deviceId}
+                          onValueChange={(v) => pickSegmentDevice(i, seg, v as string)}
+                        >
+                          <SelectTrigger className="w-auto min-w-36" aria-label="دستگاه">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {devicesByCategory.map(({ category, devices }) => (
+                              <SelectGroup key={category.id}>
+                                <SelectLabel>{category.name}</SelectLabel>
+                                {devices.map((d) => (
+                                  <SelectItem key={d.id} value={d.id}>
+                                    {d.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            ))}
+                            {deviceFallback && (
+                              <SelectItem value={deviceFallback.value} disabled>
+                                {deviceFallback.label}
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <PriceSelect
+                          groups={groups}
+                          value={seg.typeId}
+                          onChange={(id) => pickSegmentPrice(i, seg, id)}
+                          extraItems={priceFallback ? [priceFallback] : []}
+                          extra={
+                            priceFallback && (
+                              <SelectItem value={priceFallback.value} disabled>
+                                {priceFallback.label}
+                              </SelectItem>
+                            )
+                          }
+                          className="w-auto min-w-32"
+                        />
+                        <span className="ms-auto font-bold">{toman(segmentCost(seg, now))}</span>
+                      </div>
+                    </div>
+                  )
+                })
               )}
             </div>
-          )}
-        </div>
 
-        <AlertDialogFooter>
-          {readOnly ? (
-            <AlertDialogCancel>بستن</AlertDialogCancel>
-          ) : (
-            <>
-              <AlertDialogCancel>انصراف</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => onConfirm?.(edited ? finalAmount : undefined, onAccount && !!customer)}
-              >
-                تایید و اتمام تایم
-              </AlertDialogAction>
-            </>
-          )}
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+            <div className="flex flex-col gap-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <Label>بوفه و سایر هزینه‌ها</Label>
+                <ExtraItemPicker settings={settings} onAdd={(item) => setDraft((d) => addExtraItem(d, item))} />
+              </div>
+              {extraItems.length === 0 ? (
+                <p className="text-xs text-muted-foreground">موردی ثبت نشده است.</p>
+              ) : (
+                extraItems.map((i) => (
+                  <div key={i.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{i.name}</div>
+                      {i.description && (
+                        <div className="truncate text-xs text-muted-foreground">{i.description}</div>
+                      )}
+                      <div className="text-xs text-muted-foreground">{formatNumber(i.price)} تومان × </div>
+                    </div>
+                    <CountInput
+                      label="تعداد"
+                      className="w-20"
+                      value={i.qty}
+                      onCommit={(qty) => setDraft((d) => setExtraItemQty(d, i.id, qty))}
+                    />
+                    <span className="ms-auto font-bold">{toman(i.price * i.qty)}</span>
+                    <Button
+                      variant="destructive"
+                      size="icon-sm"
+                      aria-label={`حذف ${i.name}`}
+                      onClick={() => setPendingDelete({ kind: 'item', id: i.id, name: i.name })}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1.5 border-t pt-2">
+              <Row label="جمع هزینه زمان" value={toman(timeTotal)} />
+              <Row label="جمع بوفه و سایر هزینه‌ها" value={toman(itemsCost)} />
+            </div>
+
+            {!ending ? (
+              <div className="flex items-center justify-between border-t pt-2 text-base font-bold">
+                <span>مجموع</span>
+                <span>{toman(total)}</span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5 border-t pt-2">
+                <div className="flex items-center justify-between gap-4 text-base font-bold">
+                  <label htmlFor="final-total">مبلغ نهایی</label>
+                  <div className="flex items-center gap-2">
+                    {!rounding.auto && (
+                      <Tip label={`رند کردن (${ROUND_MODE_LABELS[rounding.mode]} ${formatNumber(rounding.step)} تومان)`}>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          aria-label="رند کردن"
+                          onClick={() => setFinalText(String(roundAmount(finalAmount, rounding)))}
+                        >
+                          <Coins />
+                        </Button>
+                      </Tip>
+                    )}
+                    <Input
+                      id="final-total"
+                      dir="ltr"
+                      inputMode="numeric"
+                      className="w-40 font-bold"
+                      value={finalAmount > 0 ? formatNumber(finalAmount) : finalText}
+                      onChange={(e) => setFinalText(e.target.value)}
+                    />
+                    <span className="text-sm font-normal text-muted-foreground">تومان</span>
+                  </div>
+                </div>
+                {edited && (
+                  <span className="text-xs text-muted-foreground">مجموع محاسبه‌شده: {toman(total)}</span>
+                )}
+
+                <div className="flex items-center justify-between gap-4 pt-1">
+                  <span className="text-sm font-normal">نحوه‌ی پرداخت</span>
+                  <div className="flex gap-1.5" role="group" aria-label="نحوه‌ی پرداخت">
+                    <Button
+                      size="sm"
+                      variant={onAccount ? 'outline' : 'default'}
+                      aria-pressed={!onAccount}
+                      onClick={() => setOnAccount(false)}
+                    >
+                      <Wallet /> پرداخت شد
+                    </Button>
+                    <Tip label={customer ? undefined : 'برای نسیه، ابتدا برای تایم مشتری انتخاب کنید'}>
+                      <span>
+                        <Button
+                          size="sm"
+                          variant={onAccount ? 'destructive' : 'outline'}
+                          aria-pressed={onAccount}
+                          disabled={!customer}
+                          onClick={() => setOnAccount(true)}
+                        >
+                          <NotebookPen /> نسیه
+                        </Button>
+                      </span>
+                    </Tip>
+                  </div>
+                </div>
+                {onAccount && customer && (
+                  <span className="text-xs text-destructive">
+                    {toman(finalAmount)} به بدهی «{customer.name}» اضافه می‌شود.
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={requestClose}>
+              انصراف
+            </Button>
+            {ending ? (
+              <Button onClick={confirmEnd}>تایید و اتمام تایم</Button>
+            ) : (
+              <Button onClick={save}>ذخیره</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {dialog}
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(o) => !o && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingDelete?.kind === 'segment' ? 'حذف بازه‌ی زمانی؟' : 'حذف این مورد؟'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete?.kind === 'segment'
+                ? 'این بازه‌ی زمانی حذف می‌شود.'
+                : `«${pendingDelete?.name}» حذف می‌شود.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>انصراف</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmDelete}>
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 

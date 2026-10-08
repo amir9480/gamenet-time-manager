@@ -8,9 +8,9 @@ import {
   toJalali,
   type Range,
 } from '@/lib/jalali'
-import { extraTimeCost, segmentCost, type HistoryEntry } from '@/lib/store'
+import { segmentCost, type HistoryEntry } from '@/lib/store'
 
-const extrasOf = (e: HistoryEntry) => e.extraTimesCost + e.extraItemsCost
+const extrasOf = (e: HistoryEntry) => e.extraItemsCost
 
 // ---- KPIs -------------------------------------------------------------------
 
@@ -179,7 +179,6 @@ export const rateUsage = (entries: HistoryEntry[]): RatePoint[] => {
   const add = (name: string, v: number) => map.set(name, (map.get(name) ?? 0) + v)
   for (const e of entries) {
     for (const seg of e.segments) add(seg.typeName, segmentCost(seg, e.endedAt))
-    for (const t of e.extraTimes) add(t.typeName, extraTimeCost(t))
   }
   return [...map.entries()]
     .map(([name, income]) => ({ name, income }))

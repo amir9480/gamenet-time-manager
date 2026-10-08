@@ -1,4 +1,15 @@
+import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -13,7 +24,10 @@ type Props = {
   onChange: (groups: RateGroup[]) => void
 }
 
+type PendingDelete = { kind: 'group'; id: string; name: string } | { kind: 'price'; groupId: string; id: string; name: string }
+
 export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const patchGroup = (id: string, fn: (g: RateGroup) => RateGroup) =>
     onChange(groups.map((g) => (g.id === id ? fn(g) : g)))
 
@@ -36,6 +50,16 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
       const prices = x.prices.filter((p) => p.id !== id)
       return { ...x, prices, defaultPriceId: x.defaultPriceId === id ? prices[0].id : x.defaultPriceId }
     })
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return
+    if (pendingDelete.kind === 'group') onChange(groups.filter((x) => x.id !== pendingDelete.id))
+    else {
+      const g = groups.find((x) => x.id === pendingDelete.groupId)
+      if (g) removePrice(g, pendingDelete.id)
+    }
+    setPendingDelete(null)
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -66,7 +90,7 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
                     size="icon"
                     aria-label="حذف نرخ"
                     disabled={!!blockReason || groups.length <= 1}
-                    onClick={() => onChange(groups.filter((x) => x.id !== g.id))}
+                    onClick={() => setPendingDelete({ kind: 'group', id: g.id, name: g.name })}
                   >
                     <Trash2 />
                   </Button>
@@ -137,7 +161,9 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
                           size="icon"
                           aria-label="حذف"
                           disabled={inUse || g.prices.length <= 1}
-                          onClick={() => removePrice(g, p.id)}
+                          onClick={() =>
+                            setPendingDelete({ kind: 'price', groupId: g.id, id: p.id, name: p.name })
+                          }
                         >
                           <Trash2 />
                         </Button>
@@ -157,6 +183,23 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
       <Button variant="outline" size="sm" className="self-start" onClick={addGroup}>
         <Plus /> افزودن نرخ
       </Button>
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(o) => !o && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingDelete?.kind === 'group' ? 'حذف نرخ؟' : 'حذف قیمت؟'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>«{pendingDelete?.name}» حذف می‌شود.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>انصراف</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmDelete}>
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

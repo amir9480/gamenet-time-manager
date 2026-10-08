@@ -223,7 +223,7 @@ export function SettingsDialog({
               <TabsTrigger value="general" className="shrink-0">عمومی</TabsTrigger>
               <TabsTrigger value="rates" className="shrink-0">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
               <TabsTrigger value="devices" className="shrink-0">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
-              <TabsTrigger value="extras" className="shrink-0">بوفه {dot(extrasValid)}</TabsTrigger>
+              <TabsTrigger value="extras" className="shrink-0">بوفه و سایر هزینه‌ها {dot(extrasValid)}</TabsTrigger>
               <TabsTrigger value="security" className="shrink-0">امنیت</TabsTrigger>
               <TabsTrigger value="data" className="shrink-0">داده‌ها</TabsTrigger>
             </TabsList>
@@ -422,6 +422,7 @@ export function SettingsDialog({
               <ExtraItemsEditor
                 categories={draft.extraCategories}
                 items={draft.extraItems}
+                usage={usage}
                 onChange={(extraCategories, extraItems) => patch({ extraCategories, extraItems })}
               />
             </TabsContent>

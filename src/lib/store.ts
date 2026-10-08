@@ -49,7 +49,7 @@ export type Segment = {
 }
 
 // `catalogId` links an item to its catalog entry so Settings edits propagate to live
-// sessions (see `applyExtraItems`); absent for the free-form «موارد دیگر».
+// sessions (see `applyExtraItems`); absent for the free-form «سایر هزینه‌ها».
 export type ExtraItem = {
   id: string
   catalogId?: string
@@ -57,16 +57,6 @@ export type ExtraItem = {
   price: number
   qty: number
   description?: string
-}
-
-// Manually added minutes, billed at the price chosen when added.
-export type ExtraTime = {
-  id: string
-  name: string
-  minutes: number
-  typeId: string
-  typeName: string
-  price: number
 }
 
 export type Session = {
@@ -79,7 +69,6 @@ export type Session = {
   status: 'running' | 'paused'
   typeId: string
   segments: Segment[]
-  extraTimes: ExtraTime[]
   extraItems: ExtraItem[]
   // Optional limits: independent of each other, either or both may be set. `limitMs` is a total
   // running-time budget (ms); the countdown is `limitMs - elapsedMs`, so pausing freezes it.
@@ -90,7 +79,7 @@ export type Session = {
   reservedAt?: number
 }
 
-export const OTHER_ITEM_NAME = 'موارد دیگر'
+export const OTHER_ITEM_NAME = 'سایر هزینه‌ها'
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 
@@ -134,6 +123,9 @@ export const devicePrices = (device: Device | undefined, groups: RateGroup[]): F
   flatPrices(devicePriceGroups(device, groups))
 
 // Default price of the device's first rate group.
+// Placeholder for when a device has no price at all (e.g. no rate group assigned).
+export const EMPTY_PRICE: FlatPrice = { id: '', name: '—', price: 0, groupId: '', groupName: '' }
+
 export const defaultPriceFor = (
   device: Device | undefined,
   groups: RateGroup[],
@@ -196,7 +188,6 @@ export const createSession = (
   typeId: price.id,
   segments: reserve ? [] : [openSegment(price, device.id, device.name, category, now)],
   ...(reserve ? { reservedAt: now } : {}),
-  extraTimes: [],
   extraItems: [],
   ...(limit?.minutes && limit.minutes > 0 ? { limitMs: limit.minutes * MINUTE_MS } : {}),
   ...(limit?.cost && limit.cost > 0 ? { costLimit: limit.cost } : {}),
@@ -298,6 +289,61 @@ export const switchDevice = (
   }
 }
 
+// ---- manual segment edits (correcting a mistake, not a timed transition) -----------
+
+// Direct in-place correction of one segment's fields (start/end/price/device); unlike
+// `changeType`/`switchDevice`, this never splits into a new segment.
+export const updateSegment = (s: Session, index: number, patch: Partial<Segment>): Session => ({
+  ...s,
+  segments: s.segments.map((seg, i) => (i === index ? { ...seg, ...patch } : seg)),
+})
+
+// Appended at the end; never auto-sorted (editing from/to doesn't reorder the list).
+export const addSegment = (s: Session, seg: Segment): Session => ({
+  ...s,
+  segments: [...s.segments, seg],
+})
+
+export const removeSegment = (s: Session, index: number): Session => ({
+  ...s,
+  segments: s.segments.filter((_, i) => i !== index),
+})
+
+// Adds backdated minutes before anything already recorded. Compares `device` against the
+// OLDEST segment's device (not the running one, so this works the same whether the session is
+// running or paused): same device just pushes that segment's start back; a different device
+// prepends a new segment ending exactly where the old oldest segment began (no gap/overlap),
+// billed at `price`. Using it again walks further into the past each time, since it always
+// re-reads whatever the current oldest segment is.
+export const addBackdatedTime = (
+  s: Session,
+  device: Device,
+  category: string,
+  price: FlatPrice,
+  minutes: number,
+): Session => {
+  if (minutes <= 0 || s.segments.length === 0) return s
+  const ms = minutes * MINUTE_MS
+  const oldest = s.segments.reduce((min, seg) => (seg.from < min.from ? seg : min))
+  if (device.id === oldest.deviceId) {
+    return {
+      ...s,
+      segments: s.segments.map((seg) => (seg === oldest ? { ...seg, from: seg.from - ms } : seg)),
+    }
+  }
+  const seg: Segment = {
+    from: oldest.from - ms,
+    to: oldest.from,
+    typeId: price.id,
+    typeName: price.name,
+    price: price.price,
+    deviceId: device.id,
+    deviceName: device.name,
+    categoryName: category,
+  }
+  return { ...s, segments: [seg, ...s.segments] }
+}
+
 // ---- cost -----------------------------------------------------------------
 
 export const segmentMs = (seg: Segment, now: number) => Math.max(0, (seg.to ?? now) - seg.from)
@@ -305,22 +351,22 @@ export const segmentMs = (seg: Segment, now: number) => Math.max(0, (seg.to ?? n
 export const elapsedMs = (s: Session, now: number) =>
   s.segments.reduce((sum, seg) => sum + segmentMs(seg, now), 0)
 
+// Segments under this are ignored (billed as free): almost always a rapid price/device-switch
+// artifact, not real usage.
+export const MIN_BILLABLE_MS = 3_000
+
 // Billed per whole second; any started toman counts (rounded up).
-export const segmentCost = (seg: Segment, now: number) =>
-  Math.ceil((Math.floor(segmentMs(seg, now) / 1000) * seg.price) / 3600)
-
-export const extraTimeCost = (t: ExtraTime) => Math.ceil((t.minutes * t.price) / 60)
-
-export const extraTimesCost = (s: Session) =>
-  s.extraTimes.reduce((sum, t) => sum + extraTimeCost(t), 0)
+export const segmentCost = (seg: Segment, now: number) => {
+  const ms = segmentMs(seg, now)
+  if (ms < MIN_BILLABLE_MS) return 0
+  return Math.ceil((Math.floor(ms / 1000) * seg.price) / 3600)
+}
 
 export const extraItemsCost = (s: Session) =>
   s.extraItems.reduce((sum, i) => sum + i.price * i.qty, 0)
 
 export const computeCost = (s: Session, now: number) =>
-  s.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0) +
-  extraTimesCost(s) +
-  extraItemsCost(s)
+  s.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0) + extraItemsCost(s)
 
 // ---- limits -----------------------------------------------------------------
 // A session may have a time limit and a cost limit at once; each works independently of the
@@ -375,8 +421,8 @@ export const clearCostLimit = ({ costLimit: _costLimit, ...s }: Session): Sessio
 
 // ---- settings → live sessions ----------------------------------------------------
 
-// Propagate edited prices to every live session (past segments, the running one and
-// extra-time entries). Entries of deleted prices keep their values.
+// Propagate edited prices to every live session's segments. Segments of deleted prices keep
+// their values.
 export const applyPrices = (sessions: Session[], groups: RateGroup[]): Session[] => {
   const byId = new Map(flatPrices(groups).map((t) => [t.id, t]))
   const sync = <T extends { typeId: string; typeName: string; price: number }>(x: T): T => {
@@ -386,7 +432,6 @@ export const applyPrices = (sessions: Session[], groups: RateGroup[]): Session[]
   return sessions.map((s) => ({
     ...s,
     segments: s.segments.map(sync),
-    extraTimes: s.extraTimes.map(sync),
   }))
 }
 
@@ -422,11 +467,6 @@ export const applyExtraItems = (sessions: Session[], catalog: CatalogItem[]): Se
   }))
 }
 
-export const addExtraTime = (s: Session, time: Omit<ExtraTime, 'id'>): Session => ({
-  ...s,
-  extraTimes: [...s.extraTimes, { ...time, id: uid() }],
-})
-
 export const addExtraItem = (s: Session, item: Omit<ExtraItem, 'id'>): Session => {
   const existing = s.extraItems.find((i) =>
     item.catalogId
@@ -447,14 +487,36 @@ export const addExtraItem = (s: Session, item: Omit<ExtraItem, 'id'>): Session =
   return { ...s, extraItems: [...s.extraItems, { ...item, id: uid() }] }
 }
 
+// `qty <= 0` removes the row (same as deleting it).
+export const setExtraItemQty = (s: Session, id: string, qty: number): Session => ({
+  ...s,
+  extraItems:
+    qty > 0
+      ? s.extraItems.map((i) => (i.id === id ? { ...i, qty } : i))
+      : s.extraItems.filter((i) => i.id !== id),
+})
+
+export const removeExtraItem = (s: Session, id: string): Session => ({
+  ...s,
+  extraItems: s.extraItems.filter((i) => i.id !== id),
+})
+
 // ---- what a live session still references (blocks deletion in Settings) -----------
 
-export type Usage = { deviceIds: Set<string>; customerIds: Set<string>; priceIds: Set<string> }
+export type Usage = {
+  deviceIds: Set<string>
+  customerIds: Set<string>
+  priceIds: Set<string>
+  extraItemIds: Set<string>
+}
 
 export const usageOf = (sessions: Session[]): Usage => ({
   deviceIds: new Set(sessions.map((s) => s.deviceId)),
   customerIds: new Set(sessions.flatMap((s) => (s.customerId ? [s.customerId] : []))),
   priceIds: new Set(sessions.map((s) => s.typeId)),
+  extraItemIds: new Set(
+    sessions.flatMap((s) => s.extraItems.flatMap((i) => (i.catalogId ? [i.catalogId] : []))),
+  ),
 })
 
 // ---- persistence ----------------------------------------------------------
@@ -500,10 +562,8 @@ export type HistoryEntry = {
   endedAt: number
   durationMs: number
   segments: Segment[]
-  extraTimes: ExtraTime[]
   extraItems: ExtraItem[]
   timeCost: number
-  extraTimesCost: number
   extraItemsCost: number
   // Final income (what stats sum up). Equals the calculated cost unless it was edited when ending.
   total: number
@@ -529,9 +589,8 @@ export const buildHistoryEntry = (
 ): HistoryEntry => {
   const closed = pauseSession(s, now)
   const timeCost = closed.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0)
-  const timesCost = extraTimesCost(closed)
   const itemsCost = extraItemsCost(closed)
-  const calculated = timeCost + timesCost + itemsCost
+  const calculated = timeCost + itemsCost
   const total = finalTotal ?? calculated
   return {
     id: uid(),
@@ -545,10 +604,8 @@ export const buildHistoryEntry = (
     endedAt: now,
     durationMs: elapsedMs(closed, now),
     segments: closed.segments,
-    extraTimes: closed.extraTimes,
     extraItems: closed.extraItems,
     timeCost,
-    extraTimesCost: timesCost,
     extraItemsCost: itemsCost,
     total,
     ...(total !== calculated ? { calculatedTotal: calculated } : {}),
@@ -571,7 +628,6 @@ export const sessionSearchFields = (
   customer?.phone ?? '',
   s.status === 'running' ? 'در حال بازی' : isReserved(s) ? 'رزرو' : 'متوقف',
   ...s.segments.map((x) => `${x.typeName} ${x.price}`),
-  ...s.extraTimes.map((t) => `${t.name} ${t.typeName} ${t.minutes}`),
   ...s.extraItems.map((i) => `${i.name} ${i.description ?? ''} ${i.price}`),
   String(computeCost(s, now)),
 ]

@@ -37,7 +37,7 @@ export const summarize = (entries: HistoryEntry[]): Summary =>
       durationMs: s.durationMs + e.durationMs,
       total: s.total + e.total,
       timeCost: s.timeCost + e.timeCost,
-      extrasCost: s.extrasCost + e.extraTimesCost + e.extraItemsCost,
+      extrasCost: s.extrasCost + e.extraItemsCost,
     }),
     { count: 0, durationMs: 0, total: 0, timeCost: 0, extrasCost: 0 },
   )

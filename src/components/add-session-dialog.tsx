@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ArrowLeft, ArrowRight, CalendarClock, Play } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, CalendarClock, Play } from 'lucide-react'
 import { Tip } from '@/components/tip'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,13 +13,13 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { CustomerSelect } from '@/components/customer-select'
-import type { Pick } from '@/components/device-picker'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -41,7 +41,7 @@ import {
 import { cn } from '@/lib/utils'
 
 type StepKey = 'category' | 'device' | 'rate' | 'customer'
-const ORDER: StepKey[] = ['category', 'device', 'rate', 'customer']
+const FULL_ORDER: StepKey[] = ['category', 'device', 'rate', 'customer']
 const TITLES: Record<StepKey, string> = {
   category: 'نوع دستگاه',
   device: 'دستگاه',
@@ -49,22 +49,36 @@ const TITLES: Record<StepKey, string> = {
   customer: 'مشتری (اختیاری)',
 }
 
+export type Pick = { categoryId: string; deviceId: string; priceId: string }
+
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   settings: Settings
   sessions: Session[]
-  // Reserve: the same flow, but the timer is not started (the session is created paused).
-  reserve?: boolean
-  onCreate: (
-    device: Device,
-    category: string,
-    price: FlatPrice,
-    customerId?: string,
-    limit?: { minutes?: number; cost?: number },
-    reserve?: boolean,
-  ) => void
-}
+} & (
+  | {
+      // Reserve: the same flow, but the timer is not started (the session is created paused).
+      reserve?: boolean
+      session?: undefined
+      onCreate: (
+        device: Device,
+        category: string,
+        price: FlatPrice,
+        customerId?: string,
+        limit?: { minutes?: number; cost?: number },
+        reserve?: boolean,
+      ) => void
+      onSwitch?: undefined
+    }
+  | {
+      // Switch-device mode: move `session` to another free device/price (no customer step).
+      reserve?: undefined
+      session: Session
+      onCreate?: undefined
+      onSwitch: (device: Device, category: string, price: FlatPrice) => void
+    }
+)
 
 type SearchItem = {
   key: string
@@ -106,13 +120,28 @@ export function RadioCard({
   )
 }
 
-export function AddSessionDialog({ open, onOpenChange, settings, sessions, reserve, onCreate }: Props) {
+export function AddSessionDialog({
+  open,
+  onOpenChange,
+  settings,
+  sessions,
+  reserve,
+  onCreate,
+  session,
+  onSwitch,
+}: Props) {
+  const switchMode = !!session
+  // Switch-device mode skips the customer step entirely.
+  const ORDER = switchMode ? FULL_ORDER.filter((k) => k !== 'customer') : FULL_ORDER
   const busyIds = new Set(sessions.map((s) => s.deviceId))
   const free = freeDevices(settings.devices, sessions)
   const devicesOf = (categoryId: string) => settings.devices.filter((d) => d.categoryId === categoryId)
   const freeIn = (categoryId: string) => devicesOf(categoryId).filter((d) => !busyIds.has(d.id))
   // Only types that actually have devices can start a session.
   const categories = settings.deviceCategories.filter((c) => devicesOf(c.id).length > 0)
+  const currentCategory = session
+    ? settings.devices.find((d) => d.id === session.deviceId)?.categoryId
+    : undefined
 
   // Steps that need a decision from the user for a given selection.
   const stepsFor = (p: Pick): StepKey[] => {
@@ -147,12 +176,14 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
     return { categoryId, deviceId, priceId }
   }
   const EMPTY: Pick = { categoryId: '', deviceId: '', priceId: '' }
+  // In switch mode, default to the category of the device being switched away from.
+  const initialPick = (): Pick => resolve({ ...EMPTY, categoryId: currentCategory ?? '' })
   const after = (steps: StepKey[], from: StepKey) =>
-    steps.find((k) => ORDER.indexOf(k) > ORDER.indexOf(from)) ?? 'customer'
+    steps.find((k) => ORDER.indexOf(k) > ORDER.indexOf(from)) ?? ORDER[ORDER.length - 1]
   const before = (steps: StepKey[], from: StepKey) =>
     [...steps].reverse().find((k) => ORDER.indexOf(k) < ORDER.indexOf(from))
 
-  const [pick, setPick] = useState<Pick>(() => resolve(EMPTY))
+  const [pick, setPick] = useState<Pick>(() => initialPick())
   const [initial, setInitial] = useState(pick)
   const [step, setStep] = useState<StepKey>(() => stepsFor(pick)[0])
   const [customerId, setCustomerId] = useState<string | undefined>()
@@ -160,10 +191,10 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
   const [timeLimit, setTimeLimit] = useState('')
   const [costLimit, setCostLimit] = useState('')
 
-  // Start from the last used type each time the dialog opens.
+  // Start from the last used type (or, in switch mode, the current device's type) each time the dialog opens.
   useEffect(() => {
     if (!open) return
-    const p = resolve(EMPTY)
+    const p = initialPick()
     setPick(p)
     setInitial(p)
     setStep(stepsFor(p)[0])
@@ -179,13 +210,11 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
   const price = flatPrices(settings.rateGroups).find((p) => p.id === pick.priceId)
   const steps = stepsFor(pick)
   const prevStep = before(steps, step)
-  const last = step === 'customer'
+  const last = step === ORDER[ORDER.length - 1]
 
   const dirty =
     JSON.stringify(pick) !== JSON.stringify(initial) ||
-    customerId !== undefined ||
-    timeLimit !== '' ||
-    costLimit !== ''
+    (!switchMode && (customerId !== undefined || timeLimit !== '' || costLimit !== ''))
   const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
 
   const stepValid =
@@ -296,10 +325,15 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
 
   const submit = () => {
     if (!device || !price) return
+    if (switchMode) {
+      onSwitch!(device, categoryName(settings, device), price)
+      onOpenChange(false)
+      return
+    }
     const minutes = Math.floor(parseNumber(timeLimit))
     const cost = Math.floor(parseNumber(costLimit))
     if (minutes > 0 || cost > 0) requestNotificationPermission()
-    onCreate(
+    onCreate!(
       device,
       categoryName(settings, device),
       price,
@@ -323,7 +357,13 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{reserve ? 'رزرو تایم' : 'افزودن تایم'}</DialogTitle>
+            <DialogTitle>{switchMode ? 'تغییر دستگاه' : reserve ? 'رزرو تایم' : 'افزودن تایم'}</DialogTitle>
+            {switchMode && session && (
+              <DialogDescription>
+                از این لحظه، زمان با دستگاه و نرخ جدید محاسبه می‌شود؛ زمان گذشته با نرخ قبلی می‌ماند و
+                دستگاه فعلی ({session.deviceName}) آزاد می‌شود.
+              </DialogDescription>
+            )}
           </DialogHeader>
 
           <Combobox
@@ -511,7 +551,8 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
             )}
             {last ? (
               <Button disabled={!stepValid} onClick={submit}>
-                {reserve ? <CalendarClock /> : <Play />} {reserve ? 'ثبت رزرو' : 'شروع تایم'}
+                {switchMode ? <ArrowLeftRight /> : reserve ? <CalendarClock /> : <Play />}{' '}
+                {switchMode ? 'تغییر دستگاه' : reserve ? 'ثبت رزرو' : 'شروع تایم'}
               </Button>
             ) : (
               <Button disabled={!stepValid} onClick={() => setStep(after(steps, step))}>

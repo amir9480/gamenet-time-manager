@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlarmClock, Clock, Pause, Pencil, Play, Square, X } from 'lucide-react'
+import { AlarmClock, Pause, Pencil, Play, Square, X } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,12 +16,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ChangeDeviceDialog } from '@/components/change-device-dialog'
+import { AddSessionDialog } from '@/components/add-session-dialog'
 import { CustomerPickerDialog } from '@/components/customer-picker-dialog'
 import { PriceSelect } from '@/components/price-select'
 import { ExtraItemPicker } from '@/components/extra-item-picker'
-import { ExtraItemsManageDialog } from '@/components/extra-items-manage-dialog'
-import { ExtraTimeDialog } from '@/components/extra-time-dialog'
+import { BackdateTimeDialog } from '@/components/backdate-time-dialog'
 import { LimitDialog } from '@/components/limit-dialog'
 import { SessionSummaryDialog } from '@/components/session-summary-dialog'
 import { Timer } from '@/components/timer'
@@ -31,12 +30,14 @@ import { formatJalaliDateTime } from '@/lib/jalali'
 import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
 import {
+  addBackdatedTime,
   addExtraItem,
-  addExtraTime,
   changeType,
   clearCostLimit,
   clearTimeLimit,
   computeCost,
+  EMPTY_PRICE,
+  defaultPriceFor,
   deviceOf,
   devicePriceGroups,
   elapsedMs,
@@ -52,6 +53,7 @@ import {
   setCostLimit,
   setTimeLimit,
   switchDevice,
+  type Device,
   type Session,
   type Settings,
 } from '@/lib/store'
@@ -61,7 +63,7 @@ type Props = {
   sessions: Session[]
   settings: Settings
   onUpdate: (fn: (s: Session) => Session) => void
-  onEnd: (finalTotal?: number, onAccount?: boolean) => void
+  onEnd: (session: Session, finalTotal?: number, onAccount?: boolean) => void
   // Drops a reservation (no history entry).
   onCancel: () => void
   compact?: boolean
@@ -78,7 +80,6 @@ const NEAR_LIMIT_MS = 5 * MINUTE_MS
 export function SessionCard({ session, sessions, settings, onUpdate, onEnd, onCancel, compact }: Props) {
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [summaryNow, setSummaryNow] = useState(0)
-  const [manageOpen, setManageOpen] = useState(false)
   const [customerOpen, setCustomerOpen] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -156,6 +157,9 @@ ${limitLines.join('\n')}` : ''
     ? `شروع: ${formatJalaliDateTime(first.from)}${last.to ? `
 پایان: ${formatJalaliDateTime(last.to)}` : ''}${limitLine}`
     : undefined
+  // Shown on the limit button in both card layouts, so hovering it gives the same remaining
+  // time/cost regardless of which card style is in use.
+  const limitTip = `${hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}${limitLine}`
 
   const resume = () => onUpdate((s) => resumeSession(settings, s, Date.now()))
   const pause = () => onUpdate((s) => pauseSession(s, Date.now()))
@@ -172,6 +176,10 @@ ${limitLines.join('\n')}` : ''
   const openSummary = () => {
     setSummaryNow(Date.now())
     setSummaryOpen(true)
+  }
+  const addBackdated = (device: Device, category: string, minutes: number) => {
+    const price = defaultPriceFor(device, settings.rateGroups) ?? EMPTY_PRICE
+    onUpdate((s) => addBackdatedTime(s, device, category, price, minutes))
   }
 
 
@@ -235,46 +243,45 @@ ${limitLines.join('\n')}` : ''
           onSave={(customerId) => onUpdate((x) => ({ ...x, customerId }))}
         />
 
-        <ChangeDeviceDialog
+        <AddSessionDialog
           open={switchOpen}
           onOpenChange={setSwitchOpen}
-          session={session}
           settings={settings}
           sessions={sessions}
+          session={session}
           onSwitch={(device, category, price) =>
             onUpdate((x) => switchDevice(x, device, category, price, Date.now()))
           }
         />
 
-        <ExtraItemsManageDialog
-          open={manageOpen}
-          onOpenChange={setManageOpen}
-          items={session.extraItems}
-          times={session.extraTimes}
-          onSave={(extraItems, extraTimes) =>
-            onUpdate((s) => ({ ...s, extraItems, extraTimes }))
-          }
-        />
-
         <SessionSummaryDialog
-          readOnly
+          mode="view"
           open={detailOpen}
           onOpenChange={setDetailOpen}
           deviceName={customer ? `${name} (${customer.name})` : name}
           session={session}
+          settings={settings}
           now={time}
+          onUpdate={onUpdate}
+          onConfirm={(editedSession, finalTotal, onAccount) => {
+            setDetailOpen(false)
+            onEnd(editedSession, finalTotal, onAccount)
+          }}
         />
 
         <SessionSummaryDialog
+          mode="end"
           open={summaryOpen}
           onOpenChange={setSummaryOpen}
           deviceName={customer ? `${name} (${customer.name})` : name}
           session={session}
+          settings={settings}
           customer={customer}
           now={summaryNow}
-          onConfirm={(finalTotal, onAccount) => {
+          onUpdate={onUpdate}
+          onConfirm={(editedSession, finalTotal, onAccount) => {
             setSummaryOpen(false)
-            onEnd(finalTotal, onAccount)
+            onEnd(editedSession, finalTotal, onAccount)
           }}
         />
     </>
@@ -387,7 +394,7 @@ ${limitLines.join('\n')}` : ''
               )}
             </div>
             <div className="flex items-center justify-end gap-1.5">
-              <Tip label={hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}>
+              <Tip label={limitTip}>
                 <Button
                   variant={exceeded ? 'destructive' : hasLimit ? 'secondary' : 'outline'}
                   size="icon-sm"
@@ -397,13 +404,7 @@ ${limitLines.join('\n')}` : ''
                   <AlarmClock />
                 </Button>
               </Tip>
-              <ExtraTimeDialog
-                compact
-                groups={groups}
-                allGroups={settings.rateGroups}
-                currentTypeId={type.id}
-                onAdd={(t) => onUpdate((s) => addExtraTime(s, t))}
-              />
+              <BackdateTimeDialog compact session={session} settings={settings} onAdd={addBackdated} />
               <ExtraItemPicker
                 compact
                 settings={settings}
@@ -412,27 +413,16 @@ ${limitLines.join('\n')}` : ''
             </div>
           </div>
 
-          {(session.extraTimes.length > 0 || session.extraItems.length > 0) && (
+          {session.extraItems.length > 0 && (
             <div className="flex flex-wrap justify-center gap-1.5">
-              {session.extraTimes.length > 0 && (
-                <Tip label="مشاهده و تغییر زمان‌های اضافه">
-                  <Badge
-                    variant="outline"
-                    className="h-auto cursor-pointer py-0.5 hover:bg-muted"
-                    render={<button type="button" onClick={() => setManageOpen(true)} />}
-                  >
-                    <Clock /> {formatNumber(session.extraTimes.length)}
-                  </Badge>
-                </Tip>
-              )}
               {session.extraItems.length > 0 && (
-                <Tip label="مشاهده و تغییر بوفه">
+                <Tip label="مشاهده و تغییر بوفه و سایر هزینه‌ها">
                   <Badge
                     variant="secondary"
                     className="h-auto cursor-pointer py-0.5 hover:bg-secondary/70"
-                    render={<button type="button" onClick={() => setManageOpen(true)} />}
+                    render={<button type="button" onClick={() => setDetailOpen(true)} />}
                   >
-                    بوفه: {formatNumber(session.extraItems.reduce((n, i) => n + i.qty, 0))}
+                    بوفه و سایر هزینه‌ها: {formatNumber(session.extraItems.reduce((n, i) => n + i.qty, 0))}
                   </Badge>
                 </Tip>
               )}
@@ -490,22 +480,19 @@ ${limitLines.join('\n')}` : ''
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex flex-col gap-1.5">
-            <Label>زمان اضافه</Label>
-            <ExtraTimeDialog
-              groups={groups}
-              allGroups={settings.rateGroups}
-              currentTypeId={type.id}
-              onAdd={(t) => onUpdate((s) => addExtraTime(s, t))}
-            />
+            <Label>زمان گذشته</Label>
+            <BackdateTimeDialog session={session} settings={settings} onAdd={addBackdated} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>محدودیت</Label>
-            <Button variant="outline" onClick={() => setLimitOpen(true)}>
-              <AlarmClock /> {hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}
-            </Button>
+            <Tip label={limitTip}>
+              <Button variant="outline" onClick={() => setLimitOpen(true)}>
+                <AlarmClock /> {hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}
+              </Button>
+            </Tip>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>بوفه</Label>
+            <Label>بوفه و سایر هزینه‌ها</Label>
             <ExtraItemPicker
               settings={settings}
               onAdd={(item) => onUpdate((s) => addExtraItem(s, item))}
@@ -528,25 +515,14 @@ ${limitLines.join('\n')}` : ''
           </div>
         </div>
 
-        {(session.extraTimes.length > 0 || session.extraItems.length > 0) && (
+        {session.extraItems.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {session.extraTimes.map((t) => (
-              <Tip key={t.id} label="تغییر">
-                <Badge
-                  variant="outline"
-                  className="h-auto cursor-pointer py-1 hover:bg-muted"
-                  render={<button type="button" onClick={() => setManageOpen(true)} />}
-                >
-                  <Clock /> {t.name}: {formatNumber(t.minutes)} دقیقه
-                </Badge>
-              </Tip>
-            ))}
             {session.extraItems.map((i) => (
               <Tip key={i.id} label={i.description || 'تغییر'}>
                 <Badge
                   variant="secondary"
                   className="h-auto cursor-pointer py-1 hover:bg-secondary/70"
-                  render={<button type="button" onClick={() => setManageOpen(true)} />}
+                  render={<button type="button" onClick={() => setDetailOpen(true)} />}
                 >
                   {i.name}
                   {i.description ? ` (${i.description})` : ''} × {formatNumber(i.qty)} ={' '}

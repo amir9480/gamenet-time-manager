@@ -47,7 +47,7 @@ const TITLES: Record<StepKey, string> = {
   count: 'تعداد',
 }
 
-// What has been chosen so far; `custom` stands for the free «موارد دیگر» item.
+// What has been chosen so far; `custom` stands for the free «سایر هزینه‌ها» item.
 type Choice = { categoryId: string; itemId: string; custom: boolean }
 const OTHER_VALUE = '__other__'
 
@@ -236,7 +236,7 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
     finish(keepOpen)
   }
 
-  // «خیر»: keep it as a one-off «موارد دیگر» line.
+  // «خیر»: keep it as a one-off «سایر هزینه‌ها» line.
   const addAsOther = () => {
     if (!offer) return
     onAdd({
@@ -268,11 +268,11 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
           else requestClose()
         }}
       >
-        <Tip label="افزودن از بوفه به تایم">
+        <Tip label="خرید از بوفه یا افزودن سایر هزینه‌ها">
           <DialogTrigger
             render={
               compact ? (
-                <Button variant="outline" size="icon-sm" aria-label="افزودن از بوفه" />
+                <Button variant="outline" size="icon-sm" aria-label="خرید از بوفه یا افزودن سایر هزینه‌ها" />
               ) : (
                 <Button variant="outline" />
               )
@@ -283,7 +283,7 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
         </Tip>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>افزودن از بوفه</DialogTitle>
+            <DialogTitle>خرید از بوفه یا افزودن سایر هزینه‌ها</DialogTitle>
           </DialogHeader>
 
           <Combobox
@@ -473,7 +473,7 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-wrap">
-            <AlertDialogCancel onClick={addAsOther}>افزودن به عنوان موارد دیگر</AlertDialogCancel>
+            <AlertDialogCancel onClick={addAsOther}>افزودن به عنوان سایر هزینه‌ها</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 setOfferAsk(false)

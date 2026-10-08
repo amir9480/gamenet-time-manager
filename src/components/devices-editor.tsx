@@ -1,5 +1,15 @@
 import { useState } from 'react'
 import { Coins, Pencil, Plus, Trash2 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -329,9 +339,22 @@ type DialogState =
   | { kind: 'rates'; category: DeviceCategory }
   | null
 
+type PendingDelete =
+  | { kind: 'category'; id: string; name: string }
+  | { kind: 'device'; id: string; name: string }
+
 export function DevicesEditor({ categories, devices, rateGroups, usage, onChange }: Props) {
   const [dialog, setDialog] = useState<DialogState>(null)
   const close = () => setDialog(null)
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return
+    if (pendingDelete.kind === 'category')
+      onChange(categories.filter((x) => x.id !== pendingDelete.id), devices)
+    else onChange(categories, devices.filter((x) => x.id !== pendingDelete.id))
+    setPendingDelete(null)
+  }
 
   const addDevices = (added: Device[]) => onChange(categories, [...devices, ...added])
   const patchDevice = (id: string, patch: Partial<Device>) =>
@@ -385,12 +408,7 @@ export function DevicesEditor({ categories, devices, rateGroups, usage, onChange
                     size="icon"
                     aria-label="حذف نوع دستگاه"
                     disabled={list.length > 0}
-                    onClick={() =>
-                      onChange(
-                        categories.filter((x) => x.id !== c.id),
-                        devices,
-                      )
-                    }
+                    onClick={() => setPendingDelete({ kind: 'category', id: c.id, name: c.name })}
                   >
                     <Trash2 />
                   </Button>
@@ -428,12 +446,7 @@ export function DevicesEditor({ categories, devices, rateGroups, usage, onChange
                         size="icon-sm"
                         aria-label="حذف دستگاه"
                         disabled={busy}
-                        onClick={() =>
-                          onChange(
-                            categories,
-                            devices.filter((x) => x.id !== d.id),
-                          )
-                        }
+                        onClick={() => setPendingDelete({ kind: 'device', id: d.id, name: d.name })}
                       >
                         <Trash2 />
                       </Button>
@@ -529,6 +542,23 @@ export function DevicesEditor({ categories, devices, rateGroups, usage, onChange
           onClose={close}
         />
       )}
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(o) => !o && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingDelete?.kind === 'category' ? 'حذف نوع دستگاه؟' : 'حذف دستگاه؟'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>«{pendingDelete?.name}» حذف می‌شود.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>انصراف</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmDelete}>
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
