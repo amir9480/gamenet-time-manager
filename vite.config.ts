@@ -42,29 +42,15 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Lazy Lucide icon chunks (~1,850 files) are cached on first use instead of precached, but
-        // every other chunk (app icon loader, icon picker, SW registration) must work offline.
-        globPatterns: [
-          '**/*.{html,css,woff2,svg,png}',
-          'assets/{index,app-icon-lucide,DynamicIcon,Icon,icon-picker,virtual_pwa-register,workbox-window}*.js',
-        ],
+        // Precache everything (incl. every lazy Lucide icon chunk): old hashed chunks vanish from
+        // the server on each deploy, so a runtime-cached chunk that was never fetched would 404.
+        globPatterns: ['**/*.{html,css,woff2,svg,png,js}'],
         // The social-preview banner (index.html og:image, README) is never shown in the app.
         globIgnores: ['img/**'],
         navigateFallback: 'index.html',
         // Notification click handler for the time-limit alert (see src/lib/attention.ts).
         importScripts: ['notification-click.js'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.endsWith('.js'),
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'js-chunks',
-              // Icon chunks pile up (picker browsing, new hashes per deploy): keep the most recent.
-              expiration: { maxEntries: 300, purgeOnQuotaError: true },
-            },
-          },
-        ],
       },
     }),
   ],
