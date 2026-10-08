@@ -23,6 +23,8 @@ import { CustomerSelect } from '@/components/customer-select'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { MoneyInput } from '@/components/ui/money-input'
 import { requestNotificationPermission } from '@/lib/attention'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { toFa } from '@/lib/jalali'
@@ -68,6 +70,7 @@ type Props = {
         customerId?: string,
         limit?: { minutes?: number; cost?: number },
         reserve?: boolean,
+        prepay?: number,
       ) => void
       onSwitch?: undefined
     }
@@ -190,6 +193,8 @@ export function AddSessionDialog({
   const [query, setQuery] = useState('')
   const [timeLimit, setTimeLimit] = useState('')
   const [costLimit, setCostLimit] = useState('')
+  const [prepay, setPrepay] = useState('')
+  const [prepaySetsLimit, setPrepaySetsLimit] = useState(false)
 
   // Start from the last used type (or, in switch mode, the current device's type) each time the dialog opens.
   useEffect(() => {
@@ -201,10 +206,25 @@ export function AddSessionDialog({
     setCustomerId(undefined)
     setTimeLimit('')
     setCostLimit('')
+    setPrepay('')
+    setPrepaySetsLimit(false)
     setQuery('')
     // Only when the dialog opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  const prepayAmount = Math.floor(parseNumber(prepay))
+  const prepayLimitEnabled = prepayAmount > 0
+
+  useEffect(() => {
+    if (prepaySetsLimit && prepayLimitEnabled) {
+      setCostLimit(String(prepayAmount))
+    }
+  }, [prepayAmount, prepayLimitEnabled, prepaySetsLimit])
+
+  useEffect(() => {
+    if (!prepayLimitEnabled) setPrepaySetsLimit(false)
+  }, [prepayLimitEnabled])
 
   const device = free.find((d) => d.id === pick.deviceId)
   const price = flatPrices(settings.rateGroups).find((p) => p.id === pick.priceId)
@@ -214,7 +234,12 @@ export function AddSessionDialog({
 
   const dirty =
     JSON.stringify(pick) !== JSON.stringify(initial) ||
-    (!switchMode && (customerId !== undefined || timeLimit !== '' || costLimit !== ''))
+    (!switchMode &&
+      (customerId !== undefined ||
+        timeLimit !== '' ||
+        costLimit !== '' ||
+        prepay !== '' ||
+        prepaySetsLimit))
   const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
 
   const stepValid =
@@ -331,7 +356,9 @@ export function AddSessionDialog({
       return
     }
     const minutes = Math.floor(parseNumber(timeLimit))
-    const cost = Math.floor(parseNumber(costLimit))
+    const typedCost = Math.floor(parseNumber(costLimit))
+    const prepayAmount = Math.floor(parseNumber(prepay))
+    const cost = prepaySetsLimit && prepayAmount > 0 ? prepayAmount : typedCost
     if (minutes > 0 || cost > 0) requestNotificationPermission()
     onCreate!(
       device,
@@ -340,6 +367,7 @@ export function AddSessionDialog({
       customerId,
       minutes > 0 || cost > 0 ? { minutes: minutes || undefined, cost: cost || undefined } : undefined,
       reserve,
+      prepayAmount > 0 ? prepayAmount : undefined,
     )
     onOpenChange(false)
   }
@@ -524,18 +552,38 @@ export function AddSessionDialog({
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="new-limit-cost">محدودیت هزینه (اختیاری، تومان)</Label>
-                <Input
+                <MoneyInput
                   id="new-limit-cost"
-                  dir="ltr"
-                  inputMode="numeric"
                   placeholder="بدون محدودیت"
+                  disabled={prepaySetsLimit && prepayLimitEnabled}
                   value={
-                    parseNumber(costLimit) > 0
-                      ? formatNumber(Math.floor(parseNumber(costLimit)))
-                      : costLimit
+                    prepaySetsLimit && prepayLimitEnabled
+                      ? formatNumber(prepayAmount)
+                      : parseNumber(costLimit) > 0
+                        ? formatNumber(Math.floor(parseNumber(costLimit)))
+                        : costLimit
                   }
                   onChange={(e) => setCostLimit(e.target.value)}
                 />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="new-prepay">پیش‌پرداخت (اختیاری، تومان)</Label>
+                <MoneyInput
+                  id="new-prepay"
+                  placeholder="بدون پیش‌پرداخت"
+                  value={prepayAmount > 0 ? formatNumber(prepayAmount) : prepay}
+                  onChange={(e) => setPrepay(e.target.value)}
+                />
+                {prepayLimitEnabled && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={prepaySetsLimit}
+                      onCheckedChange={(v) => setPrepaySetsLimit(v === true)}
+                    />
+                    تنظیم خودکار محدودیت هزینه بر اساس پیش‌پرداخت
+                  </label>
+                )}
               </div>
             </div>
           )}

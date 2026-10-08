@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { MoneyInput } from '@/components/ui/money-input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { addCatalogItem } from '@/lib/db'
@@ -118,10 +119,8 @@ export function SaveExtraItemDialog({ open, onOpenChange, settings, initialName,
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="extra-item-price">قیمت</Label>
               <div className="flex items-center gap-2">
-                <Input
+                <MoneyInput
                   id="extra-item-price"
-                  dir="ltr"
-                  inputMode="numeric"
                   placeholder="0"
                   value={unit ? formatNumber(unit) : ''}
                   onChange={(e) => setPrice(e.target.value)}

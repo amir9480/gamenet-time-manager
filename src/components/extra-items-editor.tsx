@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { MoneyInput } from '@/components/ui/money-input'
 import {
   Select,
   SelectContent,
@@ -120,11 +121,9 @@ export function ExtraItemsEditor({ categories, items, usage, onChange }: Props) 
                   onChange={(e) => update(i.id, { name: e.target.value })}
                   className="col-span-2 sm:col-span-1"
                 />
-                <Input
+                <MoneyInput
                   aria-label={`قیمت ${i.name}`}
                   aria-invalid={!i.price}
-                  dir="ltr"
-                  inputMode="numeric"
                   placeholder="0"
                   value={i.price ? formatNumber(i.price) : ''}
                   onChange={(e) => update(i.id, { price: parseNumber(e.target.value) })}

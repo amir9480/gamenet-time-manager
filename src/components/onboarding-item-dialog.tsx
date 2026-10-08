@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { MoneyInput } from '@/components/ui/money-input'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { formatNumber, parseNumber } from '@/lib/format'
 
@@ -68,10 +69,8 @@ export function OnboardingItemDialog({ open, onOpenChange, categoryName, onAdd }
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="onb-item-price">قیمت</Label>
               <div className="flex items-center gap-2">
-                <Input
+                <MoneyInput
                   id="onb-item-price"
-                  dir="ltr"
-                  inputMode="numeric"
                   placeholder="0"
                   value={price ? formatNumber(unit) : ''}
                   onChange={(e) => setPrice(e.target.value)}

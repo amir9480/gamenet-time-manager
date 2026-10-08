@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { MoneyInput } from '@/components/ui/money-input'
 import { OnboardingItemDialog } from '@/components/onboarding-item-dialog'
 import { useTheme } from '@/components/theme-provider'
 import { formatNumber, parseNumber } from '@/lib/format'
@@ -225,11 +226,9 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                           className="col-span-2 sm:col-span-1"
                         />
                         <Money>
-                          <Input
+                          <MoneyInput
                             aria-label={`قیمت ${p.name || d.name}`}
                             aria-invalid={p.price <= 0}
-                            dir="ltr"
-                            inputMode="numeric"
                             placeholder="0"
                             value={p.price ? formatNumber(p.price) : ''}
                             onChange={(e) =>
@@ -292,11 +291,9 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                     >
                       <span className="col-span-2 truncate sm:col-span-1">{i.name}</span>
                       <Money>
-                        <Input
+                        <MoneyInput
                           aria-label={`قیمت ${i.name}`}
                           aria-invalid={i.price <= 0}
-                          dir="ltr"
-                          inputMode="numeric"
                           placeholder="0"
                           value={i.price ? formatNumber(i.price) : ''}
                           onChange={(ev) =>

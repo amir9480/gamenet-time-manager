@@ -3,6 +3,19 @@ import { toFa } from '@/lib/jalali'
 export const formatNumber = (n: number) =>
   Math.round(n).toLocaleString('en-US')
 
+export const sanitizeMoneyInput = (value: string) => {
+  const normalized = value
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/\D/g, '')
+  return normalized
+}
+
+export const formatMoneyInput = (value: string | number | readonly string[] | null | undefined) => {
+  const digits = sanitizeMoneyInput(String(value ?? ''))
+  return digits === '' ? '' : Number(digits).toLocaleString('en-US')
+}
+
 // Accepts Persian/Arabic digits and separators, returns a non-negative number.
 export const parseNumber = (value: string) => {
   const normalized = value

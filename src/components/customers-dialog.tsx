@@ -12,7 +12,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NewCustomerDialog } from '@/components/new-customer-dialog'
-import { CustomerDebtsDialog } from '@/components/customer-debts-dialog'
+import { CustomerDebtsDialog } from './customer-debts-dialog'
 import { customerFields } from '@/components/customer-select'
 import { Tip } from '@/components/tip'
 import { buildIndex, searchIndex } from '@/lib/search'
@@ -43,14 +43,14 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
   const spend = useLiveQuery(() => (open ? readCustomerSpend() : undefined), [open])
   // Outstanding debt (نسیه) per customer, loaded the same deferred way.
   const debts = useLiveQuery(() => (open ? readDebts() : undefined), [open])
-  const owed = (id: string) => debts?.get(id)?.balance ?? 0
-  const debtors = debts ? customers.filter((c) => owed(c.id) > 0) : []
-  const totalOwed = debtors.reduce((sum, c) => sum + owed(c.id), 0)
+  const balanceOf = (id: string) => debts?.get(id)?.balance ?? 0
+  const debtors = debts ? customers.filter((c) => balanceOf(c.id) < 0) : []
+  const totalOwed = debtors.reduce((sum, c) => sum + Math.abs(balanceOf(c.id)), 0)
 
   // Newest first; a query ranks the customers by relevance instead.
   const index = useMemo(() => buildIndex([...customers].reverse(), customerFields), [customers])
   const found = useMemo(() => searchIndex(index, q), [index, q])
-  const matches = debtorsOnly ? found.filter((c) => owed(c.id) > 0) : found
+  const matches = debtorsOnly ? found.filter((c) => balanceOf(c.id) < 0) : found
   const pages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE))
   const current = Math.min(page, pages - 1)
   const shown = matches.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
@@ -77,7 +77,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative w-full sm:flex-1">
-              <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="pointer-events-none absolute inset-s-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 aria-label="جستجوی مشتری"
                 placeholder="جستجو بر اساس نام یا شماره"
@@ -108,7 +108,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
 
           {debts && totalOwed > 0 && (
             <div className="flex items-center justify-between rounded-lg bg-destructive/10 px-3 py-2 text-sm">
-              <span>مجموع نسیه‌ی مشتریان</span>
+              <span>مجموع بدهی مشتریان</span>
               <b className="text-destructive">{formatNumber(totalOwed)} تومان</b>
             </div>
           )}
@@ -123,12 +123,12 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                 <span>نام</span>
                 <span>شماره‌ی تماس</span>
                 <span>مجموع خرید</span>
-                <span>نسیه</span>
+                <span>مانده کیف پول</span>
                 <span />
               </div>
               {shown.map((c) => {
                 const busy = usage.customerIds.has(c.id)
-                const indebted = owed(c.id) > 0
+                const indebted = balanceOf(c.id) < 0
                 return (
                   <div
                     key={c.id}
@@ -151,18 +151,34 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                     ) : (
                       (() => {
                         const info = debts.get(c.id)
-                        if (!info) return <span className="text-sm text-muted-foreground">—</span>
+                        if (!info)
+                          return (
+                            <Tip label="مشاهده‌ی تراکنش‌های کیف پول">
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                className="justify-start px-1 text-muted-foreground"
+                                onClick={() => setDebtsFor(c)}
+                              >
+                                0
+                              </Button>
+                            </Tip>
+                          )
                         return (
-                          <Tip label="مشاهده‌ی نسیه‌ها و پرداخت‌ها">
+                          <Tip label="مشاهده‌ی تراکنش‌های کیف پول">
                             <Button
                               variant="ghost"
                               size="xs"
                               className="justify-start px-1"
                               onClick={() => setDebtsFor(c)}
                             >
-                              {info.balance > 0 ? (
+                              {info.balance < 0 ? (
                                 <span className="font-bold text-destructive" dir="ltr">
-                                  {formatNumber(info.balance)}
+                                  {formatNumber(Math.abs(info.balance))}-
+                                </span>
+                              ) : info.balance > 0 ? (
+                                <span className="font-bold text-green-600" dir="ltr">
+                                  +{formatNumber(info.balance)}
                                 </span>
                               ) : (
                                 <span className="text-muted-foreground">تسویه‌شده</span>
@@ -188,7 +204,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                           busy
                             ? 'این مشتری در یک تایم فعال است'
                             : indebted
-                              ? 'این مشتری نسیه‌ی پرداخت‌نشده دارد'
+                              ? 'این مشتری بدهی پرداخت‌نشده دارد'
                               : 'حذف'
                         }
                       >

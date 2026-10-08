@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { MoneyInput } from '@/components/ui/money-input'
 import { Tip } from '@/components/tip'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
@@ -332,10 +333,8 @@ export function SettingsDialog({
                     </SelectContent>
                   </Select>
                   <span className="text-sm text-muted-foreground">مضرب</span>
-                  <Input
+                  <MoneyInput
                     id="round-step"
-                    dir="ltr"
-                    inputMode="numeric"
                     aria-invalid={!roundingValid}
                     className="w-32"
                     value={draft.rounding.step > 0 ? formatNumber(draft.rounding.step) : ''}
@@ -368,10 +367,8 @@ export function SettingsDialog({
                   <span className="text-sm text-muted-foreground">دقیقه (محدودیت زمانی)</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Input
+                  <MoneyInput
                     id="quick-extend-cost"
-                    dir="ltr"
-                    inputMode="numeric"
                     aria-invalid={draft.quickExtend.cost <= 0}
                     aria-label="افزایش سریع محدودیت هزینه"
                     className="w-32"

@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { MoneyInput } from '@/components/ui/money-input'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { MINUTE_MS } from '@/lib/store'
@@ -145,10 +146,8 @@ export function LimitDialog({
                 </Button>
               )}
             </div>
-            <Input
+            <MoneyInput
               id="limit-cost"
-              dir="ltr"
-              inputMode="numeric"
               placeholder="بدون محدودیت"
               value={costAmount > 0 ? formatNumber(costAmount) : costText}
               onChange={(e) => setCostText(e.target.value)}

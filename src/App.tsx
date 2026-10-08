@@ -32,7 +32,7 @@ import { useIdleLock } from '@/lib/use-idle-lock'
 import {
   addSessionRow,
   deleteSessionRow,
-  endSessionRow,
+  endSessionWithWallet,
   markOnboarded,
   needsOnboarding,
   readRecentHistory,
@@ -42,7 +42,6 @@ import {
   updateSessionRow,
 } from '@/lib/db'
 import {
-  buildHistoryEntry,
   createSession,
   sessionSearchFields,
   useLocalStorage,
@@ -130,7 +129,7 @@ function Main() {
   // lookup by id, so any corrections made right before ending are included in the history.
   const endSession = (session: Session, finalTotal?: number, onAccount?: boolean) => {
     const customer = settings.customers.find((c) => c.id === session.customerId)
-    endSessionRow(buildHistoryEntry(session, customer, Date.now(), finalTotal, onAccount))
+    endSessionWithWallet(session, customer, { finalTotal, onAccount })
   }
 
   const addSession = (
@@ -140,9 +139,10 @@ function Main() {
     customerId?: string,
     limit?: { minutes?: number; cost?: number },
     reserve?: boolean,
+    prepay?: number,
   ) =>
     addSessionRow(
-      createSession(device, category, price, customerId, Date.now(), limit, reserve),
+      createSession(device, category, price, customerId, Date.now(), limit, reserve, prepay),
     )
 
   // Device types that have devices; the filter / grouping UI needs more than one.

@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { MoneyInput } from '@/components/ui/money-input'
 import { RadioGroup } from '@/components/ui/radio-group'
 import { SaveExtraItemDialog } from '@/components/save-extra-item-dialog'
 import { Tip } from '@/components/tip'
@@ -397,10 +398,8 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
                       قیمت واحد
                     </Label>
                     <div className="flex items-center gap-2">
-                      <Input
+                      <MoneyInput
                         id="other-price"
-                        dir="ltr"
-                        inputMode="numeric"
                         placeholder="0"
                         value={otherPrice ? formatNumber(otherUnit) : ''}
                         onChange={(e) => setOtherPrice(e.target.value)}

@@ -2,10 +2,12 @@ import { resetSecurity } from '@/lib/security'
 import { emitSessionUpdated } from '@/lib/session-events'
 import Dexie, { type Table } from 'dexie'
 import {
+  buildHistoryEntry,
   applyDevices,
   applyExtraItems,
   applyPrices,
   defaultSettings,
+  settleSessionAmount,
   uid,
   type CatalogItem,
   type Customer,
@@ -17,6 +19,7 @@ import {
   type RateGroup,
   type Session,
   type Settings,
+  type WalletTransaction,
 } from '@/lib/store'
 
 // Catalog rows are never removed: deleting sets `deletedAt` (soft delete) so ids stay stable
@@ -34,6 +37,7 @@ class GamenetDB extends Dexie {
   sessions!: Table<Session, string>
   history!: Table<HistoryEntry, string>
   payments!: Table<Payment, string>
+  walletTransactions!: Table<WalletTransaction, string>
 
   constructor() {
     super('gamenet-timer-manager')
@@ -52,6 +56,44 @@ class GamenetDB extends Dexie {
     this.version(2).stores({ meta: 'key' })
     // v3: debt (نسیه) payments, and a customer index on history for the debt ledger.
     this.version(3).stores({ payments: 'id, customerId, paidAt', history: 'id, endedAt, customerId' })
+    // v4: signed customer wallet ledger (negative = debt, positive = credit).
+    this.version(4)
+      .stores({
+        payments: 'id, customerId, paidAt',
+        history: 'id, endedAt, customerId',
+        walletTransactions: 'id, customerId, at, kind, sessionId',
+      })
+      .upgrade(async (tx) => {
+        const wallet = tx.table('walletTransactions')
+        const histories = await tx.table('history').toArray()
+        const payments = await tx.table('payments').toArray()
+        const rows: WalletTransaction[] = []
+
+        for (const h of histories as HistoryEntry[]) {
+          if (!h.customerId || !h.onAccount || !Number.isFinite(h.total) || h.total <= 0) continue
+          rows.push({
+            id: uid(),
+            customerId: h.customerId,
+            amount: -h.total,
+            at: h.endedAt || Date.now(),
+            kind: 'legacy-debt',
+            sessionId: h.sessionId,
+            note: 'واردشده از سابقه‌ی نسیه‌ی قدیمی',
+          })
+        }
+        for (const p of payments as Payment[]) {
+          if (!p.customerId || !Number.isFinite(p.amount) || p.amount <= 0) continue
+          rows.push({
+            id: uid(),
+            customerId: p.customerId,
+            amount: p.amount,
+            at: p.paidAt || Date.now(),
+            kind: 'legacy-payment',
+            note: 'واردشده از پرداخت‌های قدیمی',
+          })
+        }
+        if (rows.length > 0) await wallet.bulkAdd(rows)
+      })
     this.on('populate', (tx) => {
       const d = defaultSettings()
       const seed = (table: string, rows: object[]) =>
@@ -97,7 +139,9 @@ export const readSettings = async (): Promise<Settings> => {
 }
 
 export const readSessions = async (): Promise<Session[]> =>
-  (await db.sessions.toArray()).sort(
+  (await db.sessions.toArray())
+    .map((s) => (s.prepayEntries ? s : { ...s, prepayEntries: [] }))
+    .sort(
     (a, b) => (a.segments[0]?.from ?? a.reservedAt ?? 0) - (b.segments[0]?.from ?? b.reservedAt ?? 0),
   )
 
@@ -212,7 +256,7 @@ export const addCatalogItem = async (
   return fresh.extraItems.find((i) => norm(i.name) === norm(item.name) && i.categoryId === catId)
 }
 
-export const addSessionRow =(s: Session) => db.sessions.add(s)
+export const addSessionRow = (s: Session) => db.sessions.add(s)
 
 export const updateSessionRow = (id: string, fn: (s: Session) => Session) =>
   db.transaction('rw', db.sessions, async () => {
@@ -231,6 +275,159 @@ export const endSessionRow = (entry: HistoryEntry) =>
     await db.history.add(entry)
     await db.sessions.delete(entry.sessionId)
   })
+
+// Deletes a history entry and reverses any wallet transactions it created (debt, credit used,
+// leftover-prepay credit), so a deleted entry never leaves stray balance behind.
+export const deleteHistoryEntry = (entry: HistoryEntry) =>
+  db.transaction('rw', [db.history, db.walletTransactions], async () => {
+    await db.history.delete(entry.id)
+    const linked = await db.walletTransactions.where('sessionId').equals(entry.sessionId).toArray()
+    await db.walletTransactions.bulkDelete(linked.map((x) => x.id))
+  })
+
+export const readWalletBalance = async (customerId: string): Promise<number> => {
+  const rows = await db.walletTransactions.where('customerId').equals(customerId).toArray()
+  return rows.reduce((sum, x) => sum + x.amount, 0)
+}
+
+export const readWalletBalances = async (): Promise<Map<string, number>> => {
+  const out = new Map<string, number>()
+  await db.walletTransactions.each((x) => {
+    out.set(x.customerId, (out.get(x.customerId) ?? 0) + x.amount)
+  })
+  return out
+}
+
+export const readCustomerWalletTransactions = async (
+  customerId: string,
+  range?: { from?: number; to?: number },
+): Promise<WalletTransaction[]> => {
+  const rows = await db.walletTransactions.where('customerId').equals(customerId).toArray()
+  const from = range?.from
+  const to = range?.to
+  return rows
+    .filter((x) => (from === undefined || x.at >= from) && (to === undefined || x.at <= to))
+    .sort((a, b) => b.at - a.at)
+}
+
+export const addWalletTransaction = (
+  customerId: string,
+  amount: number,
+  kind: WalletTransaction['kind'],
+  note?: string,
+  sessionId?: string,
+) =>
+  db.walletTransactions.add({
+    id: uid(),
+    customerId,
+    amount,
+    at: Date.now(),
+    kind,
+    ...(note ? { note } : {}),
+    ...(sessionId ? { sessionId } : {}),
+  })
+
+export const updateWalletTransaction = async (
+  id: string,
+  patch: Partial<Pick<WalletTransaction, 'amount' | 'note'>>,
+) => {
+  const cur = await db.walletTransactions.get(id)
+  if (!cur || cur.kind !== 'manual-adjustment') return
+  const amount =
+    patch.amount !== undefined && Number.isFinite(patch.amount) ? Math.floor(patch.amount) : cur.amount
+  if (amount <= 0) return
+  await db.walletTransactions.update(id, {
+    amount,
+    ...(patch.note !== undefined ? { note: patch.note } : {}),
+  })
+}
+
+export const deleteWalletTransaction = async (id: string) => {
+  const cur = await db.walletTransactions.get(id)
+  if (!cur || cur.kind !== 'manual-adjustment') return
+  await db.walletTransactions.delete(id)
+}
+
+type EndSessionSettlement = {
+  finalTotal?: number
+  // Remaining amount after credit/prepay: true = put on debt, false = collected now.
+  onAccount?: boolean
+}
+
+export const endSessionWithWallet = async (
+  session: Session,
+  customer: Customer | undefined,
+  settlement?: EndSessionSettlement,
+) => {
+  const now = Date.now()
+  const finalTotal = settlement?.finalTotal
+  const draft = buildHistoryEntry(session, customer, now, finalTotal)
+  const total = draft.total
+  const prepay = session.prepayEntries?.reduce((sum, x) => sum + x.amount, 0) ?? 0
+
+  await db.transaction('rw', [db.sessions, db.history, db.walletTransactions], async () => {
+    const walletBalance = customer?.id ? await readWalletBalance(customer.id) : 0
+
+    const settle = settleSessionAmount(total, walletBalance, prepay)
+    const payableAsDebt = !!customer && !!settlement?.onAccount && settle.payableNow > 0
+
+    const entry = buildHistoryEntry(
+      session,
+      customer,
+      now,
+      finalTotal,
+      payableAsDebt,
+      {
+        creditUsed: settle.walletCreditUsed,
+        prepayUsed: settle.prepayUsed,
+        prepayReturned: settle.prepayReturned,
+        // Prepay was cash collected up front; a leftover prepay is only handed back as cash for
+        // a guest (a customer's leftover becomes wallet credit instead), so only that case nets out.
+        cashPaid: prepay + (payableAsDebt ? 0 : settle.payableNow) - (customer ? 0 : settle.prepayReturned),
+      },
+    )
+
+    await db.history.add(entry)
+
+    if (customer?.id) {
+      if (settle.walletCreditUsed > 0) {
+        await db.walletTransactions.add({
+          id: uid(),
+          customerId: customer.id,
+          amount: -settle.walletCreditUsed,
+          at: now,
+          kind: 'session-debt',
+          sessionId: session.id,
+          note: 'استفاده خودکار از اعتبار کیف پول برای تایم',
+        })
+      }
+      if (payableAsDebt) {
+        await db.walletTransactions.add({
+          id: uid(),
+          customerId: customer.id,
+          amount: -settle.payableNow,
+          at: now,
+          kind: 'session-debt',
+          sessionId: session.id,
+          note: 'باقی‌مانده‌ی تایم به بدهی منتقل شد',
+        })
+      }
+      if (settle.prepayReturned > 0) {
+        await db.walletTransactions.add({
+          id: uid(),
+          customerId: customer.id,
+          amount: settle.prepayReturned,
+          at: now,
+          kind: 'session-credit-leftover',
+          sessionId: session.id,
+          note: 'باقی‌مانده‌ی پیش‌پرداخت به اعتبار منتقل شد',
+        })
+      }
+    }
+
+    await db.sessions.delete(session.id)
+  })
+}
 
 // Saved immediately (from the session flow), outside the Settings draft. A soft-deleted
 // customer with the same name is restored instead of creating a duplicate.
@@ -264,8 +461,7 @@ export const deleteCustomer = (id: string) => db.customers.update(id, { deletedA
 
 export type DebtInfo = { debt: number; paid: number; balance: number }
 
-// Debt, payments and what is still owed per customer. Scans history once (like the spend totals),
-// so callers load it after the customer list.
+// Signed wallet summary per customer: negative balance means debt, positive means credit.
 export const readDebts = async (): Promise<Map<string, DebtInfo>> => {
   const out = new Map<string, DebtInfo>()
   const at = (id: string) => {
@@ -273,13 +469,12 @@ export const readDebts = async (): Promise<Map<string, DebtInfo>> => {
     if (!d) out.set(id, (d = { debt: 0, paid: 0, balance: 0 }))
     return d
   }
-  await db.history.each((h) => {
-    if (h.onAccount && h.customerId) at(h.customerId).debt += h.total
+  await db.walletTransactions.each((tx) => {
+    const d = at(tx.customerId)
+    d.balance += tx.amount
+    if (tx.amount < 0) d.debt += -tx.amount
+    else d.paid += tx.amount
   })
-  await db.payments.each((p) => {
-    at(p.customerId).paid += p.amount
-  })
-  out.forEach((d) => (d.balance = d.debt - d.paid))
   return out
 }
 
@@ -296,7 +491,18 @@ export const readCustomerLedger = async (customerId: string) => {
 }
 
 export const addPayment = (customerId: string, amount: number) =>
-  db.payments.add({ id: uid(), customerId, amount, paidAt: Date.now() })
+  db.transaction('rw', [db.payments, db.walletTransactions], async () => {
+    const at = Date.now()
+    await db.payments.add({ id: uid(), customerId, amount, paidAt: at })
+    await db.walletTransactions.add({
+      id: uid(),
+      customerId,
+      amount,
+      at,
+      kind: 'legacy-payment',
+      note: 'پرداخت دستی',
+    })
+  })
 
 // ---- onboarding ---------------------------------------------------------------
 
@@ -335,6 +541,7 @@ const BACKUP_TABLE_NAMES = [
   'sessions',
   'history',
   'payments',
+  'walletTransactions',
 ] as const
 
 export type BackupTableName = (typeof BACKUP_TABLE_NAMES)[number]
@@ -352,11 +559,12 @@ const backupTables = (): Record<BackupTableName, Table<any, string>> =>
     sessions: db.sessions,
     history: db.history,
     payments: db.payments,
+    walletTransactions: db.walletTransactions,
   })
 
 export type Backup = {
   app: typeof BACKUP_APP
-  version: 1
+  version: 1 | 2
   exportedAt: number
   tables: Record<BackupTableName, object[]>
   // Per-viewer settings from localStorage (theme, accent, title, icon, view, grouping, rounding).
@@ -390,7 +598,7 @@ export const exportBackup = async (): Promise<Backup> => {
   const rows = await Promise.all(names.map((n) => tables[n].toArray()))
   return {
     app: BACKUP_APP,
-    version: 1,
+    version: 2,
     exportedAt: Date.now(),
     tables: Object.fromEntries(names.map((n, i) => [n, rows[i]])) as Backup['tables'],
     prefs: readPrefs(),
@@ -400,7 +608,8 @@ export const exportBackup = async (): Promise<Backup> => {
 // Checks the shape of a parsed file; throws Error('invalid') when it is not one of our backups.
 export const parseBackup = (value: unknown): Backup => {
   const b = value as Partial<Backup> | null
-  if (!b || typeof b !== 'object' || b.app !== BACKUP_APP || b.version !== 1) throw new Error('invalid')
+  if (!b || typeof b !== 'object' || b.app !== BACKUP_APP || (b.version !== 1 && b.version !== 2))
+    throw new Error('invalid')
   const names = [...BACKUP_TABLE_NAMES]
   const tables = {} as Backup['tables']
   for (const n of names) {
@@ -415,7 +624,13 @@ export const parseBackup = (value: unknown): Backup => {
     tables[n] = rows
   }
   const prefs = b.prefs && typeof b.prefs === 'object' ? b.prefs : {}
-  return { app: BACKUP_APP, version: 1, exportedAt: Number(b.exportedAt) || 0, tables, prefs }
+  return {
+    app: BACKUP_APP,
+    version: b.version,
+    exportedAt: Number(b.exportedAt) || 0,
+    tables,
+    prefs,
+  }
 }
 
 // Replaces everything (data and preferences) with the backup's content in one transaction.
@@ -425,7 +640,45 @@ export const importBackup = async (backup: Backup) => {
   await db.transaction('rw', names.map((n) => tables[n]), async () => {
     for (const n of names) {
       await tables[n].clear()
-      await tables[n].bulkAdd(backup.tables[n] as never[])
+      const rows = backup.tables[n] as never[]
+      if (n === 'sessions') {
+        const normalized = (rows as Session[]).map((s) => ({ ...s, prepayEntries: s.prepayEntries ?? [] }))
+        if (normalized.length > 0) await tables[n].bulkAdd(normalized as never[])
+        continue
+      }
+      if (rows.length > 0) await tables[n].bulkAdd(rows)
+    }
+
+    // Backups from old versions can contain no wallet rows. Imports bypass Dexie upgrades,
+    // so rebuild wallet transactions from legacy debt/payment data here.
+    const walletCount = await db.walletTransactions.count()
+    if (walletCount === 0) {
+      const [histories, payments] = await Promise.all([db.history.toArray(), db.payments.toArray()])
+      const rows: WalletTransaction[] = []
+      for (const h of histories) {
+        if (!h.customerId || !h.onAccount || !Number.isFinite(h.total) || h.total <= 0) continue
+        rows.push({
+          id: uid(),
+          customerId: h.customerId,
+          amount: -h.total,
+          at: h.endedAt || Date.now(),
+          kind: 'legacy-debt',
+          sessionId: h.sessionId,
+          note: 'Imported from legacy on-account history',
+        })
+      }
+      for (const p of payments) {
+        if (!p.customerId || !Number.isFinite(p.amount) || p.amount <= 0) continue
+        rows.push({
+          id: uid(),
+          customerId: p.customerId,
+          amount: p.amount,
+          at: p.paidAt || Date.now(),
+          kind: 'legacy-payment',
+          note: 'Imported from legacy payment rows',
+        })
+      }
+      if (rows.length > 0) await db.walletTransactions.bulkAdd(rows)
     }
     await db.meta.put({ key: 'onboarded', value: '1' })
   })

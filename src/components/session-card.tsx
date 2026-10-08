@@ -93,7 +93,6 @@ export function SessionCard({
   const [summaryNow, setSummaryNow] = useState(0)
   const [customerOpen, setCustomerOpen] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
-  const [detailOpen, setDetailOpen] = useState(false)
   const [limitOpen, setLimitOpen] = useState(false)
   const [pendingTypeId, setPendingTypeId] = useState<string | null>(null)
   const running = session.status === 'running'
@@ -185,6 +184,12 @@ ${limitLines.join('\n')}` : ''
     setPendingTypeId(null)
   }
   const pendingType = flatPrices(settings.rateGroups).find((t) => t.id === pendingTypeId)
+  useEffect(() => {
+    if (!summaryOpen || !running) return
+    setSummaryNow(Date.now())
+    const t = setInterval(() => setSummaryNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [summaryOpen, running])
   const openSummary = () => {
     setSummaryNow(Date.now())
     setSummaryOpen(true)
@@ -267,28 +272,11 @@ ${limitLines.join('\n')}` : ''
         />
 
         <SessionSummaryDialog
-          mode="view"
-          open={detailOpen}
-          onOpenChange={setDetailOpen}
-          deviceName={customer ? `${name} (${customer.name})` : name}
-          session={session}
-          settings={settings}
-          now={time}
-          onUpdate={onUpdate}
-          onConfirm={(editedSession, finalTotal, onAccount) => {
-            setDetailOpen(false)
-            onEnd(editedSession, finalTotal, onAccount)
-          }}
-        />
-
-        <SessionSummaryDialog
-          mode="end"
           open={summaryOpen}
           onOpenChange={setSummaryOpen}
           deviceName={customer ? `${name} (${customer.name})` : name}
           session={session}
           settings={settings}
-          customer={customer}
           now={summaryNow}
           onUpdate={onUpdate}
           onConfirm={(editedSession, finalTotal, onAccount) => {
@@ -344,7 +332,7 @@ ${limitLines.join('\n')}` : ''
           <Tip label="مشاهده جزئیات هزینه">
             <button
               type="button"
-              onClick={() => setDetailOpen(true)}
+              onClick={openSummary}
               className="flex items-baseline justify-center gap-1.5 rounded-md py-0.5 hover:bg-muted"
             >
               <span className="text-2xl font-bold" dir="ltr">
@@ -432,7 +420,7 @@ ${limitLines.join('\n')}` : ''
                   <Badge
                     variant="secondary"
                     className="h-auto cursor-pointer py-0.5 hover:bg-secondary/70"
-                    render={<button type="button" onClick={() => setDetailOpen(true)} />}
+                    render={<button type="button" onClick={openSummary} />}
                   >
                     بوفه و سایر هزینه‌ها: {formatNumber(session.extraItems.reduce((n, i) => n + i.qty, 0))}
                   </Badge>
@@ -519,7 +507,7 @@ ${limitLines.join('\n')}` : ''
                   dir="ltr"
                   className="cursor-pointer font-bold"
                   value={displayTotal}
-                  onClick={() => setDetailOpen(true)}
+                  onClick={openSummary}
                 />
               </Tip>
               <span className="shrink-0 text-sm text-muted-foreground">تومان</span>
@@ -534,7 +522,7 @@ ${limitLines.join('\n')}` : ''
                 <Badge
                   variant="secondary"
                   className="h-auto cursor-pointer py-1 hover:bg-secondary/70"
-                  render={<button type="button" onClick={() => setDetailOpen(true)} />}
+                  render={<button type="button" onClick={openSummary} />}
                 >
                   {i.name}
                   {i.description ? ` (${i.description})` : ''} × {formatNumber(i.qty)} ={' '}

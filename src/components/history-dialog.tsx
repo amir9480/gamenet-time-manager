@@ -31,7 +31,7 @@ import { FilterCombobox } from '@/components/filter-combobox'
 import { StatsPanel } from '@/components/stats-panel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { JalaliDatePicker } from '@/components/jalali-date-picker'
-import { db } from '@/lib/db'
+import { db, deleteHistoryEntry } from '@/lib/db'
 import { NO_CUSTOMER, previousRange } from '@/lib/stats'
 import { exportCsv, exportXlsx, printReport, rangeLabel } from '@/lib/report-export'
 import { formatDuration, formatNumber } from '@/lib/format'
@@ -65,9 +65,9 @@ const PRESETS: { id: Preset; label: string }[] = [
 const toman = (n: number) => `${formatNumber(n)} تومان`
 
 const PAY_ITEMS = [
-  { value: 'all', label: 'همه (نقدی و نسیه)' },
+  { value: 'all', label: 'همه (تسویه‌شده و بدهی)' },
   { value: 'paid', label: 'پرداخت‌شده' },
-  { value: 'account', label: 'نسیه' },
+  { value: 'account', label: 'بدهی' },
 ]
 
 type Pending = { kind: 'one'; entry: HistoryEntry } | { kind: 'range' } | null
@@ -174,8 +174,8 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
 
   const confirmDelete = async () => {
     if (!pending) return
-    if (pending.kind === 'one') await db.history.delete(pending.entry.id)
-    else await db.history.bulkDelete((entries ?? []).map((e) => e.id))
+    if (pending.kind === 'one') await deleteHistoryEntry(pending.entry)
+    else for (const e of entries ?? []) await deleteHistoryEntry(e)
     setPending(null)
   }
 
@@ -347,7 +347,17 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
                           {toman(e.total)}
                           {e.onAccount && (
                             <Badge variant="destructive" className="ms-1.5">
-                              نسیه
+                              بدهی
+                            </Badge>
+                          )}
+                          {!!e.creditUsed && e.creditUsed > 0 && (
+                            <Badge variant="secondary" className="ms-1.5">
+                              اعتبار {formatNumber(e.creditUsed)}
+                            </Badge>
+                          )}
+                          {!!e.prepayUsed && e.prepayUsed > 0 && (
+                            <Badge variant="secondary" className="ms-1.5">
+                              پیش‌پرداخت {formatNumber(e.prepayUsed)}
                             </Badge>
                           )}
                         </div>
@@ -437,7 +447,17 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
                             {toman(e.total)}
                             {e.onAccount && (
                               <Badge variant="destructive" className="ms-1.5">
-                                نسیه
+                                بدهی
+                              </Badge>
+                            )}
+                            {!!e.creditUsed && e.creditUsed > 0 && (
+                              <Badge variant="secondary" className="ms-1.5">
+                                اعتبار {formatNumber(e.creditUsed)}
+                              </Badge>
+                            )}
+                            {!!e.prepayUsed && e.prepayUsed > 0 && (
+                              <Badge variant="secondary" className="ms-1.5">
+                                پیش‌پرداخت {formatNumber(e.prepayUsed)}
                               </Badge>
                             )}
                           </td>
@@ -527,7 +547,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
             <AlertDialogTitle>حذف از تاریخچه؟</AlertDialogTitle>
             <AlertDialogDescription>
               {pending?.kind === 'one'
-                ? `تایم «${pending.entry.deviceNames.join('، ')}» (${formatJalaliDate(pending.entry.endedAt)}) برای همیشه حذف می‌شود.${pending.entry.onAccount ? ' این تایم نسیه است و از بدهی مشتری هم کم می‌شود.' : ''}`
+                ? `تایم «${pending.entry.deviceNames.join('، ')}» (${formatJalaliDate(pending.entry.endedAt)}) برای همیشه حذف می‌شود.${pending.entry.onAccount ? ' این تایم بدهی است و از بدهی مشتری هم کم می‌شود.' : ''}`
                 : `${toFa(summary.count)} تایم در بازه‌ی انتخاب‌شده برای همیشه حذف می‌شود.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -582,9 +602,29 @@ function Details({ entry }: { entry: HistoryEntry }) {
           <span className="shrink-0">{toman(i.price * i.qty)}</span>
         </div>
       ))}
+      {!!entry.creditUsed && entry.creditUsed > 0 && (
+        <div className="text-green-700">
+          استفاده از اعتبار مشتری: {toman(entry.creditUsed)}
+        </div>
+      )}
+      {!!entry.prepayUsed && entry.prepayUsed > 0 && (
+        <div className="text-blue-700">
+          استفاده از پیش‌پرداخت: {toman(entry.prepayUsed)}
+        </div>
+      )}
+      {!!entry.prepayReturned && entry.prepayReturned > 0 && (
+        <div className="text-blue-700">
+          باقی‌مانده‌ی پیش‌پرداخت: {toman(entry.prepayReturned)}
+        </div>
+      )}
+      {!!entry.cashPaid && entry.cashPaid > 0 && (
+        <div>
+          دریافتی نقدی: {toman(entry.cashPaid)}
+        </div>
+      )}
       {entry.onAccount && (
         <div className="font-bold text-destructive">
-          نسیه: این مبلغ به حساب {entry.customerName} گذاشته شده است.
+          بدهی: بخشی از مبلغ به حساب {entry.customerName} گذاشته شده است.
         </div>
       )}
       <div className="flex justify-between gap-4 border-t pt-1.5 font-bold">

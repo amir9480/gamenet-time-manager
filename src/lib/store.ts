@@ -59,6 +59,12 @@ export type ExtraItem = {
   description?: string
 }
 
+export type SessionPrepay = {
+  id: string
+  amount: number
+  at: number
+}
+
 export type Session = {
   id: string
   // Current device (snapshots of its name/category are kept in sync by `applyDevices`).
@@ -70,6 +76,9 @@ export type Session = {
   typeId: string
   segments: Segment[]
   extraItems: ExtraItem[]
+  // Session-scoped prepay amounts collected before ending. For customer sessions this can be
+  // turned into wallet credit/debit during settlement; for guests it is only session-local.
+  prepayEntries?: SessionPrepay[]
   // Optional limits: independent of each other, either or both may be set. `limitMs` is a total
   // running-time budget (ms); the countdown is `limitMs - elapsedMs`, so pausing freezes it.
   // `costLimit` is a total cost budget (toman); the countdown is `costLimit - computeCost`.
@@ -178,6 +187,8 @@ export const createSession = (
   limit?: { minutes?: number; cost?: number },
   // Reserve the device: the session starts paused with an empty timer.
   reserve = false,
+  // Money received before ending this session.
+  prepayAmount?: number,
 ): Session => ({
   id: uid(),
   deviceId: device.id,
@@ -189,6 +200,9 @@ export const createSession = (
   segments: reserve ? [] : [openSegment(price, device.id, device.name, category, now)],
   ...(reserve ? { reservedAt: now } : {}),
   extraItems: [],
+  ...(prepayAmount && prepayAmount > 0
+    ? { prepayEntries: [{ id: uid(), amount: prepayAmount, at: now }] }
+    : {}),
   ...(limit?.minutes && limit.minutes > 0 ? { limitMs: limit.minutes * MINUTE_MS } : {}),
   ...(limit?.cost && limit.cost > 0 ? { costLimit: limit.cost } : {}),
 })
@@ -501,6 +515,22 @@ export const removeExtraItem = (s: Session, id: string): Session => ({
   extraItems: s.extraItems.filter((i) => i.id !== id),
 })
 
+export const prepayTotal = (s: Session) =>
+  (s.prepayEntries ?? []).reduce((sum, x) => sum + x.amount, 0)
+
+export const addSessionPrepay = (s: Session, amount: number, at: number): Session => {
+  if (amount <= 0) return s
+  return {
+    ...s,
+    prepayEntries: [...(s.prepayEntries ?? []), { id: uid(), amount, at }],
+  }
+}
+
+export const removeSessionPrepay = (s: Session, id: string): Session => ({
+  ...s,
+  prepayEntries: (s.prepayEntries ?? []).filter((x) => x.id !== id),
+})
+
 // ---- what a live session still references (blocks deletion in Settings) -----------
 
 export type Usage = {
@@ -571,10 +601,60 @@ export type HistoryEntry = {
   calculatedTotal?: number
   // نسیه: the customer did not pay when the session ended; `total` was added to their debt.
   onAccount?: boolean
+  // Session-level prepay, for audit and guest settlement visibility.
+  prepayTotal?: number
+  prepayUsed?: number
+  prepayReturned?: number
+  // Wallet/credit usage at settlement.
+  creditUsed?: number
+  cashPaid?: number
 }
 
 // Money a customer paid towards their debt (any amount, any time).
 export type Payment = { id: string; customerId: string; amount: number; paidAt: number }
+
+export type WalletTransactionKind =
+  | 'legacy-debt'
+  | 'legacy-payment'
+  | 'session-debt'
+  | 'session-credit-leftover'
+  | 'manual-adjustment'
+
+export type WalletTransaction = {
+  id: string
+  customerId: string
+  amount: number
+  at: number
+  kind: WalletTransactionKind
+  sessionId?: string
+  note?: string
+}
+
+export type SessionSettlement = {
+  total: number
+  walletCreditUsed: number
+  prepayUsed: number
+  payableNow: number
+  prepayReturned: number
+}
+
+export const settleSessionAmount = (
+  total: number,
+  walletBalance: number,
+  sessionPrepay: number,
+): SessionSettlement => {
+  const walletCredit = Math.max(0, walletBalance)
+  const walletCreditUsed = Math.min(walletCredit, Math.max(0, total))
+  const afterWallet = Math.max(0, total - walletCreditUsed)
+  const prepayUsed = Math.min(Math.max(0, sessionPrepay), afterWallet)
+  return {
+    total,
+    walletCreditUsed,
+    prepayUsed,
+    payableNow: Math.max(0, total - walletCreditUsed - prepayUsed),
+    prepayReturned: Math.max(0, sessionPrepay - prepayUsed),
+  }
+}
 
 const distinct = (xs: string[]) => [...new Set(xs.filter(Boolean))]
 
@@ -586,12 +666,15 @@ export const buildHistoryEntry = (
   finalTotal?: number,
   // Put the amount on the customer's account instead of being paid now (needs a customer).
   onAccount?: boolean,
+  // Optional settlement details for payment/credit/prepay visibility.
+  settlement?: Partial<Pick<HistoryEntry, 'prepayUsed' | 'prepayReturned' | 'creditUsed' | 'cashPaid'>>,
 ): HistoryEntry => {
   const closed = pauseSession(s, now)
   const timeCost = closed.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0)
   const itemsCost = extraItemsCost(closed)
   const calculated = timeCost + itemsCost
   const total = finalTotal ?? calculated
+  const prepay = prepayTotal(closed)
   return {
     id: uid(),
     sessionId: s.id,
@@ -608,8 +691,15 @@ export const buildHistoryEntry = (
     timeCost,
     extraItemsCost: itemsCost,
     total,
+    ...(prepay > 0 ? { prepayTotal: prepay } : {}),
     ...(total !== calculated ? { calculatedTotal: calculated } : {}),
     ...(onAccount && customer ? { onAccount: true } : {}),
+    ...(settlement?.prepayUsed !== undefined ? { prepayUsed: settlement.prepayUsed } : {}),
+    ...(settlement?.prepayReturned !== undefined
+      ? { prepayReturned: settlement.prepayReturned }
+      : {}),
+    ...(settlement?.creditUsed !== undefined ? { creditUsed: settlement.creditUsed } : {}),
+    ...(settlement?.cashPaid !== undefined ? { cashPaid: settlement.cashPaid } : {}),
   }
 }
 

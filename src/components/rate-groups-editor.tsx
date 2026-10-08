@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { MoneyInput } from '@/components/ui/money-input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Tip } from '@/components/tip'
 import { formatNumber, parseNumber } from '@/lib/format'
@@ -129,11 +130,9 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
                         }))
                       }
                     />
-                    <Input
+                    <MoneyInput
                       aria-label={`قیمت ساعتی ${p.name}`}
                       aria-invalid={!p.price}
-                      dir="ltr"
-                      inputMode="numeric"
                       placeholder="0"
                       value={p.price ? formatNumber(p.price) : ''}
                       onChange={(e) =>

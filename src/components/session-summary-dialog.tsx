@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { Coins, NotebookPen, Pause, Plus, Trash2, Wallet } from 'lucide-react'
 import {
   AlertDialog,
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { MoneyInput } from '@/components/ui/money-input'
 import {
   Select,
   SelectContent,
@@ -31,12 +33,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { BackdateTimeDialog } from '@/components/backdate-time-dialog'
+import { CustomerSelect } from '@/components/customer-select'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { ExtraItemPicker } from '@/components/extra-item-picker'
 import { JalaliDatePicker } from '@/components/jalali-date-picker'
 import { PriceSelect } from '@/components/price-select'
 import { useTheme } from '@/components/theme-provider'
 import { Tip } from '@/components/tip'
+import { readWalletBalance } from '@/lib/db'
 import { formatClock, formatDuration, formatNumber, parseNumber } from '@/lib/format'
 import { startOfDay } from '@/lib/jalali'
 import { onSessionUpdated } from '@/lib/session-events'
@@ -53,15 +57,19 @@ import {
   extraItemsCost,
   flatPrices,
   pauseSession,
+  prepayTotal,
   removeExtraItem,
+  removeSessionPrepay,
   removeSegment,
   roundAmount,
+  settleSessionAmount,
   segmentCost,
   segmentMs,
   selectedPrice,
+  extendCostLimit,
   setExtraItemQty,
   updateSegment,
-  type Customer,
+  addSessionPrepay,
   type Segment,
   type Session,
   type Settings,
@@ -74,11 +82,6 @@ type Props = {
   session: Session
   settings: Settings
   now: number
-  // 'view': correct a live session, saved via onUpdate. 'end': same editing plus the final
-  // amount/payment section; confirming ends the session (onConfirm), onUpdate is not used.
-  mode: 'view' | 'end'
-  // The session's customer; only a customer can be put on account (نسیه).
-  customer?: Customer
   onUpdate: (fn: (s: Session) => Session) => void
   // Receives the edited session, the final amount (only when it was edited), and whether it
   // goes on the customer's account.
@@ -155,36 +158,45 @@ export function SessionSummaryDialog({
   session,
   settings,
   now,
-  mode,
-  customer,
   onUpdate,
   onConfirm,
 }: Props) {
   const { rounding } = useTheme()
-
-  // Local, not the `mode` prop: pausing from the open time range's row switches the dialog into
-  // end mode in place (no close/reopen), reusing the same dialog instance/state.
-  const [localMode, setLocalMode] = useState(mode)
-  const ending = localMode === 'end'
 
   const [draft, setDraft] = useState<Session>(session)
   // What's already committed to the DB (the `session` prop lags behind it until the next
   // live-query render), so "unsaved changes" is judged against this, not the prop directly.
   const [baseline, setBaseline] = useState<Session>(session)
   const [finalText, setFinalText] = useState('')
+  const [initialFinalText, setInitialFinalText] = useState('')
   const [onAccount, setOnAccount] = useState(false)
+  const [prepayText, setPrepayText] = useState('')
+  const [guestChargebackDone, setGuestChargebackDone] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<
-    { kind: 'segment'; index: number } | { kind: 'item'; id: string; name: string } | null
+    | { kind: 'segment'; index: number }
+    | { kind: 'item'; id: string; name: string }
+    | { kind: 'prepay'; id: string; amount: number }
+    | null
   >(null)
+
+  const pickedCustomer = settings.customers.find((c) => c.id === draft.customerId)
+
+  const walletBalance = useLiveQuery(
+    () => (open && pickedCustomer?.id ? readWalletBalance(pickedCustomer.id) : undefined),
+    [open, pickedCustomer?.id],
+  )
 
   useEffect(() => {
     if (!open) return
     setDraft(session)
     setBaseline(session)
-    setLocalMode(mode)
     const seedTotal =
       session.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0) + extraItemsCost(session)
-    setFinalText(String(rounding.auto ? roundAmount(seedTotal, rounding) : seedTotal))
+    const seedFinal = String(rounding.auto ? roundAmount(seedTotal, rounding) : seedTotal)
+    setFinalText(seedFinal)
+    setInitialFinalText(seedFinal)
+    setPrepayText('')
+    setGuestChargebackDone(false)
     setOnAccount(false)
     // Only (re)seed when opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,7 +215,6 @@ export function SessionSummaryDialog({
       }
       setDraft((d) => ({ ...d, ...patch }))
       setBaseline((b) => ({ ...b, ...patch }))
-      if (updated.status === 'paused') setLocalMode('end')
     })
   }, [open, session.id])
 
@@ -214,20 +225,38 @@ export function SessionSummaryDialog({
   const itemsCost = extraItemsCost(draft)
   const total = timeTotal + itemsCost
 
+  useEffect(() => {
+    if (!open || draft.status !== 'running') return
+    const next = String(rounding.auto ? roundAmount(total, rounding) : total)
+    setFinalText(next)
+    setInitialFinalText(next)
+  }, [draft.status, open, rounding, total])
+
   const finalAmount = parseNumber(finalText)
   const edited = finalAmount !== total
+  const finalChanged = finalText !== initialFinalText
+  const prepayAmount = prepayTotal(draft)
+  const settlement = settleSessionAmount(finalAmount, walletBalance ?? 0, prepayAmount)
+  const guestNeedsChargeback = !pickedCustomer && settlement.prepayReturned > 0
+  const canConfirm = !guestNeedsChargeback || guestChargebackDone
 
-  const dirty = open && (JSON.stringify(draft) !== JSON.stringify(baseline) || (ending && edited))
+  const dirty = open && (JSON.stringify(draft) !== JSON.stringify(baseline) || finalChanged || onAccount)
   const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
 
-  const save = () => {
-    onUpdate(() => draft)
-    setBaseline(draft)
-    onOpenChange(false)
-  }
   const confirmEnd = () => {
-    onConfirm?.(draft, edited ? finalAmount : undefined, onAccount && !!customer)
+    if (!canConfirm) return
+    onConfirm?.(draft, edited ? finalAmount : undefined, onAccount && !!pickedCustomer)
   }
+
+  useEffect(() => {
+    if (!pickedCustomer && onAccount) setOnAccount(false)
+  }, [pickedCustomer, onAccount])
+
+  // The attested return amount must track the figure the operator actually confirmed; if editing
+  // the final amount or a prepay changes how much is owed back, the attestation no longer applies.
+  useEffect(() => {
+    setGuestChargebackDone(false)
+  }, [settlement.prepayReturned])
 
   // Closes the open segment in place and switches the dialog into end mode, without closing and
   // reopening it.
@@ -238,15 +267,31 @@ export function SessionSummaryDialog({
     setDraft(paused)
     setBaseline(paused)
     const seedTotal = paused.segments.reduce((sum, seg) => sum + segmentCost(seg, ts), 0) + extraItemsCost(paused)
-    setFinalText(String(rounding.auto ? roundAmount(seedTotal, rounding) : seedTotal))
-    setLocalMode('end')
+    const seedFinal = String(rounding.auto ? roundAmount(seedTotal, rounding) : seedTotal)
+    setFinalText(seedFinal)
+    setInitialFinalText(seedFinal)
   }
 
   const confirmDelete = () => {
     if (!pendingDelete) return
     if (pendingDelete.kind === 'segment') setDraft((d) => removeSegment(d, pendingDelete.index))
-    else setDraft((d) => removeExtraItem(d, pendingDelete.id))
+    else if (pendingDelete.kind === 'item') setDraft((d) => removeExtraItem(d, pendingDelete.id))
+    else setDraft((d) => removeSessionPrepay(d, pendingDelete.id))
     setPendingDelete(null)
+  }
+
+  const addPrepay = () => {
+    const amount = Math.floor(parseNumber(prepayText))
+    if (amount <= 0) return
+    const shouldAdjustLimit =
+      draft.status === 'running' &&
+      window.confirm('این پیش‌پرداخت به محدودیت هزینه هم اضافه شود؟')
+    setDraft((d) => {
+      const withPrepay = addSessionPrepay(d, amount, Date.now())
+      if (!shouldAdjustLimit) return withPrepay
+      return extendCostLimit(withPrepay, amount, Date.now())
+    })
+    setPrepayText('')
   }
 
   // The currently open segment (none if the session is paused/ended): its device/price are
@@ -330,11 +375,11 @@ export function SessionSummaryDialog({
       <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : requestClose())}>
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>{ending ? `اتمام تایم ${deviceName}` : `جزییات هزینه ${deviceName}`}</DialogTitle>
+            <DialogTitle>{`اتمام تایم ${deviceName}`}</DialogTitle>
             <DialogDescription>
-              {ending
-                ? 'می‌توانید پیش از اتمام مواردی را اصلاح کنید؛ با تایید، تایم پایان می‌یابد و زمان و هزینه‌ها صفر می‌شوند.'
-                : 'می‌توانید بازه‌های زمانی، نرخ، دستگاه و بوفه را اصلاح، حذف یا اضافه کنید.'}
+              {draft.status === 'running'
+                ? 'برای اتمام، ابتدا تایم را متوقف کنید. پس از توقف می‌توانید تایید و اتمام را بزنید.'
+                : 'می‌توانید پیش از اتمام مواردی را اصلاح کنید؛ با تایید، تایم پایان می‌یابد و زمان و هزینه‌ها صفر می‌شوند.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -524,18 +569,53 @@ export function SessionSummaryDialog({
               )}
             </div>
 
+            <div className="flex flex-col gap-2 border-t pt-3">
+              <Label>پیش‌پرداخت</Label>
+              <div className="flex w-full items-center gap-2">
+                <MoneyInput
+                  className="flex-1"
+                  placeholder="مبلغ"
+                  value={parseNumber(prepayText) > 0 ? formatNumber(Math.floor(parseNumber(prepayText))) : prepayText}
+                  onChange={(e) => setPrepayText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addPrepay()}
+                />
+                <span className="shrink-0 text-sm text-muted-foreground">تومان</span>
+                <Button size="sm" variant="outline" onClick={addPrepay}>
+                  <Plus /> افزودن
+                </Button>
+              </div>
+              {draft.prepayEntries?.length ? (
+                <div className="flex flex-col gap-1">
+                  {draft.prepayEntries.map((p) => (
+                    <div key={p.id} className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
+                      <span className="font-medium" dir="ltr">
+                        {formatNumber(p.amount)} تومان
+                      </span>
+                      <span className="text-xs text-muted-foreground">{formatClock(p.at)}</span>
+                      <Button
+                        variant="destructive"
+                        size="icon-sm"
+                        aria-label="حذف پیش‌پرداخت"
+                        className="ms-auto"
+                        onClick={() => setPendingDelete({ kind: 'prepay', id: p.id, amount: p.amount })}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">پیش‌پرداختی ثبت نشده است.</p>
+              )}
+            </div>
+
             <div className="flex flex-col gap-1.5 border-t pt-2">
               <Row label="جمع هزینه زمان" value={toman(timeTotal)} />
               <Row label="جمع بوفه و سایر هزینه‌ها" value={toman(itemsCost)} />
+              <Row label="جمع پیش‌پرداخت" value={toman(prepayAmount)} />
             </div>
 
-            {!ending ? (
-              <div className="flex items-center justify-between border-t pt-2 text-base font-bold">
-                <span>مجموع</span>
-                <span>{toman(total)}</span>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-1.5 border-t pt-2">
+            <div className="flex flex-col gap-1.5 border-t pt-2">
                 <div className="flex items-center justify-between gap-4 text-base font-bold">
                   <label htmlFor="final-total">مبلغ نهایی</label>
                   <div className="flex items-center gap-2">
@@ -551,13 +631,12 @@ export function SessionSummaryDialog({
                         </Button>
                       </Tip>
                     )}
-                    <Input
+                    <MoneyInput
                       id="final-total"
-                      dir="ltr"
-                      inputMode="numeric"
                       className="w-40 font-bold"
                       value={finalAmount > 0 ? formatNumber(finalAmount) : finalText}
                       onChange={(e) => setFinalText(e.target.value)}
+                      disabled={draft.status === 'running'}
                     />
                     <span className="text-sm font-normal text-muted-foreground">تومان</span>
                   </div>
@@ -566,49 +645,109 @@ export function SessionSummaryDialog({
                   <span className="text-xs text-muted-foreground">مجموع محاسبه‌شده: {toman(total)}</span>
                 )}
 
-                <div className="flex items-center justify-between gap-4 pt-1">
-                  <span className="text-sm font-normal">نحوه‌ی پرداخت</span>
-                  <div className="flex gap-1.5" role="group" aria-label="نحوه‌ی پرداخت">
-                    <Button
-                      size="sm"
-                      variant={onAccount ? 'outline' : 'default'}
-                      aria-pressed={!onAccount}
-                      onClick={() => setOnAccount(false)}
-                    >
-                      <Wallet /> پرداخت شد
-                    </Button>
-                    <Tip label={customer ? undefined : 'برای نسیه، ابتدا برای تایم مشتری انتخاب کنید'}>
-                      <span>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="end-customer">مشتری</Label>
+                  <CustomerSelect
+                    id="end-customer"
+                    customers={settings.customers}
+                    value={draft.customerId}
+                    onChange={(customerId) => {
+                      setDraft((d) => ({ ...d, customerId }))
+                      setGuestChargebackDone(false)
+                    }}
+                  />
+                </div>
+
+                <div className="rounded-lg border bg-muted/30 p-2 text-sm">
+                  {!!pickedCustomer && walletBalance !== undefined && (
+                    <Row
+                      label="اعتبار فعلی مشتری"
+                      value={
+                        walletBalance >= 0
+                          ? `${formatNumber(walletBalance)} تومان`
+                          : `بدهی ${formatNumber(Math.abs(walletBalance))} تومان`
+                      }
+                    />
+                  )}
+                  <Row label="پوشش از اعتبار" value={toman(settlement.walletCreditUsed)} />
+                  <Row label="پوشش از پیش‌پرداخت" value={toman(settlement.prepayUsed)} />
+                  <Row
+                    label="باقی‌مانده برای تسویه"
+                    value={toman(settlement.payableNow)}
+                    className={settlement.payableNow === 0 ? 'font-bold text-green-600' : 'font-bold'}
+                  />
+                  {settlement.prepayReturned > 0 && (
+                    <Row
+                      label={pickedCustomer ? 'بازگشت به کیف پول مشتری' : 'باقی‌مانده‌ی قابل عودت به مهمان'}
+                      value={toman(settlement.prepayReturned)}
+                    />
+                  )}
+                </div>
+
+                {settlement.payableNow > 0 && (
+                  <>
+                    <div className="flex items-center justify-between gap-4 pt-1">
+                      <span className="text-sm font-normal">نحوه‌ی تسویه‌ی باقی‌مانده</span>
+                      <div className="flex gap-1.5" role="group" aria-label="نحوه‌ی پرداخت">
                         <Button
                           size="sm"
-                          variant={onAccount ? 'destructive' : 'outline'}
-                          aria-pressed={onAccount}
-                          disabled={!customer}
-                          onClick={() => setOnAccount(true)}
+                          variant={onAccount ? 'outline' : 'default'}
+                          aria-pressed={!onAccount}
+                          onClick={() => setOnAccount(false)}
                         >
-                          <NotebookPen /> نسیه
+                          <Wallet /> پرداخت شد
                         </Button>
+                        <Tip label={pickedCustomer ? undefined : 'برای نسیه، ابتدا برای تایم مشتری انتخاب کنید'}>
+                          <span>
+                            <Button
+                              size="sm"
+                              variant={onAccount ? 'destructive' : 'outline'}
+                              aria-pressed={onAccount}
+                              disabled={!pickedCustomer}
+                              onClick={() => setOnAccount(true)}
+                            >
+                              <NotebookPen /> نسیه
+                            </Button>
+                          </span>
+                        </Tip>
+                      </div>
+                    </div>
+                    {onAccount && pickedCustomer && (
+                      <span className="text-xs text-destructive">
+                        {toman(settlement.payableNow)} به بدهی «{pickedCustomer.name}» اضافه می‌شود.
                       </span>
-                    </Tip>
-                  </div>
-                </div>
-                {onAccount && customer && (
-                  <span className="text-xs text-destructive">
-                    {toman(finalAmount)} به بدهی «{customer.name}» اضافه می‌شود.
-                  </span>
+                    )}
+                  </>
                 )}
-              </div>
-            )}
+
+                {guestNeedsChargeback && (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs">
+                    <p className="text-destructive">
+                      مشتری مهمان است و {toman(settlement.prepayReturned)} از پیش‌پرداخت اضافه می‌ماند.
+                      باید مبلغ را به مشتری برگردانید یا پیش از اتمام، یک مشتری انتخاب کنید تا مبلغ به
+                      اعتبار او اضافه شود.
+                    </p>
+                    <label className="mt-2 flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={guestChargebackDone}
+                        onChange={(e) => setGuestChargebackDone(e.target.checked)}
+                      />
+                      برگشت مبلغ انجام شد
+                    </label>
+                  </div>
+                )}
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={requestClose}>
               انصراف
             </Button>
-            {ending ? (
-              <Button onClick={confirmEnd}>تایید و اتمام تایم</Button>
+            {draft.status === 'running' ? (
+              <Button onClick={pauseNow}>توقف تایم</Button>
             ) : (
-              <Button onClick={save}>ذخیره</Button>
+              <Button disabled={!canConfirm} onClick={confirmEnd}>تایید و اتمام تایم</Button>
             )}
           </DialogFooter>
         </DialogContent>
@@ -619,12 +758,18 @@ export function SessionSummaryDialog({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingDelete?.kind === 'segment' ? 'حذف بازه‌ی زمانی؟' : 'حذف این مورد؟'}
+              {pendingDelete?.kind === 'segment'
+                ? 'حذف بازه‌ی زمانی؟'
+                : pendingDelete?.kind === 'prepay'
+                  ? 'حذف پیش‌پرداخت؟'
+                  : 'حذف این مورد؟'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete?.kind === 'segment'
                 ? 'این بازه‌ی زمانی حذف می‌شود.'
-                : `«${pendingDelete?.name}» حذف می‌شود.`}
+                : pendingDelete?.kind === 'prepay'
+                  ? `پیش‌پرداخت ${formatNumber(pendingDelete.amount)} تومان حذف می‌شود.`
+                  : `«${pendingDelete?.name}» حذف می‌شود.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -639,9 +784,17 @@ export function SessionSummaryDialog({
   )
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({
+  label,
+  value,
+  className,
+}: {
+  label: string
+  value: string
+  className?: string
+}) {
   return (
-    <div className="flex justify-between gap-4">
+    <div className={`flex justify-between gap-4 ${className ?? ''}`}>
       <span>{label}</span>
       <span className="shrink-0">{value}</span>
     </div>

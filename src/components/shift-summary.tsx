@@ -8,6 +8,16 @@ import { formatJalaliClock, formatJalaliDate } from '@/lib/jalali'
 import { NO_CUSTOMER } from '@/lib/stats'
 import { type HistoryEntry } from '@/lib/store'
 
+const debtOf = (e: HistoryEntry) => {
+  if (!e.onAccount) return 0
+  const usedCredit = e.creditUsed ?? 0
+  const usedPrepay = e.prepayUsed ?? 0
+  return Math.max(0, e.total - usedCredit - usedPrepay)
+}
+
+const cashOf = (e: HistoryEntry) =>
+  e.cashPaid ?? (e.onAccount ? 0 : Math.max(0, e.total - (e.creditUsed ?? 0) - (e.prepayUsed ?? 0)))
+
 function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
     <Card size="sm">
@@ -66,7 +76,10 @@ export function ShiftSummary({
   detailsVisible?: boolean
 }) {
   const sum = summarize(entries)
-  const onAccount = entries.reduce((s, e) => s + (e.onAccount ? e.total : 0), 0)
+  const debtAdded = entries.reduce((s, e) => s + debtOf(e), 0)
+  const cashIn = entries.reduce((s, e) => s + cashOf(e), 0)
+  const usedCredit = entries.reduce((s, e) => s + (e.creditUsed ?? 0), 0)
+  const usedPrepay = entries.reduce((s, e) => s + (e.prepayUsed ?? 0), 0)
   const start = Math.min(...entries.map((e) => e.startedAt))
   const end = Math.max(...entries.map((e) => e.endedAt))
   const byDevice = new Map<string, { sessions: number; income: number }>()
@@ -143,10 +156,12 @@ export function ShiftSummary({
             <Stat label="درآمد شیفت" value={formatNumber(sum.total)} unit="تومان" />
             <Stat label="تعداد تایم" value={formatNumber(sum.count)} />
             <Stat label="مدت کل" value={formatDuration(sum.durationMs)} />
-            <Stat label="نسیه" value={formatNumber(onAccount)} unit="تومان" />
+            <Stat label="بدهی جدید" value={formatNumber(debtAdded)} unit="تومان" />
             <Stat label="هزینه‌ی زمان" value={formatNumber(sum.timeCost)} unit="تومان" />
             <Stat label="بوفه و زمان اضافه" value={formatNumber(sum.extrasCost)} unit="تومان" />
-            <Stat label="دریافتی نقدی" value={formatNumber(sum.total - onAccount)} unit="تومان" />
+            <Stat label="دریافتی نقدی" value={formatNumber(cashIn)} unit="تومان" />
+            <Stat label="پوشش از اعتبار" value={formatNumber(usedCredit)} unit="تومان" />
+            <Stat label="پوشش از پیش‌پرداخت" value={formatNumber(usedPrepay)} unit="تومان" />
             <Stat
               label="میانگین هر تایم"
               value={formatNumber(sum.count ? Math.round(sum.total / sum.count) : 0)}
@@ -174,7 +189,13 @@ export function ShiftSummary({
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {e.onAccount && <span className="text-xs text-destructive">نسیه</span>}
+                    {e.onAccount && <span className="text-xs text-destructive">بدهی</span>}
+                    {!!e.creditUsed && e.creditUsed > 0 && (
+                      <span className="text-xs text-green-700">اعتبار {formatNumber(e.creditUsed)}</span>
+                    )}
+                    {!!e.prepayUsed && e.prepayUsed > 0 && (
+                      <span className="text-xs text-blue-700">پیش‌پرداخت {formatNumber(e.prepayUsed)}</span>
+                    )}
                     <span className="tabular-nums">{formatNumber(e.total)} تومان</span>
                   </div>
                 </div>
