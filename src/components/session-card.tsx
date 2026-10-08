@@ -29,11 +29,13 @@ import { Tip } from '@/components/tip'
 import { formatDuration, formatIdle, formatNumber } from '@/lib/format'
 import { formatJalaliDateTime } from '@/lib/jalali'
 import { useNow } from '@/lib/use-now'
+import { cn } from '@/lib/utils'
 import {
   addExtraItem,
   addExtraTime,
   changeType,
-  clearLimit,
+  clearCostLimit,
+  clearTimeLimit,
   computeCost,
   deviceOf,
   devicePriceGroups,
@@ -41,11 +43,14 @@ import {
   flatPrices,
   forgottenMs,
   isReserved,
+  MINUTE_MS,
   pauseSession,
+  remainingCost,
   remainingMs,
   resumeSession,
   selectedPrice,
-  setLimit,
+  setCostLimit,
+  setTimeLimit,
   switchDevice,
   type Session,
   type Settings,
@@ -65,6 +70,10 @@ type Props = {
 const statusLabel = { running: 'در حال بازی', paused: 'متوقف', reserved: 'رزرو' } as const
 
 const SWITCH_DEVICE = '__switch_device__'
+
+// Below this much remaining (time, or cost estimated at the current rate) the card border
+// turns yellow as an early warning before the limit alarm fires.
+const NEAR_LIMIT_MS = 5 * MINUTE_MS
 
 export function SessionCard({ session, sessions, settings, onUpdate, onEnd, onCancel, compact }: Props) {
   const [summaryOpen, setSummaryOpen] = useState(false)
@@ -106,13 +115,43 @@ export function SessionCard({ session, sessions, settings, onUpdate, onEnd, onCa
   const name = session.deviceName
   const first = session.segments[0]
   const last = session.segments[session.segments.length - 1]
-  const remaining = remainingMs(session, time)
-  const exceeded = remaining !== undefined && remaining <= 0
-  const limitLine =
-    remaining === undefined
-      ? ''
-      : `
-${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌مانده تا محدودیت: ${formatDuration(remaining)}`}`
+  const timeRemaining = remainingMs(session, time)
+  const costRemaining = remainingCost(session, time)
+  const hasLimit = timeRemaining !== undefined || costRemaining !== undefined
+  const exceeded =
+    (timeRemaining !== undefined && timeRemaining <= 0) ||
+    (costRemaining !== undefined && costRemaining <= 0)
+  // Cost remaining has no natural time unit; estimate it from the current price so it can be
+  // shown alongside its toman amount and compared against the same 5-minute warning threshold
+  // as the time limit.
+  const costRemainingMs = (() => {
+    if (costRemaining === undefined || !last || last.to !== null || last.price <= 0) return undefined
+    return (costRemaining / last.price) * 3_600_000
+  })()
+  const limitLines = [
+    timeRemaining === undefined
+      ? null
+      : timeRemaining <= 0
+        ? 'محدودیت زمانی تمام شده'
+        : `باقی‌مانده تا محدودیت زمانی: ${formatDuration(timeRemaining)}`,
+    costRemaining === undefined
+      ? null
+      : costRemaining <= 0
+        ? 'محدودیت هزینه تمام شده'
+        : costRemainingMs !== undefined
+          ? `باقی‌مانده تا محدودیت هزینه: ${formatDuration(costRemainingMs)} (${formatNumber(costRemaining)} تومان)`
+          : `باقی‌مانده تا محدودیت هزینه: ${formatNumber(costRemaining)} تومان`,
+  ].filter((x): x is string => x !== null)
+  const limitLine = limitLines.length > 0 ? `
+${limitLines.join('\n')}` : ''
+  const nearLimit =
+    (timeRemaining !== undefined && timeRemaining > 0 && timeRemaining <= NEAR_LIMIT_MS) ||
+    (costRemainingMs !== undefined && costRemainingMs > 0 && costRemainingMs <= NEAR_LIMIT_MS)
+  const limitClass = exceeded
+    ? 'ring-2 ring-destructive/40'
+    : nearLimit
+      ? 'ring-2 ring-yellow-500/60'
+      : undefined
   const rangeTitle = first
     ? `شروع: ${formatJalaliDateTime(first.from)}${last.to ? `
 پایان: ${formatJalaliDateTime(last.to)}` : ''}${limitLine}`
@@ -180,9 +219,12 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
         <LimitDialog
           open={limitOpen}
           onOpenChange={setLimitOpen}
-          remainingMs={remaining}
-          onSave={(minutes) => onUpdate((x) => setLimit(x, minutes, Date.now()))}
-          onRemove={() => onUpdate(clearLimit)}
+          timeRemaining={timeRemaining}
+          costRemaining={costRemaining}
+          onSaveTime={(minutes) => onUpdate((x) => setTimeLimit(x, minutes, Date.now()))}
+          onSaveCost={(amount) => onUpdate((x) => setCostLimit(x, amount, Date.now()))}
+          onRemoveTime={() => onUpdate(clearTimeLimit)}
+          onRemoveCost={() => onUpdate(clearCostLimit)}
         />
 
         <CustomerPickerDialog
@@ -240,7 +282,7 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
 
   if (compact) {
     return (
-      <Card size="sm" className={forgottenClass}>
+      <Card size="sm" className={cn(forgottenClass, limitClass)}>
         <CardContent className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -345,11 +387,11 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
               )}
             </div>
             <div className="flex items-center justify-end gap-1.5">
-              <Tip label={remaining === undefined ? 'تعیین محدودیت زمانی' : 'ویرایش محدودیت زمانی'}>
+              <Tip label={hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}>
                 <Button
-                  variant={exceeded ? 'destructive' : remaining === undefined ? 'outline' : 'secondary'}
+                  variant={exceeded ? 'destructive' : hasLimit ? 'secondary' : 'outline'}
                   size="icon-sm"
-                  aria-label="محدودیت زمانی"
+                  aria-label="محدودیت"
                   onClick={() => setLimitOpen(true)}
                 >
                   <AlarmClock />
@@ -403,7 +445,7 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
   }
 
   return (
-    <Card className={forgottenClass}>
+    <Card className={cn(forgottenClass, limitClass)}>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -457,9 +499,9 @@ ${exceeded ? 'محدودیت زمانی تمام شده' : `باقی‌ماند�
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>محدودیت زمانی</Label>
+            <Label>محدودیت</Label>
             <Button variant="outline" onClick={() => setLimitOpen(true)}>
-              <AlarmClock /> {remaining === undefined ? 'تعیین محدودیت' : 'ویرایش محدودیت'}
+              <AlarmClock /> {hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}
             </Button>
           </div>
           <div className="flex flex-col gap-1.5">

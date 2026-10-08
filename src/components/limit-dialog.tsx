@@ -29,103 +29,152 @@ import { MINUTE_MS } from '@/lib/store'
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  // Time left before the limit (ms, may be negative); undefined = no limit yet.
-  remainingMs: number | undefined
-  onSave: (minutes: number) => void
-  onRemove: () => void
+  // Time left before the time limit (ms, may be negative); undefined = not set.
+  timeRemaining: number | undefined
+  // Amount left before the cost limit (toman, may be negative); undefined = not set.
+  costRemaining: number | undefined
+  onSaveTime: (minutes: number) => void
+  onSaveCost: (amount: number) => void
+  onRemoveTime: () => void
+  onRemoveCost: () => void
   // Opened over the limit alarm.
   raised?: boolean
 }
 
 // Starts from the remaining minutes: with 15 min left, enter 45 to give 30 more.
-export const initialMinutes = (remainingMs: number | undefined) =>
+const initialMinutes = (remainingMs: number | undefined) =>
   remainingMs === undefined ? '' : String(Math.max(0, Math.ceil(remainingMs / MINUTE_MS)))
 
-export function LimitDialog({ open, onOpenChange, remainingMs, onSave, onRemove, raised }: Props) {
-  const [text, setText] = useState('')
-  const [confirmRemove, setConfirmRemove] = useState(false)
+const initialCost = (remaining: number | undefined) =>
+  remaining === undefined ? '' : String(Math.max(0, Math.ceil(remaining)))
 
-  // Start from the current remaining time every time the dialog opens (snapshot: the remaining
-  // time keeps changing while it is open).
-  const [initial, setInitial] = useState('')
+export function LimitDialog({
+  open,
+  onOpenChange,
+  timeRemaining,
+  costRemaining,
+  onSaveTime,
+  onSaveCost,
+  onRemoveTime,
+  onRemoveCost,
+  raised,
+}: Props) {
+  const [timeText, setTimeText] = useState('')
+  const [costText, setCostText] = useState('')
+  const [confirmRemove, setConfirmRemove] = useState<'time' | 'cost' | null>(null)
+
+  // Start from the current limits every time the dialog opens (snapshot: the remaining amounts
+  // keep changing while it is open).
+  const [initial, setInitial] = useState({ time: '', cost: '' })
   useEffect(() => {
     if (!open) return
-    const start = initialMinutes(remainingMs)
-    setInitial(start)
-    setText(start)
+    const time = initialMinutes(timeRemaining)
+    const cost = initialCost(costRemaining)
+    setTimeText(time)
+    setCostText(cost)
+    setInitial({ time, cost })
     // Only when opening.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
-  const mins = Math.floor(parseNumber(text))
-  const hasLimit = remainingMs !== undefined
 
-  const dirty = text !== initial
+  const timeMinutes = Math.floor(parseNumber(timeText))
+  const costAmount = Math.floor(parseNumber(costText))
+  const hasTime = timeRemaining !== undefined
+  const hasCost = costRemaining !== undefined
+  const timeChanged = timeText !== initial.time
+  const costChanged = costText !== initial.cost
+
+  const dirty = timeChanged || costChanged
   const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false), raised)
+
+  const save = () => {
+    if (!timeChanged && !costChanged) return
+    requestNotificationPermission()
+    if (timeChanged && timeMinutes > 0) onSaveTime(timeMinutes)
+    if (costChanged && costAmount > 0) onSaveCost(costAmount)
+    onOpenChange(false)
+  }
 
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : requestClose())}>
         <DialogContent className="sm:max-w-sm" raised={raised}>
           <DialogHeader>
-            <DialogTitle>{hasLimit ? 'ویرایش محدودیت زمانی' : 'محدودیت زمانی'}</DialogTitle>
+            <DialogTitle>محدودیت</DialogTitle>
             <DialogDescription>
-              زمان باقی‌مانده تا پایان محدودیت را به دقیقه وارد کنید. با گذشت زمان از آن کم می‌شود.
+              زمان یا هزینه‌ی باقی‌مانده تا پایان هر محدودیت را وارد کنید؛ هر دو مستقل از هم کار می‌کنند.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="limit-minutes">زمان باقی‌مانده (دقیقه)</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="limit-time">زمانی (دقیقه باقی‌مانده)</Label>
+              {hasTime && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="text-destructive"
+                  onClick={() => setConfirmRemove('time')}
+                >
+                  <Trash2 /> حذف
+                </Button>
+              )}
+            </div>
             <Input
-              id="limit-minutes"
+              id="limit-time"
               dir="ltr"
               inputMode="numeric"
-              placeholder="0"
-              autoFocus
-              value={mins > 0 ? formatNumber(mins) : text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && mins > 0) {
-                  requestNotificationPermission()
-                  onSave(mins)
-                  onOpenChange(false)
-                }
-              }}
+              placeholder="بدون محدودیت"
+              value={timeMinutes > 0 ? formatNumber(timeMinutes) : timeText}
+              onChange={(e) => setTimeText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && save()}
             />
           </div>
 
-          <DialogFooter className="sm:justify-between">
-            {hasLimit ? (
-              <Button variant="destructive" onClick={() => setConfirmRemove(true)}>
-                <Trash2 /> حذف محدودیت
-              </Button>
-            ) : (
-              <span />
-            )}
-            <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <Button variant="outline" onClick={requestClose}>
-                انصراف
-              </Button>
-              <Button
-                disabled={mins <= 0}
-                onClick={() => {
-                  requestNotificationPermission()
-                  onSave(mins)
-                  onOpenChange(false)
-                }}
-              >
-                ذخیره
-              </Button>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="limit-cost">هزینه‌ای (تومان باقی‌مانده)</Label>
+              {hasCost && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="text-destructive"
+                  onClick={() => setConfirmRemove('cost')}
+                >
+                  <Trash2 /> حذف
+                </Button>
+              )}
             </div>
+            <Input
+              id="limit-cost"
+              dir="ltr"
+              inputMode="numeric"
+              placeholder="بدون محدودیت"
+              value={costAmount > 0 ? formatNumber(costAmount) : costText}
+              onChange={(e) => setCostText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && save()}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={requestClose}>
+              انصراف
+            </Button>
+            <Button disabled={!timeChanged && !costChanged} onClick={save}>
+              ذخیره
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+      <AlertDialog open={confirmRemove !== null} onOpenChange={(o) => !o && setConfirmRemove(null)}>
         <AlertDialogContent raised={raised}>
           <AlertDialogHeader>
-            <AlertDialogTitle>حذف محدودیت زمانی؟</AlertDialogTitle>
+            <AlertDialogTitle>
+              حذف محدودیت {confirmRemove === 'time' ? 'زمانی' : 'هزینه'}؟
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              محدودیت زمانی این تایم حذف می‌شود و دیگر هشداری برای پایان زمان نمایش داده نمی‌شود.
+              این محدودیت حذف می‌شود و دیگر هشداری برای پایان آن نمایش داده نمی‌شود.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -133,12 +182,20 @@ export function LimitDialog({ open, onOpenChange, remainingMs, onSave, onRemove,
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
-                setConfirmRemove(false)
-                onRemove()
-                onOpenChange(false)
+                const kind = confirmRemove
+                setConfirmRemove(null)
+                if (kind === 'time') {
+                  onRemoveTime()
+                  setTimeText('')
+                  setInitial((i) => ({ ...i, time: '' }))
+                } else if (kind === 'cost') {
+                  onRemoveCost()
+                  setCostText('')
+                  setInitial((i) => ({ ...i, cost: '' }))
+                }
               }}
             >
-              حذف محدودیت
+              حذف
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

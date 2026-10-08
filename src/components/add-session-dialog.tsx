@@ -61,7 +61,7 @@ type Props = {
     category: string,
     price: FlatPrice,
     customerId?: string,
-    limitMinutes?: number,
+    limit?: { minutes?: number; cost?: number },
     reserve?: boolean,
   ) => void
 }
@@ -157,7 +157,8 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
   const [step, setStep] = useState<StepKey>(() => stepsFor(pick)[0])
   const [customerId, setCustomerId] = useState<string | undefined>()
   const [query, setQuery] = useState('')
-  const [limit, setLimit] = useState('')
+  const [timeLimit, setTimeLimit] = useState('')
+  const [costLimit, setCostLimit] = useState('')
 
   // Start from the last used type each time the dialog opens.
   useEffect(() => {
@@ -167,7 +168,8 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
     setInitial(p)
     setStep(stepsFor(p)[0])
     setCustomerId(undefined)
-    setLimit('')
+    setTimeLimit('')
+    setCostLimit('')
     setQuery('')
     // Only when the dialog opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,7 +181,11 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
   const prevStep = before(steps, step)
   const last = step === 'customer'
 
-  const dirty = JSON.stringify(pick) !== JSON.stringify(initial) || customerId !== undefined || limit !== ''
+  const dirty =
+    JSON.stringify(pick) !== JSON.stringify(initial) ||
+    customerId !== undefined ||
+    timeLimit !== '' ||
+    costLimit !== ''
   const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
 
   const stepValid =
@@ -290,9 +296,17 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
 
   const submit = () => {
     if (!device || !price) return
-    const limitMinutes = Math.floor(parseNumber(limit))
-    if (limitMinutes > 0) requestNotificationPermission()
-    onCreate(device, categoryName(settings, device), price, customerId, limitMinutes || undefined, reserve)
+    const minutes = Math.floor(parseNumber(timeLimit))
+    const cost = Math.floor(parseNumber(costLimit))
+    if (minutes > 0 || cost > 0) requestNotificationPermission()
+    onCreate(
+      device,
+      categoryName(settings, device),
+      price,
+      customerId,
+      minutes > 0 || cost > 0 ? { minutes: minutes || undefined, cost: cost || undefined } : undefined,
+      reserve,
+    )
     onOpenChange(false)
   }
 
@@ -454,14 +468,33 @@ export function AddSessionDialog({ open, onOpenChange, settings, sessions, reser
                 onChange={setCustomerId}
               />
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="new-limit">محدودیت زمانی (اختیاری، دقیقه)</Label>
+                <Label htmlFor="new-limit-time">محدودیت زمانی (اختیاری، دقیقه)</Label>
                 <Input
-                  id="new-limit"
+                  id="new-limit-time"
                   dir="ltr"
                   inputMode="numeric"
                   placeholder="بدون محدودیت"
-                  value={parseNumber(limit) > 0 ? formatNumber(Math.floor(parseNumber(limit))) : limit}
-                  onChange={(e) => setLimit(e.target.value)}
+                  value={
+                    parseNumber(timeLimit) > 0
+                      ? formatNumber(Math.floor(parseNumber(timeLimit)))
+                      : timeLimit
+                  }
+                  onChange={(e) => setTimeLimit(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="new-limit-cost">محدودیت هزینه (اختیاری، تومان)</Label>
+                <Input
+                  id="new-limit-cost"
+                  dir="ltr"
+                  inputMode="numeric"
+                  placeholder="بدون محدودیت"
+                  value={
+                    parseNumber(costLimit) > 0
+                      ? formatNumber(Math.floor(parseNumber(costLimit)))
+                      : costLimit
+                  }
+                  onChange={(e) => setCostLimit(e.target.value)}
                 />
               </div>
             </div>

@@ -134,11 +134,11 @@ function Main() {
     category: string,
     price: FlatPrice,
     customerId?: string,
-    limitMinutes?: number,
+    limit?: { minutes?: number; cost?: number },
     reserve?: boolean,
   ) =>
     addSessionRow(
-      createSession(device, category, price, customerId, Date.now(), limitMinutes, reserve),
+      createSession(device, category, price, customerId, Date.now(), limit, reserve),
     )
 
   // Device types that have devices; the filter / grouping UI needs more than one.

@@ -28,6 +28,7 @@ import type { AppIconValue } from '@/lib/app-icon'
 import { formatNumber, parseNumber } from '@/lib/format'
 import {
   ROUND_MODE_LABELS,
+  type QuickExtend,
   type Rounding,
   type RoundMode,
   type Settings,
@@ -65,6 +66,7 @@ type Draft = Settings & {
   icon: AppIconValue
   grouping: boolean
   rounding: Rounding
+  quickExtend: QuickExtend
 }
 
 const isTauri = () => '__TAURI_INTERNALS__' in window
@@ -77,12 +79,36 @@ export function SettingsDialog({
   onOpenChange,
   initialTab = 'general',
 }: Props) {
-  const { theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, grouping, setGrouping, rounding, setRounding } =
-    useTheme()
+  const {
+    theme,
+    setTheme,
+    accent,
+    setAccent,
+    title,
+    setTitle,
+    icon,
+    setIcon,
+    grouping,
+    setGrouping,
+    rounding,
+    setRounding,
+    quickExtend,
+    setQuickExtend,
+  } = useTheme()
   const [autostartSaved, setAutostartSaved] = useState(false)
   const [tab, setTab] = useState<SettingsTab>(initialTab)
 
-  const saved: Draft = { ...settings, theme, accent, autostart: autostartSaved, title, icon, grouping, rounding }
+  const saved: Draft = {
+    ...settings,
+    theme,
+    accent,
+    autostart: autostartSaved,
+    title,
+    icon,
+    grouping,
+    rounding,
+    quickExtend,
+  }
   const [draft, setDraft] = useState<Draft>(saved)
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }))
@@ -129,7 +155,8 @@ export function SettingsDialog({
     named(draft.extraItems) &&
     draft.extraItems.every((i) => i.price > 0)
   const roundingValid = draft.rounding.step > 0
-  const valid = ratesValid && devicesValid && extrasValid && roundingValid
+  const quickExtendValid = draft.quickExtend.minutes > 0 && draft.quickExtend.cost > 0
+  const valid = ratesValid && devicesValid && extrasValid && roundingValid && quickExtendValid
 
   const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
 
@@ -155,6 +182,7 @@ export function SettingsDialog({
     setIcon(draft.icon)
     setGrouping(draft.grouping)
     setRounding(draft.rounding)
+    setQuickExtend(draft.quickExtend)
     if (isTauri() && draft.autostart !== autostartSaved) {
       try {
         const m = await import('@tauri-apps/plugin-autostart')
@@ -191,7 +219,7 @@ export function SettingsDialog({
           </DialogHeader>
 
           <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className="gap-4">
-            <TabsList className="w-full max-w-full justify-start overflow-x-auto">
+            <TabsList className="w-full max-w-full justify-start">
               <TabsTrigger value="general" className="shrink-0">عمومی</TabsTrigger>
               <TabsTrigger value="rates" className="shrink-0">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
               <TabsTrigger value="devices" className="shrink-0">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
@@ -322,6 +350,43 @@ export function SettingsDialog({
                 </p>
               </div>
 
+              <div className="flex flex-col gap-1.5">
+                <Label>افزایش سریع محدودیت</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    id="quick-extend-minutes"
+                    dir="ltr"
+                    inputMode="numeric"
+                    aria-invalid={draft.quickExtend.minutes <= 0}
+                    aria-label="افزایش سریع محدودیت زمانی"
+                    className="w-32"
+                    value={draft.quickExtend.minutes > 0 ? formatNumber(draft.quickExtend.minutes) : ''}
+                    onChange={(e) =>
+                      patch({ quickExtend: { ...draft.quickExtend, minutes: parseNumber(e.target.value) } })
+                    }
+                  />
+                  <span className="text-sm text-muted-foreground">دقیقه (محدودیت زمانی)</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    id="quick-extend-cost"
+                    dir="ltr"
+                    inputMode="numeric"
+                    aria-invalid={draft.quickExtend.cost <= 0}
+                    aria-label="افزایش سریع محدودیت هزینه"
+                    className="w-32"
+                    value={draft.quickExtend.cost > 0 ? formatNumber(draft.quickExtend.cost) : ''}
+                    onChange={(e) =>
+                      patch({ quickExtend: { ...draft.quickExtend, cost: parseNumber(e.target.value) } })
+                    }
+                  />
+                  <span className="text-sm text-muted-foreground">تومان (محدودیت هزینه)</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  وقتی محدودیت یک تایم تمام شود، دکمه‌ی «کمی بیشتر» روی هشدار به همین اندازه به آن اضافه می‌کند.
+                </p>
+              </div>
+
               {isTauri() && (
                 <div className="flex items-center justify-between gap-4">
                   <Label htmlFor="autostart-switch">اجرای خودکار با روشن شدن سیستم</Label>
@@ -372,9 +437,13 @@ export function SettingsDialog({
 
           <DialogFooter className="items-center sm:justify-between">
             <span className="text-sm text-destructive">
-              {valid || tab === 'data' ? '' : roundingValid
-                ? 'نام‌ها باید تکمیل و قیمت‌ها بیشتر از صفر باشند و هر دستگاه یک نرخ داشته باشد.'
-                : 'مضرب رند کردن باید بیشتر از صفر باشد.'}
+              {valid || tab === 'data'
+                ? ''
+                : !roundingValid
+                  ? 'مضرب رند کردن باید بیشتر از صفر باشد.'
+                  : !quickExtendValid
+                    ? 'مقادیر افزایش سریع محدودیت باید بیشتر از صفر باشند.'
+                    : 'نام‌ها باید تکمیل و قیمت‌ها بیشتر از صفر باشند و هر دستگاه یک نرخ داشته باشد.'}
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={requestClose}>

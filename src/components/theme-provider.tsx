@@ -1,7 +1,13 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import type { Accent } from '@/lib/accents'
 import { DEFAULT_ICON, type AppIconValue } from '@/lib/app-icon'
-import { DEFAULT_ROUNDING, useLocalStorage, type Rounding } from '@/lib/store'
+import {
+  DEFAULT_QUICK_EXTEND,
+  DEFAULT_ROUNDING,
+  useLocalStorage,
+  type QuickExtend,
+  type Rounding,
+} from '@/lib/store'
 
 export type Theme = 'light' | 'dark'
 
@@ -29,6 +35,9 @@ const ThemeContext = createContext<{
   // How the «رند کردن» button rounds the final amount when ending a timer.
   rounding: Rounding
   setRounding: (r: Rounding) => void
+  // How much a click of «کمی بیشتر» adds on the limit alarm.
+  quickExtend: QuickExtend
+  setQuickExtend: (q: QuickExtend) => void
 }>({
   theme: 'light',
   setTheme: () => {},
@@ -44,6 +53,8 @@ const ThemeContext = createContext<{
   setGrouping: () => {},
   rounding: DEFAULT_ROUNDING,
   setRounding: () => {},
+  quickExtend: DEFAULT_QUICK_EXTEND,
+  setQuickExtend: () => {},
 })
 
 export const useTheme = () => useContext(ThemeContext)
@@ -66,6 +77,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // Older saved values have no `auto`: fall back to the defaults.
   const rounding = { ...DEFAULT_ROUNDING, ...storedRounding }
 
+  const [storedQuickExtend, setQuickExtend] = useLocalStorage<QuickExtend>(
+    'gamenet-quick-extend',
+    () => DEFAULT_QUICK_EXTEND,
+  )
+  const quickExtend = { ...DEFAULT_QUICK_EXTEND, ...storedQuickExtend }
+
   useEffect(() => {
     document.title = title
     // The native window title is separate from document.title in the desktop app.
@@ -84,5 +101,5 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
-  return <ThemeContext.Provider value={{ theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, view, setView, grouping, setGrouping, rounding, setRounding }}>{children}</ThemeContext.Provider>
+  return <ThemeContext.Provider value={{ theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, view, setView, grouping, setGrouping, rounding, setRounding, quickExtend, setQuickExtend }}>{children}</ThemeContext.Provider>
 }

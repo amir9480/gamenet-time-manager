@@ -1,4 +1,4 @@
-// Calls the operator back to the app when a session's time limit runs out while it is in the
+// Calls the operator back to the app when a session's limit runs out while it is in the
 // background: the desktop app brings its window to the front (and flashes the taskbar); the web
 // app cannot focus itself, so it shows a system notification whose click focuses the window.
 import { isTauri } from '@/lib/platform'
@@ -61,7 +61,7 @@ export const alertLimitReached = (deviceName: string, sessionId: string) => {
     return
   }
   void notify(
-    `محدودیت زمانی ${deviceName} تمام شد`,
+    `محدودیت ${deviceName} تمام شد`,
     'برای ادامه، محدودیت را افزایش دهید یا تایم را متوقف کنید.',
     `limit-${sessionId}`,
   )
