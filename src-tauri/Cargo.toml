@@ -1,6 +1,6 @@
 [package]
 name = "gamenet-time-manager"
-version = "0.1.0"
+version = "0.1.1"
 description = "Gamenet Time Manager"
 authors = ["Amir Alizadeh"]
 license = "MIT"
