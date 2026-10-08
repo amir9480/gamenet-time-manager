@@ -12,6 +12,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NewCustomerDialog } from '@/components/new-customer-dialog'
+import { HistoryDialog } from '@/components/history-dialog'
 import { CustomerDebtsDialog } from './customer-debts-dialog'
 import { customerFields } from '@/components/customer-select'
 import { Tip } from '@/components/tip'
@@ -36,6 +37,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Customer | null>(null)
   const [debtsFor, setDebtsFor] = useState<Customer | null>(null)
+  const [statsFor, setStatsFor] = useState<Customer | null>(null)
   const [debtorsOnly, setDebtorsOnly] = useState(false)
 
   // Deferred: the list renders first, the totals fill in once the history has been summed
@@ -134,7 +136,14 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                     key={c.id}
                     className="grid grid-cols-2 items-center gap-2 px-3 py-1.5 sm:grid-cols-[1fr_1fr_7rem_8rem_5rem]"
                   >
-                    <span className="truncate text-sm">{c.name}</span>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="justify-start truncate px-1 text-sm"
+                      onClick={() => setStatsFor(c)}
+                    >
+                      {c.name}
+                    </Button>
                     <span className="truncate text-sm text-muted-foreground" dir="ltr">
                       {c.phone || '—'}
                     </span>
@@ -258,6 +267,13 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
       </Dialog>
 
       {debtsFor && <CustomerDebtsDialog customer={debtsFor} onClose={() => setDebtsFor(null)} />}
+      {statsFor && (
+        <HistoryDialog
+          open
+          onOpenChange={(o) => !o && setStatsFor(null)}
+          fixedCustomer={{ id: statsFor.id, name: statsFor.name }}
+        />
+      )}
       {adding && <NewCustomerDialog open onOpenChange={setAdding} />}
       {editing && (
         <NewCustomerDialog

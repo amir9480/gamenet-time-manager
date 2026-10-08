@@ -52,6 +52,9 @@ import { cn } from '@/lib/utils'
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  // Locks the dialog to one customer (CustomersDialog entry point): hides the customer filter,
+  // forces it, and retitles the dialog.
+  fixedCustomer?: { id: string; name: string }
 }
 
 const PRESETS: { id: Preset; label: string }[] = [
@@ -72,14 +75,14 @@ const PAY_ITEMS = [
 
 type Pending = { kind: 'one'; entry: HistoryEntry } | { kind: 'range' } | null
 
-export function HistoryDialog({ open, onOpenChange }: Props) {
+export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
   const [preset, setPreset] = useState<Preset | 'custom'>('today')
   const [range, setRange] = useState(() => presetRange('today'))
   const [page, setPage] = useState(0)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [pending, setPending] = useState<Pending>(null)
   // 'all' | 'none' (no customer) | customer id; 'all' | category name
-  const [customerFilter, setCustomerFilter] = useState('all')
+  const [customerFilter, setCustomerFilter] = useState(fixedCustomer?.id ?? 'all')
   const [categoryFilter, setCategoryFilter] = useState('all')
   // 'all' | 'paid' | 'account' (نسیه): switches the list and the stats between both kinds.
   const [payFilter, setPayFilter] = useState('all')
@@ -90,6 +93,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
   )
 
   const customerItems = useMemo(() => {
+    if (fixedCustomer) return []
     const seen = new Map<string, string>()
     for (const e of rangeEntries ?? [])
       if (e.customerId && !seen.has(e.customerId))
@@ -104,7 +108,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
       { value: 'none', label: 'مشتری مهمان' },
       ...[...seen].map(([value, label]) => ({ value, label })),
     ]
-  }, [rangeEntries, customerFilter])
+  }, [rangeEntries, customerFilter, fixedCustomer])
 
   const categoryItems = useMemo(() => {
     const names = new Set((rangeEntries ?? []).flatMap((e) => e.categoryNames))
@@ -184,8 +188,14 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle className="text-lg">تاریخچه تایم‌ها</DialogTitle>
-          <DialogDescription>تایم‌های پایان‌یافته به تفکیک روز و درآمد هر روز؛ با فیلتر نام، جمع درآمد هر مشتری را ببینید.</DialogDescription>
+          <DialogTitle className="text-lg">
+            {fixedCustomer ? `آمار و تاریخچه‌ی ${fixedCustomer.name}` : 'تاریخچه تایم‌ها'}
+          </DialogTitle>
+          <DialogDescription>
+            {fixedCustomer
+              ? 'تایم‌ها و آمار این مشتری به تفکیک روز، نوع دستگاه و نحوه‌ی پرداخت.'
+              : 'تایم‌های پایان‌یافته به تفکیک روز و درآمد هر روز؛ با فیلتر نام، جمع درآمد هر مشتری را ببینید.'}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -233,19 +243,21 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-xs text-muted-foreground">مشتری</Label>
-            <FilterCombobox
-              aria-label="فیلتر مشتری"
-              options={customerItems}
-              value={customerFilter}
-              onChange={(v) => {
-                setCustomerFilter(v)
-                setPage(0)
-              }}
-            />
-          </div>
+        <div className={cn('grid gap-3', fixedCustomer ? 'sm:grid-cols-2' : 'sm:grid-cols-3')}>
+          {!fixedCustomer && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground">مشتری</Label>
+              <FilterCombobox
+                aria-label="فیلتر مشتری"
+                options={customerItems}
+                value={customerFilter}
+                onChange={(v) => {
+                  setCustomerFilter(v)
+                  setPage(0)
+                }}
+              />
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">نوع دستگاه</Label>
             <FilterCombobox
@@ -384,14 +396,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
               ))}
             </div>
 
-            <table className="hidden w-full table-fixed text-start text-sm sm:table">
-              <colgroup>
-                <col className="w-[28%]" />
-                <col className="w-[26%]" />
-                <col className="w-[16%]" />
-                <col className="w-[22%]" />
-                <col className="w-[8%]" />
-              </colgroup>
+            <table className="hidden w-full text-start text-sm sm:table">
               <thead className="text-xs text-muted-foreground">
                 <tr className="border-b">
                   <th className="px-2 py-1.5 text-start font-normal">تایم</th>
@@ -423,7 +428,7 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
                     {g.entries.map((e) => (
                       <Fragment key={e.id}>
                         <tr
-                          className="cursor-pointer border-b align-middle hover:bg-muted/40"
+                          className="cursor-pointer border-b align-top hover:bg-muted/40"
                           onClick={() => setExpanded(expanded === e.id ? null : e.id)}
                         >
                           <td className="px-2 py-2">
@@ -443,23 +448,25 @@ export function HistoryDialog({ open, onOpenChange }: Props) {
                               {toFa(formatDuration(e.durationMs))}
                             </span>
                           </td>
-                          <td className="px-2 py-2 whitespace-nowrap">
-                            {toman(e.total)}
+                          <td className="px-2 py-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="whitespace-nowrap">{toman(e.total)}</span>
                             {e.onAccount && (
-                              <Badge variant="destructive" className="ms-1.5">
+                              <Badge variant="destructive">
                                 بدهی
                               </Badge>
                             )}
                             {!!e.creditUsed && e.creditUsed > 0 && (
-                              <Badge variant="secondary" className="ms-1.5">
+                              <Badge variant="secondary">
                                 اعتبار {formatNumber(e.creditUsed)}
                               </Badge>
                             )}
                             {!!e.prepayUsed && e.prepayUsed > 0 && (
-                              <Badge variant="secondary" className="ms-1.5">
+                              <Badge variant="secondary">
                                 پیش‌پرداخت {formatNumber(e.prepayUsed)}
                               </Badge>
                             )}
+                            </div>
                           </td>
                           <td className="px-1 py-1">
                             <div className="flex items-center">
