@@ -10,12 +10,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
+import { MinutesInput } from '@/components/ui/minutes-input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tip } from '@/components/tip'
 import { useDiscardGuard } from '@/components/discard-dialog'
-import { formatNumber, parseNumber } from '@/lib/format'
+import { parseNumber } from '@/lib/format'
 import { categoryName, type Device, type Session, type Settings } from '@/lib/store'
 
 type Props = {
@@ -141,12 +141,10 @@ export function BackdateTimeDialog({ session, settings, onAdd, compact, size }: 
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="backdate-minutes">مدت (دقیقه)</Label>
-              <Input
+              <MinutesInput
                 id="backdate-minutes"
-                dir="ltr"
-                inputMode="numeric"
                 placeholder="0"
-                value={mins > 0 ? formatNumber(mins) : minutes}
+                value={minutes}
                 onChange={(e) => setMinutes(e.target.value)}
               />
             </div>

@@ -1,22 +1,19 @@
-import { CalendarClock, Plus } from 'lucide-react'
+import { CalendarClock, Eye, EyeOff, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tip } from '@/components/tip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDuration, formatNumber } from '@/lib/format'
 import { summarize } from '@/lib/history'
 import { formatJalaliClock, formatJalaliDate } from '@/lib/jalali'
 import { NO_CUSTOMER } from '@/lib/stats'
-import { type HistoryEntry } from '@/lib/store'
+import { historyDebt, type HistoryEntry } from '@/lib/store'
 
-const debtOf = (e: HistoryEntry) => {
-  if (!e.onAccount) return 0
-  const usedCredit = e.creditUsed ?? 0
-  const usedPrepay = e.prepayUsed ?? 0
-  return Math.max(0, e.total - usedCredit - usedPrepay)
-}
+const debtOf = historyDebt
 
+// Money received for the entry, before or after playing alike (`cashPaid` includes the prepay).
 const cashOf = (e: HistoryEntry) =>
-  e.cashPaid ?? (e.onAccount ? 0 : Math.max(0, e.total - (e.creditUsed ?? 0) - (e.prepayUsed ?? 0)))
+  e.cashPaid ?? (e.onAccount ? (e.prepayUsed ?? 0) : Math.max(0, e.total - (e.creditUsed ?? 0)))
 
 function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
@@ -66,6 +63,7 @@ export function ShiftSummary({
   onReserve,
   active = 0,
   detailsVisible = true,
+  onToggleDetails,
 }: {
   entries: HistoryEntry[]
   onAdd: () => void
@@ -74,12 +72,13 @@ export function ShiftSummary({
   active?: number
   // Visibility of financial/details blocks controlled by the main toolbar button.
   detailsVisible?: boolean
+  // Shown (next to «رزرو») only when no session runs; otherwise the toolbar has the same toggle.
+  onToggleDetails?: () => void
 }) {
   const sum = summarize(entries)
   const debtAdded = entries.reduce((s, e) => s + debtOf(e), 0)
   const cashIn = entries.reduce((s, e) => s + cashOf(e), 0)
   const usedCredit = entries.reduce((s, e) => s + (e.creditUsed ?? 0), 0)
-  const usedPrepay = entries.reduce((s, e) => s + (e.prepayUsed ?? 0), 0)
   const start = Math.min(...entries.map((e) => e.startedAt))
   const end = Math.max(...entries.map((e) => e.endedAt))
   const byDevice = new Map<string, { sessions: number; income: number }>()
@@ -89,6 +88,16 @@ export function ShiftSummary({
     byDevice.set(key, { sessions: cur.sessions + 1, income: cur.income + e.total })
   }
   const devices = [...byDevice].sort((a, b) => b[1].income - a[1].income)
+  // Extra items (بوفه و خدمات) sold in the shift: catalog items by catalog id, free-form ones by name.
+  const byItem = new Map<string, { name: string; qty: number; income: number }>()
+  for (const e of entries) {
+    for (const i of e.extraItems ?? []) {
+      const key = i.catalogId ?? `name:${i.name}`
+      const cur = byItem.get(key) ?? { name: i.name, qty: 0, income: 0 }
+      byItem.set(key, { name: cur.name, qty: cur.qty + i.qty, income: cur.income + i.price * i.qty })
+    }
+  }
+  const items = [...byItem].map(([key, v]) => ({ key, ...v })).sort((a, b) => b.income - a.income)
 
   return (
     <div className="flex flex-col gap-4">
@@ -108,6 +117,19 @@ export function ShiftSummary({
         <div className="flex items-center gap-4">
           {active === 0 && (
             <div className="flex gap-2">
+              {onToggleDetails && (
+                <Tip label={detailsVisible ? 'پنهان کردن هزینه' : 'نمایش هزینه'}>
+                  <Button
+                    size="icon-lg"
+                    variant="outline"
+                    aria-label={detailsVisible ? 'پنهان کردن هزینه' : 'نمایش هزینه'}
+                    aria-pressed={!detailsVisible}
+                    onClick={onToggleDetails}
+                  >
+                    {detailsVisible ? <Eye /> : <EyeOff />}
+                  </Button>
+                </Tip>
+              )}
               <Button size="lg" variant="outline" onClick={onReserve}>
                 <CalendarClock /> رزرو
               </Button>
@@ -149,6 +171,21 @@ export function ShiftSummary({
               </CardContent>
             </Card>
           )}
+          {items.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>درآمد به تفکیک بوفه و خدمات</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col divide-y">
+                {items.map((i) => (
+                  <div key={i.key} className="flex items-center justify-between py-2">
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
         </>
       ) : (
         <>
@@ -161,7 +198,6 @@ export function ShiftSummary({
             <Stat label="بوفه و زمان اضافه" value={formatNumber(sum.extrasCost)} unit="تومان" />
             <Stat label="دریافتی نقدی" value={formatNumber(cashIn)} unit="تومان" />
             <Stat label="پوشش از اعتبار" value={formatNumber(usedCredit)} unit="تومان" />
-            <Stat label="پوشش از پیش‌پرداخت" value={formatNumber(usedPrepay)} unit="تومان" />
             <Stat
               label="میانگین هر تایم"
               value={formatNumber(sum.count ? Math.round(sum.total / sum.count) : 0)}
@@ -189,12 +225,11 @@ export function ShiftSummary({
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {e.onAccount && <span className="text-xs text-destructive">بدهی</span>}
+                    {debtOf(e) > 0 && (
+                      <span className="text-xs text-destructive">بدهی {formatNumber(debtOf(e))}</span>
+                    )}
                     {!!e.creditUsed && e.creditUsed > 0 && (
                       <span className="text-xs text-green-700">اعتبار {formatNumber(e.creditUsed)}</span>
-                    )}
-                    {!!e.prepayUsed && e.prepayUsed > 0 && (
-                      <span className="text-xs text-blue-700">پیش‌پرداخت {formatNumber(e.prepayUsed)}</span>
                     )}
                     <span className="tabular-nums">{formatNumber(e.total)} تومان</span>
                   </div>
@@ -215,6 +250,24 @@ export function ShiftSummary({
                       {name} <span className="text-muted-foreground">({formatNumber(d.sessions)})</span>
                     </span>
                     <span className="tabular-nums">{formatNumber(d.income)} تومان</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {items.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>درآمد به تفکیک بوفه و خدمات</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col divide-y text-sm">
+                {items.map((i) => (
+                  <div key={i.key} className="flex items-center justify-between py-2">
+                    <span>
+                      {i.name} <span className="text-muted-foreground">({formatNumber(i.qty)})</span>
+                    </span>
+                    <span className="tabular-nums">{formatNumber(i.income)} تومان</span>
                   </div>
                 ))}
               </CardContent>

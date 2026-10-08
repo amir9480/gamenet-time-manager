@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { MinutesInput } from '@/components/ui/minutes-input'
 import { Label } from '@/components/ui/label'
 import { MoneyInput } from '@/components/ui/money-input'
 import { Tip } from '@/components/tip'
@@ -22,6 +23,7 @@ import { DataTab } from '@/components/data-tab'
 import { SecuritySettings } from '@/components/security-settings'
 import { DevicesEditor } from '@/components/devices-editor'
 import { ExtraItemsEditor } from '@/components/extra-items-editor'
+import { PriceOverridesEditor } from '@/components/price-overrides-editor'
 import { RateGroupsEditor } from '@/components/rate-groups-editor'
 import { DEFAULT_TITLE, useTheme, type Theme } from '@/components/theme-provider'
 import { ACCENTS, type Accent } from '@/lib/accents'
@@ -29,6 +31,7 @@ import type { AppIconValue } from '@/lib/app-icon'
 import { formatNumber, parseNumber } from '@/lib/format'
 import {
   ROUND_MODE_LABELS,
+  overrideChangesPrice,
   type QuickExtend,
   type Rounding,
   type RoundMode,
@@ -150,6 +153,21 @@ export function SettingsDialog({
     named(draft.deviceCategories) &&
     named(draft.devices) &&
     draft.devices.every((d) => d.rateIds.length > 0)
+  // First problem of the first invalid price override (shown in the footer), or undefined.
+  const overrideError = draft.priceOverrides
+    .map((o) =>
+      !o.name?.trim()
+        ? 'نام بازه‌ی قیمت ویژه را وارد کنید.'
+        : o.weekdays.length === 0
+          ? `برای «${o.name.trim()}» حداقل یک روز را انتخاب کنید.`
+          : o.startMin === o.endMin
+            ? `ساعت شروع و پایان «${o.name.trim()}» نباید یکی باشد.`
+            : !overrideChangesPrice(o, draft.rateGroups)
+              ? `در «${o.name.trim()}» حداقل یکی از قیمت‌ها باید با قیمت معمول فرق داشته باشد.`
+              : undefined,
+    )
+    .find(Boolean)
+  const overridesValid = overrideError === undefined
   const extrasValid =
     draft.extraCategories.length > 0 &&
     named(draft.extraCategories) &&
@@ -157,7 +175,8 @@ export function SettingsDialog({
     draft.extraItems.every((i) => i.price > 0)
   const roundingValid = draft.rounding.step > 0
   const quickExtendValid = draft.quickExtend.minutes > 0 && draft.quickExtend.cost > 0
-  const valid = ratesValid && devicesValid && extrasValid && roundingValid && quickExtendValid
+  const valid =
+    ratesValid && overridesValid && devicesValid && extrasValid && roundingValid && quickExtendValid
 
   const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
 
@@ -176,6 +195,7 @@ export function SettingsDialog({
       devices: trimNames(draft.devices),
       extraCategories: trimNames(draft.extraCategories),
       extraItems: trimNames(draft.extraItems),
+      priceOverrides: draft.priceOverrides.map((o) => ({ ...o, name: o.name?.trim() })),
     })
     setTheme(draft.theme)
     setAccent(draft.accent)
@@ -352,14 +372,12 @@ export function SettingsDialog({
               <div className="flex flex-col gap-1.5">
                 <Label>افزایش سریع محدودیت</Label>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Input
+                  <MinutesInput
                     id="quick-extend-minutes"
-                    dir="ltr"
-                    inputMode="numeric"
                     aria-invalid={draft.quickExtend.minutes <= 0}
                     aria-label="افزایش سریع محدودیت زمانی"
                     className="w-32"
-                    value={draft.quickExtend.minutes > 0 ? formatNumber(draft.quickExtend.minutes) : ''}
+                    value={draft.quickExtend.minutes > 0 ? String(draft.quickExtend.minutes) : ''}
                     onChange={(e) =>
                       patch({ quickExtend: { ...draft.quickExtend, minutes: parseNumber(e.target.value) } })
                     }
@@ -396,12 +414,17 @@ export function SettingsDialog({
               )}
             </TabsContent>
 
-            <TabsContent value="rates">
+            <TabsContent value="rates" className="flex flex-col gap-6">
               <RateGroupsEditor
                 groups={draft.rateGroups}
                 devices={draft.devices}
                 usage={usage}
                 onChange={(rateGroups) => patch({ rateGroups })}
+              />
+              <PriceOverridesEditor
+                overrides={draft.priceOverrides}
+                groups={draft.rateGroups}
+                onChange={(priceOverrides) => patch({ priceOverrides })}
               />
             </TabsContent>
 
@@ -441,7 +464,9 @@ export function SettingsDialog({
                   ? 'مضرب رند کردن باید بیشتر از صفر باشد.'
                   : !quickExtendValid
                     ? 'مقادیر افزایش سریع محدودیت باید بیشتر از صفر باشند.'
-                    : 'نام‌ها باید تکمیل و قیمت‌ها بیشتر از صفر باشند و هر دستگاه یک نرخ داشته باشد.'}
+                    : overrideError
+                      ? overrideError
+                      : 'نام‌ها باید تکمیل و قیمت‌ها بیشتر از صفر باشند و هر دستگاه یک نرخ داشته باشد.'}
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={requestClose}>

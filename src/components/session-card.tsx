@@ -36,6 +36,8 @@ import {
   clearCostLimit,
   clearTimeLimit,
   computeCost,
+  costLimitEtaMs,
+  currentPrice,
   EMPTY_PRICE,
   defaultPriceFor,
   deviceOf,
@@ -133,13 +135,10 @@ export function SessionCard({
   const exceeded =
     (timeRemaining !== undefined && timeRemaining <= 0) ||
     (costRemaining !== undefined && costRemaining <= 0)
-  // Cost remaining has no natural time unit; estimate it from the current price so it can be
-  // shown alongside its toman amount and compared against the same 5-minute warning threshold
-  // as the time limit.
-  const costRemainingMs = (() => {
-    if (costRemaining === undefined || !last || last.to !== null || last.price <= 0) return undefined
-    return (costRemaining / last.price) * 3_600_000
-  })()
+  // Cost remaining has no natural time unit; estimate it minute by minute (upcoming price
+  // overrides included) so it can be shown alongside its toman amount and compared against the
+  // same 5-minute warning threshold as the time limit.
+  const costRemainingMs = costLimitEtaMs(session, settings, time)
   const limitLines = [
     timeRemaining === undefined
       ? null
@@ -211,8 +210,8 @@ ${limitLines.join('\n')}` : ''
             <AlertDialogHeader>
               <AlertDialogTitle>تغییر نوع نرخ؟</AlertDialogTitle>
               <AlertDialogDescription>
-                نوع نرخ از «{type.name}» ({formatNumber(type.price)} تومان در ساعت) به «
-                {pendingType?.name}» ({formatNumber(pendingType?.price ?? 0)} تومان در ساعت) تغییر
+                نوع نرخ از «{type.name}» ({formatNumber(currentPrice(type.id, type.price, settings.priceOverrides, Date.now()))} تومان در ساعت) به «
+                {pendingType?.name}» ({formatNumber(pendingType ? currentPrice(pendingType.id, pendingType.price, settings.priceOverrides, Date.now()) : 0)} تومان در ساعت) تغییر
                 می‌کند.{' '}
                 {running
                   ? 'این تغییر از همین لحظه روی ثانیه‌های بعدی اعمال می‌شود؛ زمان گذشته با نرخ قبلی محاسبه می‌ماند.'
@@ -346,6 +345,8 @@ ${limitLines.join('\n')}` : ''
             groups={groups}
             value={type.id}
             onChange={requestType}
+            overrides={settings.priceOverrides}
+            now={time}
             extraItems={[{ value: SWITCH_DEVICE, label: 'تغییر دستگاه…' }]}
             extra={<SelectItem value={SWITCH_DEVICE}>تغییر دستگاه…</SelectItem>}
             trigger={
@@ -447,6 +448,8 @@ ${limitLines.join('\n')}` : ''
               groups={groups}
               value={type.id}
               onChange={requestType}
+              overrides={settings.priceOverrides}
+              now={time}
               extraItems={[{ value: SWITCH_DEVICE, label: 'تغییر دستگاه…' }]}
               extra={<SelectItem value={SWITCH_DEVICE}>تغییر دستگاه…</SelectItem>}
               trigger={

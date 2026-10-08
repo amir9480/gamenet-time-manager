@@ -46,7 +46,7 @@ import {
   toFa,
   type Preset,
 } from '@/lib/jalali'
-import { segmentCost, segmentMs, type HistoryEntry } from '@/lib/store'
+import { historyDebt, segmentCost, segmentMs, type HistoryEntry } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -357,9 +357,9 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
                       <div className="flex items-center justify-between gap-2">
                         <div className="font-bold">
                           {toman(e.total)}
-                          {e.onAccount && (
+                          {historyDebt(e) > 0 && (
                             <Badge variant="destructive" className="ms-1.5">
-                              بدهی
+                              بدهی {formatNumber(historyDebt(e))}
                             </Badge>
                           )}
                           {!!e.creditUsed && e.creditUsed > 0 && (
@@ -451,10 +451,8 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
                           <td className="px-2 py-2">
                             <div className="flex flex-wrap items-center gap-1.5">
                             <span className="whitespace-nowrap">{toman(e.total)}</span>
-                            {e.onAccount && (
-                              <Badge variant="destructive">
-                                بدهی
-                              </Badge>
+                            {historyDebt(e) > 0 && (
+                              <Badge variant="destructive">بدهی {formatNumber(historyDebt(e))}</Badge>
                             )}
                             {!!e.creditUsed && e.creditUsed > 0 && (
                               <Badge variant="secondary">
@@ -591,7 +589,8 @@ function Details({ entry }: { entry: HistoryEntry }) {
             <span dir="ltr" className="inline-block">
               {formatJalaliClock(seg.from)} – {formatJalaliClock(seg.to ?? now)}
             </span>{' '}
-            · {seg.typeName} ({formatNumber(seg.price)} در ساعت) ·{' '}
+            · {seg.typeName}
+            {seg.overrideName && ` [${seg.overrideName}]`} ({formatNumber(seg.price)} در ساعت) ·{' '}
             <span dir="ltr" className="inline-block">
               {toFa(formatDuration(segmentMs(seg, now)))}
             </span>

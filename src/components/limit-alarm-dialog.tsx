@@ -18,6 +18,7 @@ import { alertLimitReached } from '@/lib/attention'
 import { readSessions, readSettings } from '@/lib/db'
 import { formatDuration, formatNumber } from '@/lib/format'
 import { useNow } from '@/lib/use-now'
+import { useOverrideSplitter } from '@/lib/use-override-splitter'
 import {
   clearCostLimit,
   clearTimeLimit,
@@ -254,10 +255,12 @@ export function LimitAlarmDialog({ sessions, settings, onUpdate, locked }: Props
 }
 
 // Same dialog, shown over the lock screen: it reads its own data since `Main` (and the live
-// queries it would otherwise come from) isn't mounted while locked.
+// queries it would otherwise come from) isn't mounted while locked. It also keeps sessions cut at
+// price-override edges (normally done in `Main`), so cost limits stay exact while locked.
 export function LockedLimitAlarmDialog({ onUpdate }: { onUpdate: Props['onUpdate'] }) {
   const sessions = useLiveQuery(readSessions)
   const settings = useLiveQuery(readSettings)
+  useOverrideSplitter(settings, sessions)
   if (!sessions || !settings) return null
   return <LimitAlarmDialog sessions={sessions} settings={settings} onUpdate={onUpdate} locked />
 }

@@ -29,6 +29,7 @@ import { APP_VERSION, REPO_URL } from '@/lib/platform'
 import { lockNow, useSecurity } from '@/lib/security'
 import { useInstance } from '@/lib/single-instance'
 import { useIdleLock } from '@/lib/use-idle-lock'
+import { useOverrideSplitter } from '@/lib/use-override-splitter'
 import {
   addSessionRow,
   deleteSessionRow,
@@ -73,6 +74,7 @@ function Main() {
   useIdleLock()
   const settings = useLiveQuery(readSettings)
   const sessions = useLiveQuery(readSessions)
+  useOverrideSplitter(settings, sessions)
   const [addOpen, setAddOpen] = useState(false)
   const [reserveOpen, setReserveOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -263,6 +265,7 @@ function Main() {
             onAdd={() => setAddOpen(true)}
             onReserve={() => setReserveOpen(true)}
             detailsVisible={summaryVisible}
+            onToggleDetails={() => setSummaryVisible((v) => !v)}
           />
         ) : sessions.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6 rounded-xl border border-dashed p-10 text-center">

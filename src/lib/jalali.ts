@@ -83,7 +83,7 @@ export const formatJalaliClock = (ts: number, seconds = true) => {
   return toFa(parts.map(pad).join(':'))
 }
 
-const WEEKDAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
+export const WEEKDAY_NAMES = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
 
 export const formatJalaliLong = (ts: number) => {
   const { y, m, d } = toJalali(ts)

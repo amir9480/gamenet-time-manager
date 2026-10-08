@@ -10,13 +10,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { formatNumber } from '@/lib/format'
-import type { RateGroup } from '@/lib/store'
+import { overrideAt, overrideLabel, type PriceOverride, type RateGroup } from '@/lib/store'
 
 type Props = {
   // The rate groups of the chosen device (see `devicePriceGroups`).
   groups: RateGroup[]
   value: string
   onChange: (priceId: string) => void
+  // When given, the price shown for each option reflects whichever override (if any) is
+  // active for it right now, instead of the flat catalog price.
+  overrides?: PriceOverride[]
+  now?: number
   // Extra trailing items (e.g. «تغییر دستگاه…»); their `items` entries must be passed too.
   extraItems?: { value: string; label: string }[]
   extra?: ReactNode
@@ -32,14 +36,23 @@ export function PriceSelect({
   groups,
   value,
   onChange,
+  overrides = [],
+  now = Date.now(),
   extraItems = [],
   extra,
   trigger,
   className,
   disabled,
 }: Props) {
+  // With an active override the label shows its price and name, e.g. «گیمینگ (60,000 · تخفیف)».
+  const labelOf = (p: { id: string; name: string; price: number }) => {
+    const hit = overrideAt(overrides, p.id, p.price, now)
+    return hit
+      ? `${p.name} (${formatNumber(hit.price)} · ${overrideLabel(hit.override)})`
+      : priceLabel(p.name, p.price)
+  }
   const items = [
-    ...groups.flatMap((g) => g.prices.map((p) => ({ value: p.id, label: priceLabel(p.name, p.price) }))),
+    ...groups.flatMap((g) => g.prices.map((p) => ({ value: p.id, label: labelOf(p) }))),
     ...extraItems,
   ]
   const grouped = groups.length > 1
@@ -60,7 +73,7 @@ export function PriceSelect({
         {groups.map((g) => {
           const rows = g.prices.map((p) => (
             <SelectItem key={p.id} value={p.id}>
-              {priceLabel(p.name, p.price)}
+              {labelOf(p)}
             </SelectItem>
           ))
           return grouped ? (

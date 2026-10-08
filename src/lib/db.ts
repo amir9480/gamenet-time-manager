@@ -8,6 +8,7 @@ import {
   applyPrices,
   defaultSettings,
   settleSessionAmount,
+  splitByOverrides,
   uid,
   type CatalogItem,
   type Customer,
@@ -16,6 +17,7 @@ import {
   type ExtraCategory,
   type HistoryEntry,
   type Payment,
+  type PriceOverride,
   type RateGroup,
   type Session,
   type Settings,
@@ -33,6 +35,7 @@ class GamenetDB extends Dexie {
   extraCategories!: Table<Ordered<ExtraCategory>, string>
   extraItems!: Table<Ordered<CatalogItem>, string>
   customers!: Table<Ordered<Customer>, string>
+  priceOverrides!: Table<Ordered<PriceOverride>, string>
   meta!: Table<{ key: string; value: string }, string>
   sessions!: Table<Session, string>
   history!: Table<HistoryEntry, string>
@@ -94,6 +97,8 @@ class GamenetDB extends Dexie {
         }
         if (rows.length > 0) await wallet.bulkAdd(rows)
       })
+    // v5: time-of-day/weekday price overrides (new optional table, nothing to migrate).
+    this.version(5).stores({ priceOverrides: 'id, order' })
     this.on('populate', (tx) => {
       const d = defaultSettings()
       const seed = (table: string, rows: object[]) =>
@@ -119,7 +124,7 @@ const readOrdered = async <T extends { order: number; deletedAt?: number }>(tabl
   (await table.orderBy('order').toArray()).filter((r) => r.deletedAt === undefined).map(strip)
 
 export const readSettings = async (): Promise<Settings> => {
-  const [rateGroups, deviceCategories, devices, extraCategories, extraItems, customers] =
+  const [rateGroups, deviceCategories, devices, extraCategories, extraItems, customers, priceOverrides] =
     await Promise.all([
       readOrdered(db.rateGroups),
       readOrdered(db.deviceCategories),
@@ -127,6 +132,7 @@ export const readSettings = async (): Promise<Settings> => {
       readOrdered(db.extraCategories),
       readOrdered(db.extraItems),
       readOrdered(db.customers),
+      readOrdered(db.priceOverrides),
     ])
   return {
     rateGroups: rateGroups as RateGroup[],
@@ -135,6 +141,7 @@ export const readSettings = async (): Promise<Settings> => {
     extraCategories: extraCategories as ExtraCategory[],
     extraItems: extraItems as CatalogItem[],
     customers: customers as Customer[],
+    priceOverrides: priceOverrides as PriceOverride[],
   }
 }
 
@@ -196,9 +203,11 @@ export const saveSettings = (next: Omit<Settings, 'customers'>) =>
       db.devices,
       db.extraCategories,
       db.extraItems,
+      db.priceOverrides,
       db.sessions,
     ],
     async () => {
+      const overrides = await syncTable(db.priceOverrides, next.priceOverrides, (o) => o.id)
       const groups = await syncTable(db.rateGroups, next.rateGroups, (g) => norm(g.name))
       const cats = await syncTable(db.deviceCategories, next.deviceCategories, (c) => norm(c.name))
       const extraCats = await syncTable(db.extraCategories, next.extraCategories, (c) => norm(c.name))
@@ -219,6 +228,9 @@ export const saveSettings = (next: Omit<Settings, 'customers'>) =>
         (i) => norm(i.name) + '|' + i.categoryId,
       )
 
+      // Prices first, then re-cut at the (possibly edited) price overrides: lines of a deleted
+      // override join back, a new/edited one splits them.
+      const now = Date.now()
       await db.sessions.bulkPut(
         applyExtraItems(
           applyDevices(
@@ -227,6 +239,8 @@ export const saveSettings = (next: Omit<Settings, 'customers'>) =>
             cats.rows,
           ),
           items.rows,
+        ).map((s) =>
+          splitByOverrides(s, { rateGroups: groups.rows, priceOverrides: overrides.rows }, now),
         ),
       )
     },
@@ -537,6 +551,7 @@ const BACKUP_TABLE_NAMES = [
   'extraCategories',
   'extraItems',
   'customers',
+  'priceOverrides',
   'meta',
   'sessions',
   'history',
@@ -555,6 +570,7 @@ const backupTables = (): Record<BackupTableName, Table<any, string>> =>
     extraCategories: db.extraCategories,
     extraItems: db.extraItems,
     customers: db.customers,
+    priceOverrides: db.priceOverrides,
     meta: db.meta,
     sessions: db.sessions,
     history: db.history,

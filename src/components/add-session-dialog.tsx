@@ -21,7 +21,7 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { CustomerSelect } from '@/components/customer-select'
 import { useDiscardGuard } from '@/components/discard-dialog'
-import { Input } from '@/components/ui/input'
+import { MinutesInput } from '@/components/ui/minutes-input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { MoneyInput } from '@/components/ui/money-input'
@@ -31,6 +31,7 @@ import { toFa } from '@/lib/jalali'
 import { rank, type Field } from '@/lib/search'
 import {
   categoryName,
+  currentPrice,
   devicePriceGroups,
   devicePrices,
   flatPrices,
@@ -262,12 +263,14 @@ export function AddSessionDialog({
 
   // Quick search entries. When a device (or a whole type) offers more than one price, there is
   // one entry per price, so the price can be picked straight from the search results.
-  const priceText = (p: FlatPrice) => `${p.name} (${formatNumber(p.price)})`
+  const priceNow = (p: { id: string; price: number }) =>
+    currentPrice(p.id, p.price, settings.priceOverrides, Date.now())
+  const priceText = (p: FlatPrice) => `${p.name} (${formatNumber(priceNow(p))})`
   // Searchable text is independent of what an entry displays: every word of the query may hit
   // the type, device, price name / value, rate group or the free / busy status.
   const priceFields = (p: FlatPrice): Field[] => [
     { text: p.name, weight: 2 },
-    String(p.price),
+    String(priceNow(p)),
     p.groupName,
   ]
   const statusField = (busy: boolean) => (busy ? 'در حال استفاده' : 'آزاد')
@@ -507,7 +510,7 @@ export function AddSessionDialog({
                         <span className="flex flex-1 items-center justify-between gap-2">
                           <span className="font-medium">{p.name}</span>
                           <span className="text-xs text-muted-foreground">
-                            {formatNumber(p.price)} تومان
+                            {formatNumber(priceNow(p))} تومان
                           </span>
                         </span>
                       </RadioCard>
@@ -524,7 +527,7 @@ export function AddSessionDialog({
                 {device ? (
                   <>
                     <b>{device.name}</b>
-                    {price && ` · ${price.name} (${formatNumber(price.price)} تومان در ساعت)`}
+                    {price && ` · ${price.name} (${formatNumber(priceNow(price))} تومان در ساعت)`}
                   </>
                 ) : (
                   'دستگاه آزادی انتخاب نشده است.'
@@ -537,16 +540,10 @@ export function AddSessionDialog({
               />
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="new-limit-time">محدودیت زمانی (اختیاری، دقیقه)</Label>
-                <Input
+                <MinutesInput
                   id="new-limit-time"
-                  dir="ltr"
-                  inputMode="numeric"
                   placeholder="بدون محدودیت"
-                  value={
-                    parseNumber(timeLimit) > 0
-                      ? formatNumber(Math.floor(parseNumber(timeLimit)))
-                      : timeLimit
-                  }
+                  value={timeLimit}
                   onChange={(e) => setTimeLimit(e.target.value)}
                 />
               </div>

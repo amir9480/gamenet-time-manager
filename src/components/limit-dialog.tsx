@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
+import { MinutesInput } from '@/components/ui/minutes-input'
 import { Label } from '@/components/ui/label'
 import { MoneyInput } from '@/components/ui/money-input'
 import { useDiscardGuard } from '@/components/discard-dialog'
@@ -121,12 +121,10 @@ export function LimitDialog({
                 </Button>
               )}
             </div>
-            <Input
+            <MinutesInput
               id="limit-time"
-              dir="ltr"
-              inputMode="numeric"
               placeholder="بدون محدودیت"
-              value={timeMinutes > 0 ? formatNumber(timeMinutes) : timeText}
+              value={timeText}
               onChange={(e) => setTimeText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && save()}
             />

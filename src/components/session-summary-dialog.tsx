@@ -66,6 +66,8 @@ import {
   segmentCost,
   segmentMs,
   selectedPrice,
+  sessionCostBreakdown,
+  splitByOverrides,
   extendCostLimit,
   setExtraItemQty,
   updateSegment,
@@ -163,7 +165,13 @@ export function SessionSummaryDialog({
 }: Props) {
   const { rounding } = useTheme()
 
-  const [draft, setDraft] = useState<Session>(session)
+  const [draft, setDraftRaw] = useState<Session>(session)
+  // Every edit goes through the override splitter/joiner, so the lines below always match how
+  // the time is billed (edited times crossing a price-override edge get split, and pieces that
+  // became identical are joined).
+  const normalize = (s: Session) => splitByOverrides(s, settings, Date.now())
+  const setDraft = (next: Session | ((d: Session) => Session)) =>
+    setDraftRaw((d) => normalize(typeof next === 'function' ? next(d) : next))
   // What's already committed to the DB (the `session` prop lags behind it until the next
   // live-query render), so "unsaved changes" is judged against this, not the prop directly.
   const [baseline, setBaseline] = useState<Session>(session)
@@ -188,10 +196,11 @@ export function SessionSummaryDialog({
 
   useEffect(() => {
     if (!open) return
-    setDraft(session)
-    setBaseline(session)
+    const seeded = normalize(session)
+    setDraftRaw(seeded)
+    setBaseline(seeded)
     const seedTotal =
-      session.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0) + extraItemsCost(session)
+      seeded.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0) + extraItemsCost(seeded)
     const seedFinal = String(rounding.auto ? roundAmount(seedTotal, rounding) : seedTotal)
     setFinalText(seedFinal)
     setInitialFinalText(seedFinal)
@@ -218,12 +227,22 @@ export function SessionSummaryDialog({
     })
   }, [open, session.id])
 
+  // A running session crossing an override edge while the dialog is open: split it here too
+  // (the stored session is split by `useOverrideSplitter`).
+  useEffect(() => {
+    if (!open || draft.status !== 'running') return
+    setDraftRaw(normalize)
+    setBaseline(normalize)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, now, draft.status, settings])
+
   const { segments, extraItems } = draft
   const start = segments[0]?.from
   const end = segments.length ? (segments[segments.length - 1].to ?? now) : undefined
   const timeTotal = segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0)
   const itemsCost = extraItemsCost(draft)
   const total = timeTotal + itemsCost
+  const costBreakdown = sessionCostBreakdown(draft, now)
 
   useEffect(() => {
     if (!open || draft.status !== 'running') return
@@ -262,11 +281,13 @@ export function SessionSummaryDialog({
   // reopening it.
   const pauseNow = () => {
     const ts = Date.now()
-    const paused = pauseSession(draft, ts)
+    const paused = splitByOverrides(pauseSession(draft, ts), settings, ts)
     onUpdate(() => paused)
-    setDraft(paused)
+    setDraftRaw(paused)
     setBaseline(paused)
-    const seedTotal = paused.segments.reduce((sum, seg) => sum + segmentCost(seg, ts), 0) + extraItemsCost(paused)
+    const seedTotal =
+      paused.segments.reduce((sum, seg) => sum + segmentCost(seg, ts), 0) +
+      extraItemsCost(paused)
     const seedFinal = String(rounding.auto ? roundAmount(seedTotal, rounding) : seedTotal)
     setFinalText(seedFinal)
     setInitialFinalText(seedFinal)
@@ -514,6 +535,10 @@ export function SessionSummaryDialog({
                           groups={groups}
                           value={seg.typeId}
                           onChange={(id) => pickSegmentPrice(i, seg, id)}
+                          // Labels show the price in effect when this line started, so a line
+                          // inside a price override shows the override's price.
+                          overrides={settings.priceOverrides}
+                          now={seg.from}
                           extraItems={priceFallback ? [priceFallback] : []}
                           extra={
                             priceFallback && (
@@ -524,7 +549,9 @@ export function SessionSummaryDialog({
                           }
                           className="w-auto min-w-32"
                         />
-                        <span className="ms-auto font-bold">{toman(segmentCost(seg, now))}</span>
+                        <span className="ms-auto font-bold">
+                          {toman(segmentCost(seg, now))}
+                        </span>
                       </div>
                     </div>
                   )
@@ -610,7 +637,13 @@ export function SessionSummaryDialog({
             </div>
 
             <div className="flex flex-col gap-1.5 border-t pt-2">
-              <Row label="جمع هزینه زمان" value={toman(timeTotal)} />
+              <Row
+                label={costBreakdown.overrides.length ? 'هزینه زمان (نرخ معمول)' : 'جمع هزینه زمان'}
+                value={toman(costBreakdown.base)}
+              />
+              {costBreakdown.overrides.map((o) => (
+                <Row key={o.id} label={`هزینه زمان (${o.label})`} value={toman(o.cost)} />
+              ))}
               <Row label="جمع بوفه و سایر هزینه‌ها" value={toman(itemsCost)} />
               <Row label="جمع پیش‌پرداخت" value={toman(prepayAmount)} />
             </div>

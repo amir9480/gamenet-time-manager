@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Field } from '@/lib/search'
+import { jalaliWeekday, startOfDay } from '@/lib/jalali'
 
 // ---- catalog types ------------------------------------------------------------
 
@@ -22,6 +23,20 @@ export type CatalogItem = { id: string; name: string; price: number; categoryId:
 
 export type Customer = { id: string; name: string; phone?: string }
 
+// Time-of-day/weekday priced window that fully replaces whichever price is active (by price id)
+// while it matches. `weekday` follows `jalaliWeekday` (0 = شنبه … 6 = جمعه). `endMin <= startMin`
+// means the window crosses into the next day (e.g. 20:00 → 02:00). Order in `Settings.priceOverrides`
+// is priority: the first matching override wins. Live sessions are cut at window edges and the
+// price is stored on the segments (`splitByOverrides`), so history keeps what was charged.
+export type PriceOverride = {
+  id: string
+  name?: string
+  weekdays: number[]
+  startMin: number
+  endMin: number
+  prices: Record<string, number>
+}
+
 export type Settings = {
   rateGroups: RateGroup[]
   deviceCategories: DeviceCategory[]
@@ -29,6 +44,7 @@ export type Settings = {
   extraCategories: ExtraCategory[]
   extraItems: CatalogItem[]
   customers: Customer[]
+  priceOverrides: PriceOverride[]
 }
 
 // ---- session types ----------------------------------------------------------
@@ -46,6 +62,11 @@ export type Segment = {
   deviceId: string
   deviceName: string
   categoryName: string
+  // Set while this run falls inside a price override (see `splitByOverrides`): `price` is then
+  // the override's price and `basePrice` the catalog price it replaced. Absent on older rows.
+  overrideId?: string
+  overrideName?: string
+  basePrice?: number
 }
 
 // `catalogId` links an item to its catalog entry so Settings edits propagate to live
@@ -114,6 +135,7 @@ export const defaultSettings = (): Settings => {
       { id: uid(), name: 'کیک', price: 500, categoryId: byName('خوراکی') },
     ],
     customers: [],
+    priceOverrides: [],
   }
 }
 
@@ -369,6 +391,204 @@ export const elapsedMs = (s: Session, now: number) =>
 // artifact, not real usage.
 export const MIN_BILLABLE_MS = 3_000
 
+// ---- price overrides (weekday/time-of-day) ---------------------------------------
+// Overrides are materialized into the segments themselves (see `splitByOverrides`): a segment
+// never crosses an override boundary, and one that runs inside an override carries its price,
+// `overrideId`/`overrideName` and the catalog `basePrice`. So every cost helper below just bills
+// `seg.price`, the summary lists one line per price, and history snapshots stay correct.
+
+const minutesOfDay = (ts: number) => (ts - startOfDay(ts)) / 60_000
+
+const overrideMatches = (o: PriceOverride, ts: number): boolean => {
+  const w = jalaliWeekday(new Date(ts))
+  const m = minutesOfDay(ts)
+  if (o.endMin > o.startMin) return o.weekdays.includes(w) && m >= o.startMin && m < o.endMin
+  // Wraps past midnight: active from `startMin` to end of a picked weekday, then from 00:00 to
+  // `endMin` on the following day.
+  return (
+    (o.weekdays.includes(w) && m >= o.startMin) ||
+    (o.weekdays.includes((w + 6) % 7) && m < o.endMin)
+  )
+}
+
+// First override (in priority order) with a price set for `typeId` whose window contains `ts`.
+// An empty/zero price means "not overridden"; a price equal to `basePrice` counts as no override,
+// so it never splits a line for nothing.
+export const overrideAt = (
+  overrides: PriceOverride[],
+  typeId: string,
+  basePrice: number,
+  ts: number,
+): { price: number; override: PriceOverride } | undefined => {
+  for (const o of overrides) {
+    const price = o.prices?.[typeId]
+    if (!price || price <= 0 || !Array.isArray(o.weekdays)) continue
+    if (overrideMatches(o, ts)) return price === basePrice ? undefined : { price, override: o }
+  }
+  return undefined
+}
+
+// The price charged for `typeId` at `ts` (the active override's, else `basePrice`). For showing
+// a price "right now" (price pickers, add-session).
+export const currentPrice = (
+  typeId: string,
+  basePrice: number,
+  overrides: PriceOverride[],
+  ts: number,
+): number => overrideAt(overrides, typeId, basePrice, ts)?.price ?? basePrice
+
+const DAY_MS = 86_400_000
+
+// The next instant after `now` where any override starts or ends (undefined without overrides).
+export const nextOverrideBoundary = (overrides: PriceOverride[], now: number): number | undefined => {
+  let next: number | undefined
+  for (let day = startOfDay(now), i = 0; i < 2; i++, day += DAY_MS) {
+    for (const o of overrides) {
+      for (const m of [o.startMin, o.endMin]) {
+        const t = day + m * 60_000
+        if (t > now && (next === undefined || t < next)) next = t
+      }
+    }
+  }
+  return next
+}
+
+type PriceSlice = { from: number; to: number; price: number; override?: PriceOverride }
+
+// Splits [from, to) into contiguous slices of constant effective price. Candidate cuts are every
+// override's start/end minute on every calendar day touched; each piece is resolved at its middle.
+const priceSlices = (
+  from: number,
+  to: number,
+  typeId: string,
+  basePrice: number,
+  overrides: PriceOverride[],
+): PriceSlice[] => {
+  const bounds = new Set<number>([from, to])
+  for (let day = startOfDay(from); day < to; day += DAY_MS) {
+    for (const o of overrides) {
+      for (const m of [o.startMin, o.endMin]) {
+        const t = day + m * 60_000
+        if (t > from && t < to) bounds.add(t)
+      }
+    }
+  }
+  const sorted = [...bounds].sort((a, b) => a - b)
+  const slices: PriceSlice[] = []
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i]
+    const b = sorted[i + 1]
+    const hit = overrideAt(overrides, typeId, basePrice, (a + b) / 2)
+    const price = hit?.price ?? basePrice
+    const last = slices[slices.length - 1]
+    if (last && last.price === price && last.override?.id === hit?.override.id) last.to = b
+    else slices.push({ from: a, to: b, price, override: hit?.override })
+  }
+  // A sliver under the billable minimum (e.g. started 2 s before a window opened) is absorbed by
+  // the following slice instead of becoming its own free line.
+  for (let i = 0; i < slices.length - 1; i++) {
+    if (slices[i].to - slices[i].from < MIN_BILLABLE_MS) {
+      slices[i + 1].from = slices[i].from
+      slices.splice(i, 1)
+      i--
+    }
+  }
+  return slices
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+const minToClock = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`
+
+export const overrideLabel = (o: PriceOverride) =>
+  o.name?.trim() || `${minToClock(o.startMin)}–${minToClock(o.endMin)}`
+
+// An override must change at least one price (an override equal to every catalog price, or with
+// every price left empty, does nothing).
+export const overrideChangesPrice = (o: PriceOverride, groups: RateGroup[]) =>
+  flatPrices(groups).some((p) => {
+    const price = o.prices[p.id]
+    return !!price && price > 0 && price !== p.price
+  })
+
+const priced = (
+  seg: Segment,
+  from: number,
+  to: number | null,
+  price: number,
+  override: PriceOverride | undefined,
+  basePrice: number,
+): Segment => {
+  const { overrideId: _id, overrideName: _name, basePrice: _base, ...rest } = seg
+  return {
+    ...rest,
+    from,
+    to,
+    price,
+    ...(override ? { overrideId: override.id, overrideName: overrideLabel(override), basePrice } : {}),
+  }
+}
+
+// Two lines that are really one: same device, price type, price and override, and at most 3
+// seconds apart (compared in whole seconds, as the clock shows them; a small overlap from an
+// edited time counts too). The gap is billed as part of the joined line.
+const MERGE_GAP_S = MIN_BILLABLE_MS / 1000
+const sameLine = (a: Segment, b: Segment) =>
+  a.to !== null &&
+  Math.abs(Math.floor(b.from / 1000) - Math.floor(a.to / 1000)) <= MERGE_GAP_S &&
+  a.deviceId === b.deviceId &&
+  a.typeId === b.typeId &&
+  a.price === b.price &&
+  a.overrideId === b.overrideId
+
+// A closed piece too short to be billed (e.g. a quick price/device switch that was undone).
+const isSliver = (seg: Segment) => seg.to !== null && seg.to - seg.from < MIN_BILLABLE_MS
+
+// Smart splitter + joiner for live sessions. Every segment is cut at override boundaries and
+// re-priced (catalog price outside overrides, the override's price inside), then neighbours that
+// ended up identical (same device, price type, price and override, at most 3 s apart) are joined
+// back into one line, e.g. after an override is deleted/edited or a window no longer applies.
+// Pure and idempotent: returns `s` itself when nothing changes, so callers write only on change.
+// History snapshots are never passed through it.
+export const splitByOverrides = (
+  s: Session,
+  settings: Pick<Settings, 'rateGroups' | 'priceOverrides'>,
+  now: number,
+): Session => {
+  if (s.segments.length === 0) return s
+  const overrides = settings.priceOverrides ?? []
+  const catalog = new Map(flatPrices(settings.rateGroups).map((p) => [p.id, p.price]))
+  const split: Segment[] = []
+  for (const seg of s.segments) {
+    const base = catalog.get(seg.typeId) ?? seg.basePrice ?? seg.price
+    const end = seg.to ?? now
+    if (end <= seg.from) {
+      const hit = overrideAt(overrides, seg.typeId, base, seg.from)
+      split.push(priced(seg, seg.from, seg.to, hit?.price ?? base, hit?.override, base))
+      continue
+    }
+    const slices = priceSlices(seg.from, end, seg.typeId, base, overrides)
+    slices.forEach((sl, i) => {
+      const to = i === slices.length - 1 ? seg.to : sl.to
+      split.push(priced(seg, sl.from, to, sl.price, sl.override, base))
+    })
+  }
+  const joined: Segment[] = []
+  for (const seg of split) {
+    // The last real line, looking past any unbilled slivers right before `seg` (A → tiny B →
+    // tiny C → A: the slivers are dropped and both A lines become one).
+    let i = joined.length - 1
+    while (i >= 0 && isSliver(joined[i]) && !sameLine(joined[i], seg)) i--
+    const prev = joined[i]
+    if (prev && sameLine(prev, seg)) {
+      const to = seg.to === null || prev.to === null ? null : Math.max(prev.to, seg.to)
+      joined.splice(i, joined.length - i, { ...prev, to })
+    } else {
+      joined.push(seg)
+    }
+  }
+  return JSON.stringify(joined) === JSON.stringify(s.segments) ? s : { ...s, segments: joined }
+}
+
 // Billed per whole second; any started toman counts (rounded up).
 export const segmentCost = (seg: Segment, now: number) => {
   const ms = segmentMs(seg, now)
@@ -381,6 +601,26 @@ export const extraItemsCost = (s: Session) =>
 
 export const computeCost = (s: Session, now: number) =>
   s.segments.reduce((sum, seg) => sum + segmentCost(seg, now), 0) + extraItemsCost(s)
+
+// Time cost split into the normal-price part and one entry per override (from the override
+// stored on each segment), for the end-session summary.
+export type CostBreakdown = { base: number; overrides: { id: string; label: string; cost: number }[] }
+
+export const sessionCostBreakdown = (s: Session, now: number): CostBreakdown => {
+  const byOverride = new Map<string, { id: string; label: string; cost: number }>()
+  let base = 0
+  for (const seg of s.segments) {
+    const cost = segmentCost(seg, now)
+    if (!seg.overrideId) {
+      base += cost
+      continue
+    }
+    const row = byOverride.get(seg.overrideId) ?? { id: seg.overrideId, label: seg.overrideName ?? '', cost: 0 }
+    row.cost += cost
+    byOverride.set(seg.overrideId, row)
+  }
+  return { base, overrides: [...byOverride.values()].filter((x) => x.cost > 0) }
+}
 
 // ---- limits -----------------------------------------------------------------
 // A session may have a time limit and a cost limit at once; each works independently of the
@@ -402,6 +642,38 @@ export const remainingMs = (s: Session, now: number): number | undefined =>
 // Amount left before the cost limit (negative once exceeded); undefined without one.
 export const remainingCost = (s: Session, now: number): number | undefined =>
   s.costLimit === undefined ? undefined : s.costLimit - computeCost(s, now)
+
+// Estimated running time left until the cost limit is reached. Walks forward minute by minute
+// from `now`, charging each minute at the price it will have then (the catalog price, or the
+// price override active in that minute), so an upcoming override window is accounted for.
+// Negative once exceeded (overdue time at the current price); undefined without a cost limit,
+// while not running, at a free price, or when the limit is more than 7 days away.
+export const costLimitEtaMs = (
+  s: Session,
+  settings: Pick<Settings, 'rateGroups' | 'priceOverrides'>,
+  now: number,
+): number | undefined => {
+  const remaining = remainingCost(s, now)
+  const last = s.segments[s.segments.length - 1]
+  if (remaining === undefined || s.status !== 'running' || !last || last.to !== null) return undefined
+  if (remaining <= 0) return last.price > 0 ? (remaining / last.price) * 3_600_000 : undefined
+  const base =
+    flatPrices(settings.rateGroups).find((p) => p.id === last.typeId)?.price ??
+    last.basePrice ??
+    last.price
+  const overrides = settings.priceOverrides ?? []
+  const end = now + 7 * DAY_MS
+  let left = remaining
+  for (let t = now; t < end; ) {
+    const next = Math.min(end, (Math.floor(t / MINUTE_MS) + 1) * MINUTE_MS)
+    const rate = currentPrice(last.typeId, base, overrides, t)
+    const cost = (rate * (next - t)) / 3_600_000
+    if (rate > 0 && cost >= left) return t + (left / rate) * 3_600_000 - now
+    left -= cost
+    t = next
+  }
+  return undefined
+}
 
 // Sets the time limit so that `minutes` remain from now (the edit dialog shows the remaining
 // time); the cost limit, if any, is untouched.
@@ -609,6 +881,10 @@ export type HistoryEntry = {
   creditUsed?: number
   cashPaid?: number
 }
+
+// What a نسیه entry still left owed after the credit and prepay used at settlement (0 if paid).
+export const historyDebt = (e: HistoryEntry) =>
+  e.onAccount ? Math.max(0, e.total - (e.creditUsed ?? 0) - (e.prepayUsed ?? 0)) : 0
 
 // Money a customer paid towards their debt (any amount, any time).
 export type Payment = { id: string; customerId: string; amount: number; paidAt: number }
