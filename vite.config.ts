@@ -42,18 +42,42 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Precache everything (incl. every lazy Lucide icon chunk): old hashed chunks vanish from
-        // the server on each deploy, so a runtime-cached chunk that was never fetched would 404.
+        // Precache everything except the lazy Lucide icon chunks (~1,850 files, see
+        // `chunkFileNames` below): old hashed chunks vanish from the server on each deploy, so
+        // every app chunk must be precached to keep an old copy working.
         globPatterns: ['**/*.{html,css,woff2,svg,png,js}'],
         // The social-preview banner (index.html og:image, README) is never shown in the app.
-        globIgnores: ['img/**'],
+        globIgnores: ['img/**', 'assets/icons/**'],
         navigateFallback: 'index.html',
         // Notification click handler for the time-limit alert (see src/lib/attention.ts).
         importScripts: ['notification-click.js'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // Icon chunks are fetched only when shown (app icon / picker), then kept for offline use.
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, sameOrigin }) =>
+              sameOrigin && url.pathname.includes('/assets/icons/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'lucide-icons',
+              expiration: { maxEntries: 400, purgeOnQuotaError: true },
+            },
+          },
+        ],
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        // Lazy Lucide icon chunks get their own folder so the service worker can skip them.
+        chunkFileNames: (chunk) =>
+          chunk.facadeModuleId?.includes('/lucide-react/dist/esm/icons/')
+            ? 'assets/icons/[name]-[hash].js'
+            : 'assets/[name]-[hash].js',
+      },
+    },
+  },
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, './src') },
   },
