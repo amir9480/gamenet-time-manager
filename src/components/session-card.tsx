@@ -67,6 +67,8 @@ type Props = {
   // Drops a reservation (no history entry).
   onCancel: () => void
   compact?: boolean
+  // Censors the displayed cost with «***» (toggled on the main page).
+  costHidden?: boolean
 }
 
 const statusLabel = { running: 'در حال بازی', paused: 'متوقف', reserved: 'رزرو' } as const
@@ -77,7 +79,16 @@ const SWITCH_DEVICE = '__switch_device__'
 // turns yellow as an early warning before the limit alarm fires.
 const NEAR_LIMIT_MS = 5 * MINUTE_MS
 
-export function SessionCard({ session, sessions, settings, onUpdate, onEnd, onCancel, compact }: Props) {
+export function SessionCard({
+  session,
+  sessions,
+  settings,
+  onUpdate,
+  onEnd,
+  onCancel,
+  compact,
+  costHidden,
+}: Props) {
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [summaryNow, setSummaryNow] = useState(0)
   const [customerOpen, setCustomerOpen] = useState(false)
@@ -113,6 +124,7 @@ export function SessionCard({ session, sessions, settings, onUpdate, onEnd, onCa
   const groups = devicePriceGroups(deviceOf(settings, session), settings.rateGroups)
   const customer = settings.customers.find((c) => c.id === session.customerId)
   const total = computeCost(session, time)
+  const displayTotal = costHidden ? '***' : formatNumber(total)
   const name = session.deviceName
   const first = session.segments[0]
   const last = session.segments[session.segments.length - 1]
@@ -336,7 +348,7 @@ ${limitLines.join('\n')}` : ''
               className="flex items-baseline justify-center gap-1.5 rounded-md py-0.5 hover:bg-muted"
             >
               <span className="text-2xl font-bold" dir="ltr">
-                {formatNumber(total)}
+                {displayTotal}
               </span>
               <span className="text-xs text-muted-foreground">تومان</span>
             </button>
@@ -506,7 +518,7 @@ ${limitLines.join('\n')}` : ''
                   readOnly
                   dir="ltr"
                   className="cursor-pointer font-bold"
-                  value={formatNumber(total)}
+                  value={displayTotal}
                   onClick={() => setDetailOpen(true)}
                 />
               </Tip>

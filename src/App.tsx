@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { CalendarClock, ChartNoAxesColumn, History, LayoutGrid, Moon, Lock, Download, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
+import { CalendarClock, ChartNoAxesColumn, Eye, EyeOff, History, LayoutGrid, Moon, Lock, Download, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
 import { AddSessionDialog } from '@/components/add-session-dialog'
 import { AppIcon } from '@/components/app-icon'
 import { InstallDialog } from '@/components/install-dialog'
@@ -45,6 +45,7 @@ import {
   buildHistoryEntry,
   createSession,
   sessionSearchFields,
+  useLocalStorage,
   usageOf,
   type Device,
   type FlatPrice,
@@ -89,6 +90,8 @@ function Main() {
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [showShift, setShowShift] = useState(false)
+  const [summaryVisible, setSummaryVisible] = useLocalStorage('gamenet-shift-summary-visible', () => true)
+  const costHidden = !summaryVisible
   const [installOpen, setInstallOpen] = useState(false)
   const { offer: offerInstall } = useInstall()
   const ready = noticeOk && !onboarding && !importing
@@ -259,6 +262,7 @@ function Main() {
             entries={shift}
             onAdd={() => setAddOpen(true)}
             onReserve={() => setReserveOpen(true)}
+            detailsVisible={summaryVisible}
           />
         ) : sessions.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6 rounded-xl border border-dashed p-10 text-center">
@@ -381,6 +385,17 @@ function Main() {
                   </Button>
                 </Tip>
                 </div>
+                <Tip label={costHidden ? 'نمایش هزینه' : 'پنهان کردن هزینه'}>
+                  <Button
+                    size="icon-lg"
+                    variant="outline"
+                    aria-label={costHidden ? 'نمایش هزینه تایم‌ها' : 'پنهان کردن هزینه تایم‌ها'}
+                    aria-pressed={costHidden}
+                    onClick={() => setSummaryVisible((v) => !v)}
+                  >
+                    {costHidden ? <EyeOff /> : <Eye />}
+                  </Button>
+                </Tip>
                 <Button size="lg" variant="outline" onClick={() => setReserveOpen(true)}>
                   <CalendarClock /> رزرو
                 </Button>
@@ -395,6 +410,7 @@ function Main() {
                 active={sessions.length}
                 onAdd={() => setAddOpen(true)}
                 onReserve={() => setReserveOpen(true)}
+                detailsVisible={summaryVisible}
               />
             )}
             {!summaryOn && found.length === 0 && (
@@ -424,6 +440,7 @@ function Main() {
                       sessions={sessions}
                       settings={settings}
                       compact={view === 'compact'}
+                      costHidden={costHidden}
                       onUpdate={(fn) => updateSessionRow(session.id, fn)}
                       onEnd={(edited, total, onAccount) => endSession(edited, total, onAccount)}
                       onCancel={() => deleteSessionRow(session.id)}

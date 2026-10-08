@@ -1,13 +1,12 @@
-import { CalendarClock, Eye, EyeOff, Plus } from 'lucide-react'
+import { CalendarClock, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tip } from '@/components/tip'
 import { formatDuration, formatNumber } from '@/lib/format'
 import { summarize } from '@/lib/history'
 import { formatJalaliClock, formatJalaliDate } from '@/lib/jalali'
 import { NO_CUSTOMER } from '@/lib/stats'
-import { useLocalStorage, type HistoryEntry } from '@/lib/store'
+import { type HistoryEntry } from '@/lib/store'
 
 function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
@@ -56,12 +55,15 @@ export function ShiftSummary({
   onAdd,
   onReserve,
   active = 0,
+  detailsVisible = true,
 }: {
   entries: HistoryEntry[]
   onAdd: () => void
   onReserve: () => void
   // Running sessions; when any, the summary is an on-demand view (the toolbar already has add).
   active?: number
+  // Visibility of financial/details blocks controlled by the main toolbar button.
+  detailsVisible?: boolean
 }) {
   const sum = summarize(entries)
   const onAccount = entries.reduce((s, e) => s + (e.onAccount ? e.total : 0), 0)
@@ -74,7 +76,6 @@ export function ShiftSummary({
     byDevice.set(key, { sessions: cur.sessions + 1, income: cur.income + e.total })
   }
   const devices = [...byDevice].sort((a, b) => b[1].income - a[1].income)
-  const [visible, setVisible] = useLocalStorage('gamenet-shift-summary-visible', () => true)
 
   return (
     <div className="flex flex-col gap-4">
@@ -82,17 +83,6 @@ export function ShiftSummary({
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold">خلاصه‌ی شیفت</h2>
-            <Tip label={visible ? 'پنهان کردن جزئیات' : 'نمایش جزئیات'}>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={visible ? 'پنهان کردن جزئیات شیفت' : 'نمایش جزئیات شیفت'}
-                aria-pressed={!visible}
-                onClick={() => setVisible(!visible)}
-              >
-                {visible ? <Eye /> : <EyeOff />}
-              </Button>
-            </Tip>
           </div>
           <p className="text-sm text-muted-foreground">
             {active > 0
@@ -116,7 +106,7 @@ export function ShiftSummary({
         </div>
       </div>
 
-      {!visible ? (
+      {!detailsVisible ? (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {Array.from({ length: 8 }, (_, i) => <StatSkeleton key={i} />)}
