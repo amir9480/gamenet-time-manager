@@ -12,7 +12,7 @@ import { LockScreen } from '@/components/lock-screen'
 import { NoticeDialog } from '@/components/notice-dialog'
 import { OnboardingDialog } from '@/components/onboarding-dialog'
 import { TourPromptDialog } from '@/components/tour-prompt-dialog'
-import { SessionCard } from '@/components/session-card'
+import { SessionCard, sessionCardSteps } from '@/components/session-card'
 import { CustomersDialog } from '@/components/customers-dialog'
 import { ShiftSummary } from '@/components/shift-summary'
 import { SettingsDialog, type SettingsTab } from '@/components/settings-dialog'
@@ -28,7 +28,8 @@ import { rank } from '@/lib/search'
 import { installSeen, markInstallSeen, useInstall } from '@/lib/install'
 import { APP_VERSION, REPO_URL } from '@/lib/platform'
 import { lockNow, useSecurity } from '@/lib/security'
-import { isTourActive, registerTour, skipTours, startGuide, tourSel, tourSkipped, type TourDef } from '@/lib/tour'
+import type { DriveStep } from 'driver.js'
+import { isTourActive, registerTour, setTourFollowUp, skipTours, startGuide, startTourById, takeTourFollowUp, tourSel, tourSkipped, type TourDef } from '@/lib/tour'
 import { useInstance } from '@/lib/single-instance'
 import { useIdleLock } from '@/lib/use-idle-lock'
 import { useOverrideSplitter } from '@/lib/use-override-splitter'
@@ -77,6 +78,82 @@ const mainTour: TourDef = {
 }
 registerTour(mainTour)
 
+// Guide of the running sessions: the newest card's own steps (see `sessionCardSteps`), then the toolbar.
+// It follows the add-session guide once a session was started, and F1 picks it whenever a card is on screen.
+const sessionsTour: TourDef = {
+  id: 'sessions',
+  present: tourSel('session-card'),
+  priority: 5,
+  steps: () => {
+    const info = (
+      name: string,
+      title: string,
+      description: string,
+      extra: Partial<DriveStep> = {},
+    ): DriveStep => ({
+      element: tourSel(name),
+      disableActiveInteraction: true,
+      ...extra,
+      popover: { title, description, side: 'bottom' },
+    })
+    return [
+      ...sessionCardSteps(),
+      info(
+        'type-filter',
+        'فیلتر نوع دستگاه',
+        'وقتی چند نوع دستگاه دارید، با این دکمه‌ها فقط تایم‌های یک نوع را ببینید.',
+        { skipMissingElement: true },
+      ),
+      info(
+        'view-detailed',
+        'نمای کامل',
+        'در نمای کامل، هر تایم با همه‌ی جزئیات و دکمه‌هایش در یک ردیف بزرگ نمایش داده می‌شود.',
+      ),
+      info(
+        'view-compact',
+        'نمای فشرده',
+        'در نمای فشرده کارت‌ها کوچک‌تر و کنار هم چیده می‌شوند؛ برای وقتی که تایم‌های زیادی در جریان است.',
+      ),
+      info(
+        'shift-summary',
+        'خلاصه‌ی شیفت',
+        'خلاصه‌ی درآمد و تایم‌های پایان‌یافته‌ی شیفت. اگر این دکمه غیرفعال است، یعنی هنوز هیچ تایم پایان‌یافته‌ای ثبت نشده است.',
+      ),
+      info(
+        'reserve',
+        'رزرو',
+        'برای رزرو یک دستگاه است. تایم بلافاصله شروع نمی‌شود و فقط جلوی استفاده از آن دستگاه برای مشتری دیگر را می‌گیرد؛ هر زمان مشتری رسید، آن را شروع کنید.',
+      ),
+      info(
+        'add-session',
+        'تایم جدید',
+        'برای مشتری‌های بعدی هم از همین دکمه یک تایم جدید بسازید.',
+      ),
+      info(
+        'history',
+        'تاریخچه و آمار',
+        'همه‌ی تایم‌های پایان‌یافته، درآمد و آمار و نمودارهای کسب‌وکارتان را اینجا ببینید و فیلتر یا خروجی بگیرید.',
+      ),
+      info(
+        'customers',
+        'مشتریان',
+        'مشتریان را اینجا مدیریت کنید و بدهی (نسیه) یا اعتبار هر مشتری را ببینید و پرداخت‌هایش را ثبت کنید.',
+      ),
+      info(
+        'theme',
+        'تم روشن و تیره',
+        'با این دکمه بین حالت روشن و تیره‌ی برنامه جابه‌جا شوید.',
+      ),
+      info(
+        'settings',
+        'تنظیمات',
+        'همه‌ی تنظیمات برنامه اینجاست: ویرایش نرخ‌ها و دستگاه‌ها، افزودن یا ویرایش بوفه و سایر هزینه‌ها، ظاهر برنامه، امنیت و پشتیبان‌گیری.',
+      ),
+    ]
+  },
+}
+registerTour(sessionsTour)
+
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
   return (
@@ -85,6 +162,7 @@ function ThemeToggle() {
         variant="outline"
         size="icon"
         aria-label="تغییر تم"
+        data-tour="theme"
         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       >
         {theme === 'dark' ? <Sun /> : <Moon />}
@@ -195,7 +273,13 @@ function Main() {
   ) =>
     addSessionRow(
       createSession(device, category, price, customerId, Date.now(), limit, reserve, prepay),
-    )
+    ).then(() => {
+      const next = takeTourFollowUp()
+      if (next && !tourSkipped()) {
+        setTourBusy(true)
+        startTourById(next, () => setTourBusy(false))
+      }
+    })
 
   // Device types that have devices; the filter / grouping UI needs more than one.
   const typeNames = settings.deviceCategories
@@ -258,6 +342,7 @@ function Main() {
                 variant="outline"
                 size="icon"
                 aria-label="تاریخچه"
+                data-tour="history"
                 onClick={() => setHistoryOpen(true)}
               >
                 <History />
@@ -268,6 +353,7 @@ function Main() {
                 variant="outline"
                 size="icon"
                 aria-label="مشتریان"
+                data-tour="customers"
                 onClick={() => setCustomersOpen(true)}
               >
                 <Users />
@@ -350,7 +436,7 @@ function Main() {
                 when the number of device types changes. */}
             <div className="flex flex-col gap-2">
               {showTypes && (
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5" data-tour="type-filter">
                   <Button
                     size="lg"
                     variant={activeType === null ? 'default' : 'outline'}
@@ -401,6 +487,7 @@ function Main() {
                     size="icon-lg"
                     variant={!summaryOn && view === 'detailed' ? 'secondary' : 'ghost'}
                     role="radio"
+                    data-tour="view-detailed"
                     aria-label="نمای کامل"
                     aria-checked={!summaryOn && view === 'detailed'}
                     onClick={() => {
@@ -416,6 +503,7 @@ function Main() {
                     size="icon-lg"
                     variant={!summaryOn && view === 'compact' ? 'secondary' : 'ghost'}
                     role="radio"
+                    data-tour="view-compact"
                     aria-label="نمای فشرده"
                     aria-checked={!summaryOn && view === 'compact'}
                     onClick={() => {
@@ -431,6 +519,7 @@ function Main() {
                     size="icon-lg"
                     variant={summaryOn ? 'secondary' : 'ghost'}
                     role="radio"
+                    data-tour="shift-summary"
                     aria-label="خلاصه‌ی شیفت"
                     aria-checked={summaryOn}
                     disabled={!manualShift}
@@ -451,7 +540,12 @@ function Main() {
                     {costHidden ? <EyeOff /> : <Eye />}
                   </Button>
                 </Tip>
-                <Button size="lg" variant="outline" onClick={() => setReserveOpen(true)}>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  data-tour="reserve"
+                  onClick={() => setReserveOpen(true)}
+                >
                   <CalendarClock /> رزرو
                 </Button>
                 <Button size="lg" data-tour="add-session" onClick={() => setAddOpen(true)}>
@@ -570,7 +664,11 @@ function Main() {
 
       <AddSessionDialog
         open={addOpen}
-        onOpenChange={setAddOpen}
+        onOpenChange={(o) => {
+          setAddOpen(o)
+          // Closed without creating: the pending follow-up guide no longer applies.
+          if (!o) setTimeout(() => setTourFollowUp(null), 300)
+        }}
         settings={settings}
         sessions={sessions}
         onCreate={addSession}

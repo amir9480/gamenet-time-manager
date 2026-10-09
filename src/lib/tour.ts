@@ -30,6 +30,13 @@ export const isTourActive = () => active !== null
 export const tourEl = (sel: string) => document.querySelector(sel)
 export const tourSel = (name: string) => `[data-tour="${name}"]`
 
+// Several elements can share a target (one session card per session): the newest one wins, going by
+// their `data-tour-at` timestamp.
+export const tourLatest = (name: string): Element | undefined =>
+  [...document.querySelectorAll(tourSel(name))].sort(
+    (a, b) => Number(b.getAttribute('data-tour-at')) - Number(a.getAttribute('data-tour-at')),
+  )[0]
+
 // Adds «رد کردن همه‌ی راهنماها» under every popover.
 const addSkipAll = (popover: PopoverDOM, d: Driver) => {
   // The popover is created outside any open dialog; make sure a modal never makes it inert.
@@ -58,8 +65,9 @@ export type TourContext = TourOptions & {
   // Poll `fn` every `ms` (one watcher at a time); it is stopped when the step ends or the guide closes.
   watch: (fn: () => void, ms: number) => void
   stopWatch: () => void
-  // Continue with another guide once this one ends.
-  chainTo: (def: TourDef) => void
+  // Continue with another guide once this one ends (a registered guide may be named by its id, so
+  // a component doesn't have to import the one that owns it).
+  chainTo: (def: TourDef | string) => void
 }
 
 export type TourDef = {
@@ -72,6 +80,18 @@ export type TourDef = {
 }
 
 const registry: TourDef[] = []
+
+// A guide to start once the user's next action completes (e.g. the card guide after the first
+// session was created, even if they closed the add-session guide before that).
+let followUp: string | null = null
+export const setTourFollowUp = (id: string | null) => {
+  followUp = id
+}
+export const takeTourFollowUp = () => {
+  const id = followUp
+  followUp = null
+  return id
+}
 export const registerTour = (def: TourDef) => {
   if (!registry.some((d) => d.id === def.id)) registry.push(def)
 }
@@ -115,7 +135,7 @@ function drive(steps: DriveStep[], cleanup: () => void, onEnd: () => void) {
 export function startTour(def: TourDef, onEnd: () => void, opts: TourOptions = {}) {
   if (active) return
   let watcher: number | undefined
-  let next: TourDef | undefined
+  let next: TourDef | string | undefined
   const stopWatch = () => {
     window.clearInterval(watcher)
     watcher = undefined
@@ -130,9 +150,16 @@ export function startTour(def: TourDef, onEnd: () => void, opts: TourOptions = {
     chainTo: (d) => (next = d),
   }
   drive(def.steps(ctx), stopWatch, () => {
-    if (next) startTour(next, onEnd, opts)
+    const def = typeof next === 'string' ? registry.find((d) => d.id === next) : next
+    if (def) startTour(def, onEnd, opts)
     else onEnd()
   })
+}
+
+export function startTourById(id: string, onEnd: () => void, opts: TourOptions = {}) {
+  const def = registry.find((d) => d.id === id)
+  if (def) startTour(def, onEnd, opts)
+  else onEnd()
 }
 
 // F1: the guide of whatever is on screen (false when there is none).

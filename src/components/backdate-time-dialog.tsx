@@ -78,10 +78,11 @@ export function BackdateTimeDialog({ session, settings, onAdd, compact, size }: 
                   variant="outline"
                   size="icon-sm"
                   aria-label="افزودن زمان گذشته"
+                  data-tour="card-backdate"
                   disabled={!hasSegments}
                 />
               ) : (
-                <Button variant="outline" size={size} disabled={!hasSegments} />
+                <Button variant="outline" size={size} data-tour="card-backdate" disabled={!hasSegments} />
               )
             }
           >

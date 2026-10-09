@@ -25,6 +25,8 @@ import { LimitDialog } from '@/components/limit-dialog'
 import { SessionSummaryDialog } from '@/components/session-summary-dialog'
 import { Timer } from '@/components/timer'
 import { Tip } from '@/components/tip'
+import type { DriveStep } from 'driver.js'
+import { tourLatest, tourSel } from '@/lib/tour'
 import { formatDuration, formatIdle, formatNumber } from '@/lib/format'
 import { formatJalaliDateTime } from '@/lib/jalali'
 import { useNow } from '@/lib/use-now'
@@ -80,6 +82,116 @@ const SWITCH_DEVICE = '__switch_device__'
 // Below this much remaining (time, or cost estimated at the current rate) the card border
 // turns yellow as an early warning before the limit alarm fires.
 const NEAR_LIMIT_MS = 5 * MINUTE_MS
+
+// The newest card's part (or the card itself when the part isn't there).
+const cardPart = (part?: string) => () =>
+  (part && tourLatest('session-card')?.querySelector(tourSel(part))) ||
+  tourLatest('session-card') ||
+  document.body
+
+// Guide of a session card, run on the newest one (the page guide in App.tsx appends its own steps).
+// The steps point at the `data-tour` attributes above, so keep the two in sync when the markup changes.
+export const sessionCardSteps = (): DriveStep[] => [
+  {
+    element: cardPart(),
+    waitForElement: 3000,
+    disableActiveInteraction: true,
+    popover: {
+      title: 'کارت تایم',
+      description:
+        'این کارت، جدیدترین تایمی است که ساخته‌اید. هر تایم در جریان یک کارت جداگانه دارد و همه‌ی کارهای آن تایم از همین‌جا انجام می‌شود.',
+      side: 'bottom',
+    },
+  },
+  {
+    element: cardPart('card-device'),
+    disableActiveInteraction: true,
+    popover: {
+      title: 'دستگاه',
+      description: 'نام دستگاهی که این تایم روی آن در حال اجراست.',
+      side: 'bottom',
+    },
+  },
+  {
+    element: cardPart('card-customer'),
+    disableActiveInteraction: true,
+    popover: {
+      title: 'مشتری',
+      description:
+        'با این دکمه می‌توانید مشتری تایم را عوض کنید. اگر مشتری را اشتباه انتخاب کرده‌اید، آن را بردارید تا تایم برای مشتری مهمان ثبت شود.',
+      side: 'bottom',
+    },
+  },
+  {
+    element: cardPart('card-timer'),
+    disableActiveInteraction: true,
+    popover: {
+      title: 'زمان سپری‌شده',
+      description: 'مدت زمانی که از شروع تایم گذشته است. با توقف تایم، این زمان هم می‌ایستد.',
+      side: 'bottom',
+    },
+  },
+  {
+    element: cardPart('card-cost'),
+    disableActiveInteraction: true,
+    popover: {
+      title: 'هزینه تا این لحظه',
+      description:
+        'مجموع هزینه‌ی زمان بازی و بوفه تا همین الان. با کلیک روی آن ریز هزینه‌ها را می‌بینید.',
+      side: 'top',
+    },
+  },
+  {
+    element: cardPart('card-price'),
+    disableActiveInteraction: true,
+    popover: {
+      title: 'نرخ و دستگاه',
+      description:
+        'از این لیست می‌توانید نرخ ساعتی را عوض کنید یا با «تغییر دستگاه…» تایم را به دستگاه دیگری ببرید. هزینه از همان لحظه‌ی تغییر با نرخ یا دستگاه جدید حساب می‌شود و زمان قبلی با نرخ قبلی می‌ماند.',
+      side: 'top',
+    },
+  },
+  {
+    element: cardPart('card-pause'),
+    disableActiveInteraction: true,
+    popover: {
+      title: 'توقف',
+      description:
+        'تایم را موقتاً متوقف می‌کند؛ در این مدت هزینه‌ای حساب نمی‌شود. بعداً با «ادامه» دوباره شروع می‌شود و با «اتمام» صورت‌حساب نهایی را می‌بینید.',
+      side: 'top',
+    },
+  },
+  {
+    element: cardPart('card-limit'),
+    disableActiveInteraction: true,
+    popover: {
+      title: 'محدودیت',
+      description:
+        'برای هر تایم می‌توانید محدودیت زمانی یا هزینه تعیین کنید، یا محدودیتی را که قبلاً گذاشته‌اید تغییر دهید و بردارید. با رسیدن به آن، هشدار می‌گیرید.',
+      side: 'top',
+    },
+  },
+  {
+    element: cardPart('card-backdate'),
+    disableActiveInteraction: true,
+    popover: {
+      title: 'افزودن زمان گذشته',
+      description:
+        'اگر ثبت تایم را فراموش کرده بودید و مشتری از چند دقیقه‌ی پیش مشغول بازی است، همان دقایق را از اینجا به تایم اضافه کنید.',
+      side: 'top',
+    },
+  },
+  {
+    element: cardPart('card-extra'),
+    disableActiveInteraction: true,
+    popover: {
+      title: 'بوفه و سایر هزینه‌ها',
+      description:
+        'خوراکی، نوشیدنی یا هر هزینه‌ی دیگری که مشتری گرفته را از اینجا به همین تایم اضافه کنید تا در صورت‌حساب بیاید.',
+      side: 'top',
+    },
+  },
+]
 
 export function SessionCard({
   session,
@@ -296,6 +408,7 @@ ${limitLines.join('\n')}` : ''
         size={compact ? 'xs' : 'sm'}
         className={compact ? 'max-w-28 shrink-0' : undefined}
         aria-label="تغییر مشتری"
+        data-tour="card-customer"
         onClick={() => setCustomerOpen(true)}
       >
         <Pencil />
@@ -321,6 +434,7 @@ ${limitLines.join('\n')}` : ''
             size={sm}
             className={compact ? 'w-full text-xs max-md:data-[size=sm]:h-11' : 'w-auto min-w-44'}
             aria-label="نرخ"
+            data-tour="card-price"
           >
             <SelectValue />
           </SelectTrigger>
@@ -331,7 +445,7 @@ ${limitLines.join('\n')}` : ''
 
   const timer = (
     <Tip label={rangeTitle}>
-      <div>
+      <div data-tour="card-timer">
         <Timer ms={elapsedMs(session, time)} compact={compact} />
       </div>
     </Tip>
@@ -346,6 +460,7 @@ ${limitLines.join('\n')}` : ''
         variant={exceeded ? 'destructive' : hasLimit ? 'secondary' : 'outline'}
         size="icon-sm"
         aria-label="محدودیت"
+        data-tour="card-limit"
         onClick={() => setLimitOpen(true)}
       >
         <AlarmClock />
@@ -353,7 +468,7 @@ ${limitLines.join('\n')}` : ''
     </Tip>
   ) : (
     <Tip label={limitTip}>
-      <Button variant="outline" onClick={() => setLimitOpen(true)}>
+      <Button variant="outline" data-tour="card-limit" onClick={() => setLimitOpen(true)}>
         <AlarmClock /> {hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}
       </Button>
     </Tip>
@@ -368,7 +483,7 @@ ${limitLines.join('\n')}` : ''
 
   const actionButtons = running ? (
     <Tip label="توقف موقت تایم">
-      <Button size={sm} className={flexBtn} onClick={pause}>
+      <Button size={sm} className={flexBtn} data-tour="card-pause" onClick={pause}>
         <Pause /> توقف
       </Button>
     </Tip>
@@ -401,7 +516,12 @@ ${limitLines.join('\n')}` : ''
   )
 
   return (
-    <Card size={sm} className={cn(forgottenClass, limitClass)}>
+    <Card
+      size={sm}
+      className={cn(forgottenClass, limitClass)}
+      data-tour="session-card"
+      data-tour-at={first?.from ?? session.reservedAt ?? 0}
+    >
       <CardContent className={cn('flex flex-col', compact ? 'gap-2.5' : 'gap-4')}>
         <div
           className={cn(
@@ -420,7 +540,10 @@ ${limitLines.join('\n')}` : ''
               </Tip>
             )}
             <Tip label={name}>
-              <span className={cn('truncate font-bold', compact ? 'text-base' : 'text-lg')}>
+              <span
+                data-tour="card-device"
+                className={cn('truncate font-bold', compact ? 'text-base' : 'text-lg')}
+              >
                 {name}
               </span>
             </Tip>
@@ -454,6 +577,7 @@ ${limitLines.join('\n')}` : ''
               <Button
                 type="button"
                 variant="ghost"
+                data-tour="card-cost"
                 onClick={openSummary}
                 className="h-auto items-baseline justify-center gap-1.5 py-0.5 max-md:h-auto"
               >
@@ -489,7 +613,7 @@ ${limitLines.join('\n')}` : ''
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>مجموع هزینه تایم</Label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" data-tour="card-cost">
                 <Tip label="مشاهده جزئیات هزینه">
                   <Input
                     readOnly

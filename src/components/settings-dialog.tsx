@@ -259,7 +259,7 @@ export function SettingsDialog({
         }}
       >
         <Tip label="تنظیمات">
-          <DialogTrigger render={<Button variant="outline" size="icon" aria-label="تنظیمات" />}>
+          <DialogTrigger render={<Button variant="outline" size="icon" aria-label="تنظیمات" data-tour="settings" />}>
             <SettingsIcon />
           </DialogTrigger>
         </Tip>

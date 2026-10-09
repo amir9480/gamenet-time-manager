@@ -273,9 +273,14 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
           <DialogTrigger
             render={
               compact ? (
-                <Button variant="outline" size="icon-sm" aria-label="خرید از بوفه یا افزودن سایر هزینه‌ها" />
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="خرید از بوفه یا افزودن سایر هزینه‌ها"
+                  data-tour="card-extra"
+                />
               ) : (
-                <Button variant="outline" />
+                <Button variant="outline" data-tour="card-extra" />
               )
             }
           >

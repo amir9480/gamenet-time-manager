@@ -26,7 +26,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { MoneyInput } from '@/components/ui/money-input'
 import { requestNotificationPermission } from '@/lib/attention'
-import { isTourActive, registerTour, tourEl, tourSel, type TourContext, type TourDef } from '@/lib/tour'
+import { isTourActive, registerTour, setTourFollowUp, tourEl, tourSel, type TourContext, type TourDef } from '@/lib/tour'
 import type { DriveStep } from 'driver.js'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { toFa } from '@/lib/jalali'
@@ -136,6 +136,20 @@ export const addSessionTour: TourDef = {
     {
       element: tourSel('add-search'),
       waitForElement: 2000,
+      // Starting the session (at whatever step the user does it) continues with the guide of the
+      // card it creates.
+      onHighlighted: () => {
+        // First run: whatever happens to this guide, creating the session shows the card guide.
+        if (ctx.forceCustomer) setTourFollowUp('sessions')
+        const onClick = (e: MouseEvent) => {
+          if (!isTourActive()) return document.removeEventListener('click', onClick, true)
+          if ((e.target as Element | null)?.closest(tourSel('add-submit'))) {
+            document.removeEventListener('click', onClick, true)
+            ctx.chainTo('sessions')
+          }
+        }
+        document.addEventListener('click', onClick, true)
+      },
       popover: {
         title: 'جستجوی سریع',
         description:
@@ -751,7 +765,7 @@ export function AddSessionDialog({
               </Button>
             )}
             {last ? (
-              <Button disabled={!stepValid} onClick={submit}>
+              <Button disabled={!stepValid} data-tour="add-submit" onClick={submit}>
                 {switchMode ? <ArrowLeftRight /> : reserve ? <CalendarClock /> : <Play />}{' '}
                 {switchMode ? 'تغییر دستگاه' : reserve ? 'ثبت رزرو' : 'شروع تایم'}
               </Button>

@@ -185,25 +185,24 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                   setDevice(d.id, { prices: fn(c.prices) })
                 return (
                   <div key={d.id} className={cn(cardCls(false), 'flex flex-col gap-2')}>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-bold">{d.name}</span>
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        تعداد
-                        <Input
-                          aria-label={`تعداد ${d.name}`}
-                          aria-invalid={c.count < 1}
-                          dir="ltr"
-                          inputMode="numeric"
-                          className="w-16 text-center"
-                          placeholder="0"
-                          value={c.count ? formatNumber(c.count) : ''}
-                          onChange={(e) =>
-                            setDevice(d.id, {
-                              count: Math.min(MAX_DEVICES, Math.floor(parseNumber(e.target.value))),
-                            })
-                          }
-                        />
-                      </div>
+                    <span className="font-bold">{d.name}</span>
+
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      تعداد دستگاه
+                      <Input
+                        aria-label={`تعداد ${d.name}`}
+                        aria-invalid={c.count < 1}
+                        dir="ltr"
+                        inputMode="numeric"
+                        className="w-20 text-center"
+                        placeholder="0"
+                        value={c.count ? formatNumber(c.count) : ''}
+                        onChange={(e) =>
+                          setDevice(d.id, {
+                            count: Math.min(MAX_DEVICES, Math.floor(parseNumber(e.target.value))),
+                          })
+                        }
+                      />
                     </div>
 
                     <div className="text-xs text-muted-foreground">نرخ‌های ساعتی (نرخ «{PREFERRED_DEFAULT_PRICE}» پیش‌فرض است؛ اگر نباشد، اولی)</div>
