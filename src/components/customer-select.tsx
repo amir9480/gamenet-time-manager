@@ -47,7 +47,7 @@ export function CustomerSelect({ customers, value, onChange, id, autoFocus }: Pr
           placeholder="مشتری مهمان"
           aria-label="مشتری"
           showClear={!!selected}
-          className="w-full"
+          className="w-full bg-background max-md:h-11"
         />
         <ComboboxContent>
           <ComboboxEmpty>مشتری‌ای پیدا نشد</ComboboxEmpty>

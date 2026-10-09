@@ -1,5 +1,5 @@
 import type { DriveStep } from 'driver.js'
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { Check, Settings as SettingsIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,8 @@ import { Tip } from '@/components/tip'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import { HelpHint } from '@/components/help-hint'
+import { ScrollFade } from '@/components/scroll-fade'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TourHelpButton } from '@/components/tour-help-button'
 import {
@@ -372,7 +374,8 @@ export function SettingsDialog({
           </DialogHeader>
 
           <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className="gap-4">
-            <TabsList className="w-full max-w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <ScrollFade>
+            <TabsList className="w-max min-w-full justify-start">
               <TabsTrigger value="general" className="shrink-0" data-tour="settings-tab-general">عمومی</TabsTrigger>
               <TabsTrigger value="rates" className="shrink-0" data-tour="settings-tab-rates">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
               <TabsTrigger value="devices" className="shrink-0" data-tour="settings-tab-devices">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
@@ -380,46 +383,43 @@ export function SettingsDialog({
               <TabsTrigger value="security" className="shrink-0" data-tour="settings-tab-security">امنیت</TabsTrigger>
               <TabsTrigger value="data" className="shrink-0" data-tour="settings-tab-data">داده‌ها</TabsTrigger>
             </TabsList>
+            </ScrollFade>
 
-            <TabsContent value="general" className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="app-title">عنوان برنامه</Label>
+            <TabsContent value="general" className="flex flex-col gap-5">
+              <SettingRow
+                label="عنوان برنامه"
+                htmlFor="app-title"
+                hint="این عنوان بالای صفحه و در نوار عنوان پنجره نمایش داده می‌شود. خالی بگذارید تا عنوان پیش‌فرض استفاده شود."
+              >
                 <Input
                   id="app-title"
                   placeholder={DEFAULT_TITLE}
                   value={draft.title}
                   onChange={(e) => patch({ title: e.target.value })}
                 />
-                <p className="text-xs text-muted-foreground">
-                  این عنوان بالای صفحه و در نوار عنوان پنجره نمایش داده می‌شود. خالی بگذارید تا عنوان
-                  پیش‌فرض استفاده شود.
-                </p>
-              </div>
+              </SettingRow>
 
-              <div className="flex flex-col gap-1.5">
-                <Label>آیکن برنامه</Label>
+              <SettingRow
+                top
+                label="آیکن برنامه"
+                hint="این آیکن بالای صفحه و در صفحه‌ی خالی نمایش داده می‌شود. می‌توانید از فهرست انتخاب کنید، تصویر دلخواه بارگذاری کنید یا به آیکن پیش‌فرض برگردید."
+              >
                 <Suspense
                   fallback={<div className="h-14 animate-pulse rounded-xl bg-muted/50" aria-hidden />}
                 >
                   <IconPicker value={draft.icon} onChange={(icon) => patch({ icon })} />
                 </Suspense>
-                <p className="text-xs text-muted-foreground">
-                  این آیکن بالای صفحه و در صفحه‌ی خالی نمایش داده می‌شود. می‌توانید از فهرست انتخاب کنید،
-                  تصویر دلخواه بارگذاری کنید یا به آیکن پیش‌فرض برگردید.
-                </p>
-              </div>
+              </SettingRow>
 
-              <div className="flex items-center justify-between gap-4">
-                <Label htmlFor="theme-switch">حالت تاریک</Label>
+              <SettingRow inline label="حالت تاریک" htmlFor="theme-switch">
                 <Switch
                   id="theme-switch"
                   checked={draft.theme === 'dark'}
                   onCheckedChange={(c) => patch({ theme: c ? 'dark' : 'light' })}
                 />
-              </div>
+              </SettingRow>
 
-              <div className="flex flex-col gap-2">
-                <Label>رنگ تم</Label>
+              <SettingRow top label="رنگ تم">
                 <div className="flex flex-wrap gap-2">
                   {ACCENTS.map((a) => (
                     <Tip key={a.id} label={a.label}>
@@ -441,7 +441,7 @@ export function SettingsDialog({
                     </Tip>
                   ))}
                 </div>
-              </div>
+              </SettingRow>
 
               {(
                 [
@@ -459,70 +459,67 @@ export function SettingsDialog({
                   },
                 ] as const
               ).map((s) => (
-                <div key={s.key} className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between gap-4">
-                    <Label htmlFor={s.id}>{s.label}</Label>
-                    <div className="flex items-center gap-2">
-                      <span dir="ltr" className="w-12 text-end text-sm tabular-nums">
-                        {draft[s.key]}%
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={draft[s.key] === 100}
-                        onClick={() => patch({ [s.key]: 100 })}
-                      >
-                        بازنشانی
-                      </Button>
-                    </div>
+                <SettingRow key={s.key} label={s.label} htmlFor={s.id} hint={s.hint}>
+                  <div className="flex items-center gap-3">
+                    <Slider
+                      id={s.id}
+                      dir="ltr"
+                      className="flex-1"
+                      min={SCALE_MIN}
+                      max={SCALE_MAX}
+                      step={5}
+                      value={[draft[s.key]]}
+                      onValueChange={(v) => patch({ [s.key]: Array.isArray(v) ? v[0] : v })}
+                    />
+                    <span dir="ltr" className="w-12 text-end text-sm tabular-nums">
+                      {draft[s.key]}%
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={draft[s.key] === 100}
+                      onClick={() => patch({ [s.key]: 100 })}
+                    >
+                      بازنشانی
+                    </Button>
                   </div>
-                  <Slider
-                    id={s.id}
-                    dir="ltr"
-                    min={SCALE_MIN}
-                    max={SCALE_MAX}
-                    step={5}
-                    value={[draft[s.key]]}
-                    onValueChange={(v) => patch({ [s.key]: Array.isArray(v) ? v[0] : v })}
-                  />
-                  <p className="text-xs text-muted-foreground">{s.hint}</p>
-                </div>
+                </SettingRow>
               ))}
 
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between gap-4">
-                  <Label htmlFor="grouping-switch">گروه‌بندی تایم‌ها بر اساس نوع دستگاه</Label>
-                  <Switch
-                    id="grouping-switch"
-                    checked={draft.grouping}
-                    onCheckedChange={(c) => patch({ grouping: c })}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  تایم‌ها بر اساس نوع دستگاه دسته‌بندی می‌شوند و بالای فهرست می‌توانید فقط یک نوع را
-                  نمایش دهید. فقط وقتی بیش از یک نوع دستگاه دارید دیده می‌شود.
-                </p>
-              </div>
+              <SettingRow
+                inline
+                label="گروه‌بندی تایم‌ها بر اساس نوع دستگاه"
+                htmlFor="grouping-switch"
+                hint="تایم‌ها بر اساس نوع دستگاه دسته‌بندی می‌شوند و بالای فهرست می‌توانید فقط یک نوع را نمایش دهید. فقط وقتی بیش از یک نوع دستگاه دارید دیده می‌شود."
+              >
+                <Switch
+                  id="grouping-switch"
+                  checked={draft.grouping}
+                  onCheckedChange={(c) => patch({ grouping: c })}
+                />
+              </SettingRow>
 
-              <div className="flex items-center justify-between gap-4">
-                <Label htmlFor="auto-round-switch">رند کردن خودکار مبلغ نهایی هنگام اتمام تایم</Label>
+              <SettingRow inline label="رند کردن خودکار مبلغ نهایی" htmlFor="auto-round-switch">
                 <Switch
                   id="auto-round-switch"
                   checked={draft.rounding.auto}
                   onCheckedChange={(auto) => patch({ rounding: { ...draft.rounding, auto } })}
                 />
-              </div>
+              </SettingRow>
 
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="round-step">رند کردن مبلغ نهایی</Label>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <SettingRow
+                label="رند کردن مبلغ نهایی"
+                htmlFor="round-step"
+                hint="مبلغ نهایی هنگام اتمام تایم به این صورت گرد می‌شود (خودکار یا با دکمه‌ی «رند کردن»)."
+              >
+                <div className="grid gap-2 @lg:grid-cols-2 @lg:items-center">
                   <Select
                     items={ROUND_ITEMS}
                     value={draft.rounding.mode}
                     onValueChange={(m) => patch({ rounding: { ...draft.rounding, mode: m as RoundMode } })}
                   >
-                    <SelectTrigger className="w-full sm:flex-1" aria-label="نوع رند کردن">
+                    <SelectTrigger className="w-full" aria-label="نوع رند کردن">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -533,63 +530,67 @@ export function SettingsDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                  <div className="flex items-center gap-2 sm:flex-1">
-                  <span className="text-sm text-muted-foreground">مضرب</span>
-                  <MoneyInput
-                    id="round-step"
-                    aria-invalid={!roundingValid}
-                    className="min-w-0 flex-1"
-                    value={draft.rounding.step > 0 ? formatNumber(draft.rounding.step) : ''}
-                    onChange={(e) =>
-                      patch({ rounding: { ...draft.rounding, step: parseNumber(e.target.value) } })
-                    }
-                  />
-                  <span className="text-sm text-muted-foreground">تومان</span>
+                  <div className="flex items-center gap-2">
+                    <MoneyInput
+                      id="round-step"
+                      aria-invalid={!roundingValid}
+                      className="min-w-0 flex-1"
+                      value={draft.rounding.step > 0 ? formatNumber(draft.rounding.step) : ''}
+                      onChange={(e) =>
+                        patch({ rounding: { ...draft.rounding, step: parseNumber(e.target.value) } })
+                      }
+                    />
+                    <span className="w-24 shrink-0 text-sm text-muted-foreground">تومان</span>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  مبلغ نهایی هنگام اتمام تایم به این صورت گرد می‌شود (خودکار یا با دکمه‌ی «رند کردن»).
-                </p>
-              </div>
+              </SettingRow>
 
-              <div className="flex flex-col gap-1.5">
-                <Label>افزایش سریع محدودیت</Label>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <div className="flex items-center gap-2 sm:flex-1">
-                  <MinutesInput
-                    id="quick-extend-minutes"
-                    aria-invalid={draft.quickExtend.minutes <= 0}
-                    aria-label="افزایش سریع محدودیت زمانی"
-                    className="min-w-0 flex-1"
-                    value={draft.quickExtend.minutes > 0 ? String(draft.quickExtend.minutes) : ''}
-                    onChange={(e) =>
-                      patch({ quickExtend: { ...draft.quickExtend, minutes: parseNumber(e.target.value) } })
-                    }
-                  />
-                  <span className="text-sm text-muted-foreground">دقیقه (محدودیت زمانی)</span>
+              <SettingRow
+                label="افزایش سریع محدودیت"
+                hint="وقتی محدودیت یک تایم تمام شود، دکمه‌ی «کمی بیشتر» روی هشدار به همین اندازه به آن اضافه می‌کند."
+              >
+                <div className="grid gap-2 @lg:grid-cols-2 @lg:items-center">
+                  <div className="flex items-center gap-2">
+                    <MinutesInput
+                      id="quick-extend-minutes"
+                      aria-invalid={draft.quickExtend.minutes <= 0}
+                      aria-label="افزایش سریع محدودیت زمانی"
+                      className="min-w-0 flex-1"
+                      value={draft.quickExtend.minutes > 0 ? String(draft.quickExtend.minutes) : ''}
+                      onChange={(e) =>
+                        patch({ quickExtend: { ...draft.quickExtend, minutes: parseNumber(e.target.value) } })
+                      }
+                    />
+                    <span className="w-24 shrink-0 text-sm text-muted-foreground">دقیقه (زمانی)</span>
                   </div>
-                  <div className="flex items-center gap-2 sm:flex-1">
-                  <MoneyInput
-                    id="quick-extend-cost"
-                    aria-invalid={draft.quickExtend.cost <= 0}
-                    aria-label="افزایش سریع محدودیت هزینه"
-                    className="min-w-0 flex-1"
-                    value={draft.quickExtend.cost > 0 ? formatNumber(draft.quickExtend.cost) : ''}
-                    onChange={(e) =>
-                      patch({ quickExtend: { ...draft.quickExtend, cost: parseNumber(e.target.value) } })
-                    }
-                  />
-                  <span className="text-sm text-muted-foreground">تومان (محدودیت هزینه)</span>
+                  <div className="flex items-center gap-2">
+                    <MoneyInput
+                      id="quick-extend-cost"
+                      aria-invalid={draft.quickExtend.cost <= 0}
+                      aria-label="افزایش سریع محدودیت هزینه"
+                      className="min-w-0 flex-1"
+                      value={draft.quickExtend.cost > 0 ? formatNumber(draft.quickExtend.cost) : ''}
+                      onChange={(e) =>
+                        patch({ quickExtend: { ...draft.quickExtend, cost: parseNumber(e.target.value) } })
+                      }
+                    />
+                    <span className="w-24 shrink-0 text-sm text-muted-foreground">تومان (هزینه)</span>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  وقتی محدودیت یک تایم تمام شود، دکمه‌ی «کمی بیشتر» روی هشدار به همین اندازه به آن اضافه می‌کند.
-                </p>
-              </div>
+              </SettingRow>
 
-              <div className="flex items-center justify-between gap-4">
-                <Label htmlFor="autostart-switch" className="flex items-center gap-2">
-                  اجرای خودکار با روشن شدن سیستم
+              <SettingRow
+                inline
+                label="اجرای خودکار با روشن شدن سیستم"
+                htmlFor="autostart-switch"
+              >
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="autostart-switch"
+                    checked={isTauri() && draft.autostart}
+                    disabled={!isTauri()}
+                    onCheckedChange={(c) => patch({ autostart: c })}
+                  />
                   {!isTauri() && (
                     <Badge
                       variant="secondary"
@@ -599,14 +600,8 @@ export function SettingsDialog({
                       فقط ویندوز
                     </Badge>
                   )}
-                </Label>
-                <Switch
-                  id="autostart-switch"
-                  checked={isTauri() && draft.autostart}
-                  disabled={!isTauri()}
-                  onCheckedChange={(c) => patch({ autostart: c })}
-                />
-              </div>
+                </div>
+              </SettingRow>
               <InstallDialog open={installOpen} onOpenChange={setInstallOpen} windowsOnly />
             </TabsContent>
 
@@ -680,5 +675,42 @@ export function SettingsDialog({
 
       {dialog}
     </>
+  )
+}
+
+// One settings row: label (+ optional «?» hint) on the start side, control on the other. On
+// sm+ it is a two-column grid so every control lines up; `inline` keeps label and a switch on
+// one line on mobile, `top` aligns the label with the top of a tall control.
+function SettingRow({
+  label,
+  htmlFor,
+  hint,
+  inline,
+  top,
+  children,
+}: {
+  label: ReactNode
+  htmlFor?: string
+  hint?: string
+  inline?: boolean
+  top?: boolean
+  children: ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        'gap-1.5 sm:grid sm:grid-cols-[15rem_minmax(0,1fr)] sm:gap-4',
+        inline ? 'flex items-center justify-between' : 'flex flex-col',
+        top ? 'sm:items-start' : 'sm:items-center',
+      )}
+    >
+      <div className={cn('flex flex-wrap items-center gap-1.5', top && 'sm:pt-2')}>
+        <Label htmlFor={htmlFor} className="flex items-center gap-2">
+          {label}
+        </Label>
+        {hint && <HelpHint>{hint}</HelpHint>}
+      </div>
+      <div className={cn('min-w-0', !inline && '@container')}>{children}</div>
+    </div>
   )
 }

@@ -1,3 +1,4 @@
+import { cn } from '@/lib/utils'
 import { useEffect, useMemo, useState } from 'react'
 import type { DriveStep } from 'driver.js'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -25,6 +26,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { MoneyInput } from '@/components/ui/money-input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { RowCell } from '@/components/row-cell'
 import { JalaliDatePicker } from '@/components/jalali-date-picker'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { TourHelpButton } from '@/components/tour-help-button'
@@ -313,6 +315,7 @@ export function CustomerDebtsDialog({
             <Label className="text-xs text-muted-foreground">از تاریخ</Label>
             <JalaliDatePicker
               label=""
+              className="w-full"
               value={startOfDay(fromDay)}
               onChange={(d) => {
                 setFromDay(startOfDay(d))
@@ -324,6 +327,7 @@ export function CustomerDebtsDialog({
             <Label className="text-xs text-muted-foreground">تا تاریخ</Label>
             <JalaliDatePicker
               label=""
+              className="w-full"
               value={startOfDay(toDay)}
               onChange={(d) => {
                 setToDay(startOfDay(d))
@@ -346,21 +350,40 @@ export function CustomerDebtsDialog({
         ) : (
           <div className="flex flex-col gap-2">
             <div className="flex flex-col divide-y rounded-lg border" data-tour="wal-list">
-              <div className="grid grid-cols-[9rem_1fr_8rem] gap-2 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <div className="hidden grid-cols-[9rem_1fr_8rem] gap-2 bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:grid">
                 <span>تاریخ</span>
                 <span>نوع</span>
                 <span>مبلغ</span>
               </div>
               {shown.map((r) => (
-                <div key={r.id} className="grid grid-cols-[9rem_1fr_8rem] items-center gap-2 px-3 py-2 text-sm">
-                  <span className="text-xs">{formatJalaliDateTime(r.at)}</span>
-                  <span className="flex min-w-0 items-center gap-1.5">
+                <div
+                  key={r.id}
+                  className="flex flex-col gap-2 px-3 py-3 text-sm sm:grid sm:grid-cols-[9rem_1fr_8rem] sm:items-center sm:gap-2 sm:py-2"
+                >
+                  <RowCell label="تاریخ">
+                    <span className="text-xs">{formatJalaliDateTime(r.at)}</span>
+                  </RowCell>
+                  <RowCell label="نوع">
+                  <span className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-1.5">
                     <Badge variant={r.amount < 0 ? 'destructive' : 'secondary'}>{KIND_LABEL[r.kind]}</Badge>
-                    {r.note && <span className="truncate text-xs text-muted-foreground">{r.note}</span>}
+                    {r.note && <span className="text-xs text-muted-foreground sm:truncate">{r.note}</span>}
                   </span>
-                  <div className="flex items-center justify-end gap-1" dir="ltr">
+                  </RowCell>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-1">
+                    <RowCell label="مبلغ">
+                      <span
+                        dir="ltr"
+                        className={cn(
+                          'font-medium max-sm:text-end',
+                          r.amount < 0 ? 'text-destructive' : 'text-green-600',
+                        )}
+                      >
+                        {r.amount > 0 ? '+' : ''}
+                        {formatNumber(r.amount)}
+                      </span>
+                    </RowCell>
                     {manualCreditEditable(r) && (
-                      <>
+                      <div className="flex items-center gap-1">
                         <Button
                           data-tour={r.id === firstEditableId ? 'wal-row-actions' : undefined}
                           variant="ghost"
@@ -381,16 +404,8 @@ export function CustomerDebtsDialog({
                         >
                           <Trash2 />
                         </Button>
-                      </>
+                      </div>
                     )}
-                    <span
-                      className={
-                        r.amount < 0 ? 'font-medium text-destructive' : 'font-medium text-green-600'
-                      }
-                    >
-                      {r.amount > 0 ? '+' : ''}
-                      {formatNumber(r.amount)}
-                    </span>
                   </div>
                 </div>
               ))}

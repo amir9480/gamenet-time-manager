@@ -13,8 +13,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AddSessionDialog } from '@/components/add-session-dialog'
 import { CustomerPickerDialog } from '@/components/customer-picker-dialog'
@@ -449,14 +447,18 @@ ${limitLines.join('\n')}` : ''
   )
 
   const sm = compact ? 'sm' : undefined
-  const flexBtn = compact ? 'sm:flex-1' : 'flex-1'
+  const flexBtn = 'flex-1'
+  // Compact card on a phone: when the card is narrow the action buttons keep only their icon.
+  const lbl = (t: string) => (
+    <span className={compact ? 'max-md:@max-[30rem]/card:hidden' : undefined}>{t}</span>
+  )
 
   const customerButton = (
     <Tip label={compact ? (customer ? `مشتری: ${customer.name} (تغییر)` : 'انتخاب مشتری') : 'تغییر مشتری'}>
       <Button
         variant="ghost"
         size={compact ? 'xs' : 'sm'}
-        className={compact ? 'max-w-28 shrink-0' : undefined}
+        className={compact ? 'max-w-32 shrink-0' : undefined}
         aria-label="تغییر مشتری"
         data-tour="card-customer"
         onClick={() => setCustomerOpen(true)}
@@ -482,7 +484,9 @@ ${limitLines.join('\n')}` : ''
         <Tip label="تغییر نرخ یا دستگاه">
           <SelectTrigger
             size={sm}
-            className={compact ? 'w-full text-xs max-md:data-[size=sm]:h-11' : 'w-auto min-w-44'}
+            className={
+              compact ? 'w-full text-xs max-md:data-[size=sm]:h-11' : 'w-full'
+            }
             aria-label="نرخ"
             data-tour="card-price"
           >
@@ -493,12 +497,39 @@ ${limitLines.join('\n')}` : ''
     />
   )
 
-  const timer = (
-    <Tip label={rangeTitle}>
-      <div data-tour="card-timer">
-        <Timer ms={elapsedMs(session, time)} compact={compact} />
-      </div>
-    </Tip>
+  // Timer and cost share one tinted panel (two cells) in both layouts.
+  const statsPanel = (
+    <div
+      className={cn(
+        'grid rounded-xl bg-muted/50',
+        'grid-cols-1 divide-y py-2 md:grid-cols-2 md:divide-x md:divide-y-0 md:divide-x-reverse',
+        compact ? 'md:py-2.5' : 'md:py-5 lg:flex-1 lg:basis-0',
+      )}
+    >
+      <Tip label={rangeTitle}>
+        <div className="flex min-w-0 flex-col items-center gap-0.5 px-2 max-md:pb-3" data-tour="card-timer">
+          <span className="text-xs text-muted-foreground">زمان</span>
+          <Timer ms={elapsedMs(session, time)} compact={compact} large={!compact} />
+        </div>
+      </Tip>
+      <Tip label="مشاهده جزئیات هزینه">
+        <Button
+          type="button"
+          variant="ghost"
+          data-tour="card-cost"
+          onClick={openSummary}
+          className="h-auto min-w-0 flex-col gap-0.5 rounded-none px-2 py-0 hover:bg-transparent max-md:h-auto max-md:pt-3"
+        >
+          <span className="text-xs font-normal text-muted-foreground">هزینه (تومان)</span>
+          <span
+            className={cn('font-bold leading-tight', compact ? 'text-2xl' : 'text-4xl md:text-5xl lg:text-4xl xl:text-5xl')}
+            dir="ltr"
+          >
+            {displayTotal}
+          </span>
+        </Button>
+      </Tip>
+    </div>
   )
 
   const backdateButton = (
@@ -518,7 +549,11 @@ ${limitLines.join('\n')}` : ''
     </Tip>
   ) : (
     <Tip label={limitTip}>
-      <Button variant="outline" data-tour="card-limit" onClick={() => setLimitOpen(true)}>
+      <Button
+        variant={exceeded ? 'destructive' : hasLimit ? 'secondary' : 'outline'}
+        data-tour="card-limit"
+        onClick={() => setLimitOpen(true)}
+      >
         <AlarmClock /> {hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}
       </Button>
     </Tip>
@@ -533,8 +568,8 @@ ${limitLines.join('\n')}` : ''
 
   const actionButtons = running ? (
     <Tip label="توقف موقت تایم">
-      <Button size={sm} className={flexBtn} data-tour="card-pause" onClick={pause}>
-        <Pause /> توقف
+      <Button size={sm} className={flexBtn} aria-label="توقف" data-tour="card-pause" onClick={pause}>
+        <Pause /> {lbl('توقف')}
       </Button>
     </Tip>
   ) : (
@@ -543,10 +578,11 @@ ${limitLines.join('\n')}` : ''
         <Button
           size={sm}
           className={flexBtn}
+          aria-label={reserved ? 'شروع' : 'ادامه'}
           data-tour={reserved ? undefined : 'card-resume'}
           onClick={resume}
         >
-          <Play /> {reserved ? 'شروع' : 'ادامه'}
+          <Play /> {lbl(reserved ? 'شروع' : 'ادامه')}
         </Button>
       </Tip>
       {reserved ? (
@@ -555,9 +591,10 @@ ${limitLines.join('\n')}` : ''
             size={sm}
             variant="destructive"
             className={flexBtn}
+            aria-label="لغو رزرو"
             onClick={() => setCancelOpen(true)}
           >
-            <X /> {compact ? 'لغو' : 'لغو رزرو'}
+            <X /> {lbl(compact ? 'لغو' : 'لغو رزرو')}
           </Button>
         </Tip>
       ) : (
@@ -566,162 +603,118 @@ ${limitLines.join('\n')}` : ''
             size={sm}
             variant="destructive"
             className={flexBtn}
+            aria-label="اتمام"
             data-tour="card-end"
             onClick={openSummary}
           >
-            <Square /> اتمام
+            <Square /> {lbl('اتمام')}
           </Button>
         </Tip>
       )}
     </>
   )
 
+  const statusBadge = (
+    <Badge variant={running ? 'default' : 'secondary'} className="shrink-0">
+      {statusLabel[statusKey]}
+    </Badge>
+  )
+
+  const extraBadges =
+    session.extraItems.length > 0 &&
+    (compact ? (
+      <div className="flex flex-wrap justify-center gap-1.5">
+        <Tip label="مشاهده و تغییر بوفه و سایر هزینه‌ها">
+          <Badge
+            variant="secondary"
+            className="h-auto cursor-pointer py-0.5 hover:bg-secondary/70"
+            render={<button type="button" onClick={openSummary} />}
+          >
+            بوفه و سایر هزینه‌ها: {formatNumber(session.extraItems.reduce((n, i) => n + i.qty, 0))}
+          </Badge>
+        </Tip>
+      </div>
+    ) : (
+      <div className="flex flex-wrap gap-2">
+        {session.extraItems.map((i) => (
+          <Tip key={i.id} label={i.description || 'تغییر'}>
+            <Badge
+              variant="secondary"
+              className="h-auto cursor-pointer py-1 hover:bg-secondary/70"
+              render={<button type="button" onClick={openSummary} />}
+            >
+              {i.name}
+              {i.description ? ` (${i.description})` : ''} × {formatNumber(i.qty)} ={' '}
+              {formatNumber(i.price * i.qty)}
+            </Badge>
+          </Tip>
+        ))}
+      </div>
+    ))
+
   return (
     <Card
       size={sm}
-      className={cn(forgottenClass, limitClass)}
+      className={cn('@container/card', forgottenClass, limitClass)}
       data-tour="session-card"
       data-tour-at={first?.from ?? session.reservedAt ?? 0}
     >
-      <CardContent className={cn('flex flex-col', compact ? 'gap-2.5' : 'gap-4')}>
-        <div
-          className={cn(
-            'flex items-center justify-between',
-            compact ? 'gap-2' : 'flex-wrap gap-4',
-          )}
-        >
-          <div
-            className={cn('flex items-center', compact ? 'min-w-0 gap-1.5' : 'flex-wrap gap-2')}
-          >
-            {compact && (
+      <CardContent className={cn('flex flex-col', compact ? 'gap-3' : 'gap-4')}>
+        {/* Header: who/where on one side, status + customer on the other. */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex min-w-0 items-center gap-2">
               <Tip label={statusLabel[statusKey]}>
                 <span
                   className={`size-2.5 shrink-0 rounded-full ${running ? 'animate-pulse bg-green-500' : reserved ? 'bg-amber-500' : 'bg-muted-foreground/50'}`}
                 />
               </Tip>
-            )}
-            <Tip label={name}>
-              <span
-                data-tour="card-device"
-                className={cn('truncate font-bold', compact ? 'text-base' : 'text-lg')}
-              >
-                {name}
-              </span>
-            </Tip>
-            {session.categoryName && (
-              <Badge variant="outline" className={compact ? 'shrink-0' : undefined}>
-                {session.categoryName}
-              </Badge>
-            )}
-            {!compact && (
-              <>
-                {priceSelect}
-                <Badge variant={running ? 'default' : 'secondary'}>{statusLabel[statusKey]}</Badge>
-                {forgottenBadge}
-                {customerButton}
-              </>
-            )}
+              <Tip label={name}>
+                <span
+                  data-tour="card-device"
+                  className={cn('truncate font-bold', compact ? 'text-base' : 'text-lg')}
+                >
+                  {name}
+                </span>
+              </Tip>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {session.categoryName && <Badge variant="outline">{session.categoryName}</Badge>}
+              {!running && statusBadge}
+              {forgottenBadge}
+            </div>
           </div>
-          {compact ? customerButton : timer}
+          {customerButton}
         </div>
-
-        {compact && (
-          <>
-            {forgottenBadge && <div className="flex justify-center">{forgottenBadge}</div>}
-            {timer}
-          </>
-        )}
 
         {compact ? (
           <>
-            <Tip label="مشاهده جزئیات هزینه">
-              <Button
-                type="button"
-                variant="ghost"
-                data-tour="card-cost"
-                onClick={openSummary}
-                className="h-auto items-baseline justify-center gap-1.5 py-0.5 max-md:h-auto"
-              >
-                <span className="text-2xl font-bold" dir="ltr">
-                  {displayTotal}
-                </span>
-                <span className="text-xs text-muted-foreground">تومان</span>
-              </Button>
-            </Tip>
+            {statsPanel}
             {priceSelect}
-            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
-              <div className="flex flex-col gap-1.5 sm:flex-1 sm:flex-row">{actionButtons}</div>
-              <div className="flex items-center justify-end gap-1.5">
+            {extraBadges}
+            <div className="flex items-center gap-1.5">
+              <div className="flex flex-1 gap-1.5">{actionButtons}</div>
+              {limitButton}
+              {backdateButton}
+              {extraPicker}
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
+            {statsPanel}
+            <div className="flex min-w-0 flex-col justify-end gap-3 lg:flex-1 lg:basis-0">
+              {extraBadges}
+              {priceSelect}
+              <div className="flex flex-wrap items-center gap-2 [&>*]:flex-1">
                 {limitButton}
                 {backdateButton}
                 {extraPicker}
               </div>
-            </div>
-          </>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="flex flex-col gap-1.5">
-              <Label>محدودیت</Label>
-              {limitButton}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>زمان گذشته</Label>
-              {backdateButton}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>بوفه و سایر هزینه‌ها</Label>
-              {extraPicker}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>مجموع هزینه تایم</Label>
-              <div className="flex items-center gap-2" data-tour="card-cost">
-                <Tip label="مشاهده جزئیات هزینه">
-                  <Input
-                    readOnly
-                    dir="ltr"
-                    className="cursor-pointer font-bold"
-                    value={displayTotal}
-                    onClick={openSummary}
-                  />
-                </Tip>
-                <span className="shrink-0 text-sm text-muted-foreground">تومان</span>
-              </div>
+              <div className="flex gap-2">{actionButtons}</div>
             </div>
           </div>
         )}
 
-        {session.extraItems.length > 0 &&
-          (compact ? (
-            <div className="flex flex-wrap justify-center gap-1.5">
-              <Tip label="مشاهده و تغییر بوفه و سایر هزینه‌ها">
-                <Badge
-                  variant="secondary"
-                  className="h-auto cursor-pointer py-0.5 hover:bg-secondary/70"
-                  render={<button type="button" onClick={openSummary} />}
-                >
-                  بوفه و سایر هزینه‌ها: {formatNumber(session.extraItems.reduce((n, i) => n + i.qty, 0))}
-                </Badge>
-              </Tip>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {session.extraItems.map((i) => (
-                <Tip key={i.id} label={i.description || 'تغییر'}>
-                  <Badge
-                    variant="secondary"
-                    className="h-auto cursor-pointer py-1 hover:bg-secondary/70"
-                    render={<button type="button" onClick={openSummary} />}
-                  >
-                    {i.name}
-                    {i.description ? ` (${i.description})` : ''} × {formatNumber(i.qty)} ={' '}
-                    {formatNumber(i.price * i.qty)}
-                  </Badge>
-                </Tip>
-              ))}
-            </div>
-          ))}
-
-        {!compact && <div className="flex flex-col gap-2 sm:flex-row">{actionButtons}</div>}
       </CardContent>
       {dialogs}
     </Card>

@@ -1,3 +1,4 @@
+import { cn } from '@/lib/utils'
 import { useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -18,9 +19,10 @@ type Props = {
   // Local midnight timestamp of the chosen day.
   value: number
   onChange: (dayStart: number) => void
+  className?: string
 }
 
-export function JalaliDatePicker({ label, value, onChange }: Props) {
+export function JalaliDatePicker({ label, value, onChange, className }: Props) {
   const [open, setOpen] = useState(false)
   const selected = toJalali(value)
   const [view, setView] = useState({ y: selected.y, m: selected.m })
@@ -52,7 +54,7 @@ export function JalaliDatePicker({ label, value, onChange }: Props) {
         setOpen(o)
       }}
     >
-      <PopoverTrigger render={<Button variant="outline" className="justify-between gap-2" />}>
+      <PopoverTrigger render={<Button variant="outline" className={cn('justify-between gap-2', className)} />}>
         <span className="text-xs text-muted-foreground">{label}</span>
         <span>{formatJalaliDate(value)}</span>
         <CalendarDays />

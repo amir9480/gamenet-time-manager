@@ -245,3 +245,10 @@
   cursor: pointer;
 }
 .gn-tour .driver-popover-footer-btns { gap: 0.5rem; }
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

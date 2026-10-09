@@ -211,7 +211,7 @@ export function LimitDialog({
             </div>
             <MinutesInput
               id="limit-time"
-              placeholder="بدون محدودیت"
+              placeholder="بدون محدودیت زمانی"
               value={timeText}
               onChange={(e) => setTimeText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && save()}
@@ -235,7 +235,7 @@ export function LimitDialog({
             </div>
             <MoneyInput
               id="limit-cost"
-              placeholder="بدون محدودیت"
+              placeholder="بدون محدودیت هزینه"
               value={costAmount > 0 ? formatNumber(costAmount) : costText}
               onChange={(e) => setCostText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && save()}

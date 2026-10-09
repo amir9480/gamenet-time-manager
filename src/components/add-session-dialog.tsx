@@ -738,7 +738,7 @@ export function AddSessionDialog({
                 <Label htmlFor="new-limit-time">محدودیت زمانی (اختیاری، دقیقه)</Label>
                 <MinutesInput
                   id="new-limit-time"
-                  placeholder="بدون محدودیت"
+                  placeholder="بدون محدودیت زمانی"
                   value={timeLimit}
                   onChange={(e) => setTimeLimit(e.target.value)}
                 />
@@ -747,7 +747,7 @@ export function AddSessionDialog({
                 <Label htmlFor="new-limit-cost">محدودیت هزینه (اختیاری، تومان)</Label>
                 <MoneyInput
                   id="new-limit-cost"
-                  placeholder="بدون محدودیت"
+                  placeholder="بدون محدودیت هزینه"
                   disabled={prepaySetsLimit && prepayLimitEnabled}
                   value={
                     prepaySetsLimit && prepayLimitEnabled

@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MoneyInput } from '@/components/ui/money-input'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tip } from '@/components/tip'
 import { formatNumber, parseNumber } from '@/lib/format'
@@ -50,12 +49,14 @@ function TimeInput({ value, onChange, label }: { value: number; onChange: (m: nu
       type="time"
       dir="ltr"
       aria-label={label}
-      className="w-28"
+      className="w-full"
       value={minToClock(value)}
       onChange={(e) => e.target.value && onChange(clockToMin(e.target.value))}
     />
   )
 }
+
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
 
 const ROUND_ITEMS = (Object.keys(ROUND_MODE_LABELS) as RoundMode[]).map((value) => ({
   value,
@@ -75,7 +76,7 @@ export function PriceOverridesEditor({ overrides, groups, onChange }: Props) {
   const addOverride = () => {
     const seed: PriceOverride = {
       id: uid(),
-      weekdays: [5],
+      weekdays: ALL_DAYS,
       startMin: 20 * 60,
       endMin: 2 * 60,
       prices: Object.fromEntries(prices.map((p) => [p.id, p.price])),
@@ -175,91 +176,141 @@ export function PriceOverridesEditor({ overrides, groups, onChange }: Props) {
               </Tip>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              {WEEKDAY_NAMES.map((name, value) => {
-                const checked = o.weekdays.includes(value)
-                const onlyOne = checked && o.weekdays.length <= 1
-                return (
-                  <Tip key={value} label={onlyOne ? 'حداقل یک روز لازم است' : name}>
-                    <Label className="flex items-center gap-1.5 text-sm">
-                      <Checkbox
-                        disabled={onlyOne}
-                        checked={checked}
-                        onCheckedChange={(v) =>
-                          patch(o.id, (x) => ({
-                            ...x,
-                            weekdays:
-                              v === true
-                                ? [...x.weekdays, value].sort((a, b) => a - b)
-                                : x.weekdays.filter((d) => d !== value),
-                          }))
-                        }
-                      />
-                      {name}
-                    </Label>
-                  </Tip>
-                )
-              })}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs text-muted-foreground">روزهای هفته</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto px-1.5 py-0.5 text-xs max-md:h-auto"
+                  disabled={o.weekdays.length === WEEKDAY_NAMES.length}
+                  onClick={() => patch(o.id, (x) => ({ ...x, weekdays: ALL_DAYS }))}
+                >
+                  همه‌ی روزها
+                </Button>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
+                {WEEKDAY_NAMES.map((name, value) => {
+                  const checked = o.weekdays.includes(value)
+                  const onlyOne = checked && o.weekdays.length <= 1
+                  return (
+                    <Tip key={value} label={onlyOne ? 'حداقل یک روز لازم است' : name}>
+                      <span className="contents">
+                        <Button
+                          type="button"
+                          variant={checked ? 'default' : 'outline'}
+                          size="sm"
+                          aria-pressed={checked}
+                          disabled={onlyOne}
+                          className="max-md:h-8"
+                          onClick={() =>
+                            patch(o.id, (x) => ({
+                              ...x,
+                              weekdays: checked
+                                ? x.weekdays.filter((d) => d !== value)
+                                : [...x.weekdays, value].sort((a, b) => a - b),
+                            }))
+                          }
+                        >
+                          {name}
+                        </Button>
+                      </span>
+                    </Tip>
+                  )
+                })}
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <TimeInput label="شروع" value={o.startMin} onChange={(startMin) => patch(o.id, (x) => ({ ...x, startMin }))} />
-              <span className="text-sm text-muted-foreground">تا</span>
-              <TimeInput label="پایان" value={o.endMin} onChange={(endMin) => patch(o.id, (x) => ({ ...x, endMin }))} />
-              {wraps && <span className="text-xs text-muted-foreground">(تا روز بعد)</span>}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs text-muted-foreground">از ساعت</Label>
+                <TimeInput label="شروع" value={o.startMin} onChange={(startMin) => patch(o.id, (x) => ({ ...x, startMin }))} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  تا ساعت
+                  {wraps && <span>(تا روز بعد)</span>}
+                </Label>
+                <TimeInput label="پایان" value={o.endMin} onChange={(endMin) => patch(o.id, (x) => ({ ...x, endMin }))} />
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 border-t pt-2">
-              <span className="text-xs text-muted-foreground">پر کردن سریع:</span>
-              <Input
-                dir="ltr"
-                inputMode="numeric"
-                aria-label="درصد قیمت نسبت به قیمت پیش‌فرض (۱۰۰٪ = بدون تغییر)"
-                placeholder="٪ درصد"
-                className="w-20"
-                value={f.percent}
-                onChange={(e) => setFill((m) => ({ ...m, [o.id]: { ...f, percent: e.target.value } }))}
-              />
-              <span className="text-xs text-muted-foreground">رند به</span>
-              <MoneyInput
-                aria-label="مضرب رند کردن"
-                className="w-24"
-                value={f.step}
-                onChange={(e) => setFill((m) => ({ ...m, [o.id]: { ...f, step: e.target.value } }))}
-              />
-              <Select
-                items={ROUND_ITEMS}
-                value={f.mode}
-                onValueChange={(mode) => setFill((m) => ({ ...m, [o.id]: { ...f, mode: mode as RoundMode } }))}
-              >
-                <SelectTrigger className="w-28" aria-label="نوع رند کردن">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROUND_ITEMS.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>
-                      {r.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button type="button" variant="outline" size="sm" disabled={parseNumber(f.percent) <= 0} onClick={() => applyFill(o)}>
-                اعمال روی همه‌ی قیمت‌ها
-              </Button>
+            <div className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-bold">پر کردن سریع همه‌ی قیمت‌ها</span>
+                <span className="text-xs text-muted-foreground">
+                  به‌جای وارد کردن تک‌تک قیمت‌ها، درصدی از قیمت معمول را بنویسید (مثلاً ۸۰ یعنی ۲۰٪ تخفیف
+                  و ۱۲۰ یعنی ۲۰٪ گران‌تر) و دکمه‌ی اعمال را بزنید تا همه‌ی قیمت‌های پایین یکجا پر شوند.
+                </span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs text-muted-foreground">درصد از قیمت معمول</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      dir="ltr"
+                      inputMode="numeric"
+                      aria-label="درصد قیمت نسبت به قیمت پیش‌فرض (۱۰۰٪ = بدون تغییر)"
+                      placeholder="مثلاً 80"
+                      className="min-w-0 flex-1"
+                      value={f.percent}
+                      onChange={(e) => setFill((m) => ({ ...m, [o.id]: { ...f, percent: e.target.value } }))}
+                    />
+                    <span className="w-12 shrink-0 text-sm text-muted-foreground">درصد</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs text-muted-foreground">رند کردن به مضرب</Label>
+                  <div className="flex items-center gap-2">
+                    <MoneyInput
+                      aria-label="مضرب رند کردن"
+                      className="min-w-0 flex-1"
+                      value={f.step}
+                      onChange={(e) => setFill((m) => ({ ...m, [o.id]: { ...f, step: e.target.value } }))}
+                    />
+                    <span className="w-12 shrink-0 text-sm text-muted-foreground">تومان</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs text-muted-foreground">نوع رند کردن</Label>
+                  <Select
+                    items={ROUND_ITEMS}
+                    value={f.mode}
+                    onValueChange={(mode) => setFill((m) => ({ ...m, [o.id]: { ...f, mode: mode as RoundMode } }))}
+                  >
+                    <SelectTrigger className="w-full" aria-label="نوع رند کردن">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROUND_ITEMS.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col justify-end">
+                  <Button type="button" disabled={parseNumber(f.percent) <= 0} onClick={() => applyFill(o)}>
+                    اعمال روی همه
+                  </Button>
+                </div>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               {byGroup.map(({ group, prices: groupPrices }) =>
                 groupPrices.length === 0 ? null : (
                   <div key={group.id} className="flex flex-col gap-1.5">
                     <Label className="text-xs text-muted-foreground">{group.name}</Label>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
                       {groupPrices.map((p: FlatPrice) => (
-                        <div key={p.id} className="flex items-center gap-1.5">
-                          <span className="text-sm">{p.name}</span>
+                        <div key={p.id} className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-sm">{p.name}</span>
                           <MoneyInput
                             aria-label={`قیمت ویژه ${p.name}`}
-                            className="w-28"
+                            className="w-32 shrink-0"
                             placeholder="0"
                             value={o.prices[p.id] ? formatNumber(o.prices[p.id]) : ''}
                             onChange={(e) =>

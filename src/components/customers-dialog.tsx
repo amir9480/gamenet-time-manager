@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
+import { RowCell } from '@/components/row-cell'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NewCustomerDialog } from '@/components/new-customer-dialog'
 import { HistoryDialog } from '@/components/history-dialog'
@@ -271,28 +272,35 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                 return (
                   <div
                     key={c.id}
-                    className="grid grid-cols-2 items-center gap-2 px-3 py-1.5 sm:grid-cols-[1fr_1fr_7rem_8rem_5rem]"
+                    className="flex flex-col gap-3 px-3 py-3 sm:grid sm:grid-cols-[1fr_1fr_7rem_8rem_5rem] sm:items-center sm:gap-2 sm:py-1.5"
                   >
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      className="justify-start truncate px-1 text-sm"
-                      data-tour={n === 0 ? 'cust-name' : undefined}
-                      onClick={() => setStatsFor(c)}
-                    >
-                      {c.name}
-                    </Button>
-                    <span className="truncate text-sm text-muted-foreground" dir="ltr">
-                      {c.phone || '—'}
-                    </span>
+                    <RowCell label="نام">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        className="justify-start truncate px-1 text-sm"
+                        data-tour={n === 0 ? 'cust-name' : undefined}
+                        onClick={() => setStatsFor(c)}
+                      >
+                        {c.name}
+                      </Button>
+                    </RowCell>
+                    <RowCell label="شماره‌ی تماس">
+                      <span className="truncate text-sm text-muted-foreground max-sm:text-end" dir="ltr">
+                        {c.phone || '—'}
+                      </span>
+                    </RowCell>
+                    <RowCell label="مجموع خرید">
                     {spend === undefined ? (
                       <Skeleton className="h-4 w-20" />
                     ) : (
-                      <span className="truncate text-sm" dir="ltr">
+                      <span className="truncate text-sm max-sm:text-end" dir="ltr">
                         {formatNumber(spend.get(c.id) ?? 0)}{' '}
                         <span className="text-xs text-muted-foreground">تومان</span>
                       </span>
                     )}
+                    </RowCell>
+                    <RowCell label="مانده کیف پول">
                     {debts === undefined ? (
                       <Skeleton className="h-4 w-20" />
                     ) : (
@@ -337,7 +345,8 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                         )
                       })()
                     )}
-                    <div className="col-start-2 row-start-3 flex justify-end gap-0.5 sm:col-start-auto sm:row-start-auto">
+                    </RowCell>
+                    <div className="flex gap-0.5 sm:justify-end">
                       <Tip label="ویرایش">
                         <Button
                           variant="ghost"

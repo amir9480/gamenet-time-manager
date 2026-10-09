@@ -114,9 +114,9 @@ export function ShiftSummary({
             تا {formatJalaliClock(end, false)}
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex w-full items-center gap-4 sm:w-auto">
           {active === 0 && (
-            <div className="flex gap-2">
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
               {onToggleDetails && (
                 <Tip label={detailsVisible ? 'پنهان کردن هزینه' : 'نمایش هزینه'}>
                   <Button
@@ -143,7 +143,7 @@ export function ShiftSummary({
 
       {!detailsVisible ? (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 8 }, (_, i) => <StatSkeleton key={i} />)}
           </div>
           <Card>
@@ -189,7 +189,7 @@ export function ShiftSummary({
         </>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Stat label="درآمد شیفت" value={formatNumber(sum.total)} unit="تومان" />
             <Stat label="تعداد تایم" value={formatNumber(sum.count)} />
             <Stat label="مدت کل" value={formatDuration(sum.durationMs)} />

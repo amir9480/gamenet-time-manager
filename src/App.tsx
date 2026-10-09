@@ -7,6 +7,7 @@ import { InstallDialog } from '@/components/install-dialog'
 import { HistoryDialog } from '@/components/history-dialog'
 import { LimitAlarmDialog, LockedLimitAlarmDialog } from '@/components/limit-alarm-dialog'
 import { InstanceScreen } from '@/components/instance-screen'
+import { ScrollFade } from '@/components/scroll-fade'
 import { LiveClock } from '@/components/live-clock'
 import { LockScreen } from '@/components/lock-screen'
 import { NoticeDialog } from '@/components/notice-dialog'
@@ -332,14 +333,18 @@ function Main() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-6 p-4 md:p-6">
-      <header className="sticky top-0 z-40 -mx-4 -mt-4 flex flex-wrap items-center justify-between gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:-mt-6 md:px-6">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <AppIcon className="size-8 sm:size-10" />
-          <h1 className="text-lg font-bold sm:text-2xl select-none">{title}</h1>
+      <header className="sticky top-0 z-40 -mx-4 -mt-4 flex items-center justify-between gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:-mt-6 md:px-6">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <AppIcon className="size-8 shrink-0 sm:size-10" />
+          <h1 className="truncate text-lg font-bold sm:text-2xl select-none">{title}</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {(sessions.length > 0 || shift) && <LiveClock size="small" />}
-          <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {(sessions.length > 0 || shift) && (
+            <div className="max-sm:hidden">
+              <LiveClock size="small" />
+            </div>
+          )}
+          <div className="flex gap-1.5 sm:gap-2">
             <Tip label="تاریخچه">
               <Button
                 variant="outline"
@@ -435,39 +440,17 @@ function Main() {
           </div>
         ) : (
           <>
-            {/* Type filters and the controls always sit on separate rows, so the layout doesn't jump
-                when the number of device types changes. */}
-            <div className="flex flex-col gap-2">
-              {showTypes && (
-                <div className="flex flex-wrap items-center gap-1.5" data-tour="type-filter">
-                  <Button
-                    size="lg"
-                    variant={activeType === null ? 'default' : 'outline'}
-                    aria-pressed={activeType === null}
-                    onClick={() => setTypeFilter(null)}
-                  >
-                    همه ({found.length})
-                  </Button>
-                  {typeNames.map((t) => (
-                    <Button
-                      key={t}
-                      size="lg"
-                      variant={activeType === t ? 'default' : 'outline'}
-                      aria-pressed={activeType === t}
-                      onClick={() => setTypeFilter(activeType === t ? null : t)}
-                    >
-                      {t} ({found.filter((x) => x.categoryName === t).length})
-                    </Button>
-                  ))}
-                </div>
-              )}
-              <div className="flex flex-wrap items-center gap-1">
-                <div className="relative w-full sm:w-52">
+            {/* Row 1: search + primary actions. Row 2: type chips (one scrolling line, so many
+                types never grow the page) + view controls. Both rows keep their shape whatever
+                the number of types is. */}
+            <div className="flex flex-col gap-2.5 sm:gap-3">
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-2">
+                <div className="relative w-full sm:w-auto sm:max-w-md sm:flex-1">
                   <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     aria-label="جستجوی تایم‌ها"
                     placeholder="جستجو در تایم‌ها…"
-                    className="h-9 w-full ps-8 pe-8 text-sm max-sm:h-11"
+                    className="h-9 w-full ps-8 pe-8 text-sm max-sm:h-12 max-sm:ps-9"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
@@ -484,76 +467,119 @@ function Main() {
                     </Button>
                   )}
                 </div>
-                <div role="radiogroup" aria-label="نحوه‌ی نمایش" className="flex items-center gap-1">
-                <Tip label="نمای کامل">
+                <div className="flex w-full gap-2.5 sm:ms-auto sm:w-auto sm:gap-2">
                   <Button
-                    size="icon-lg"
-                    variant={!summaryOn && view === 'detailed' ? 'secondary' : 'ghost'}
-                    role="radio"
-                    data-tour="view-detailed"
-                    aria-label="نمای کامل"
-                    aria-checked={!summaryOn && view === 'detailed'}
-                    onClick={() => {
-                      setView('detailed')
-                      setShowShift(false)
-                    }}
-                  >
-                    <Rows3 />
-                  </Button>
-                </Tip>
-                <Tip label="نمای فشرده">
-                  <Button
-                    size="icon-lg"
-                    variant={!summaryOn && view === 'compact' ? 'secondary' : 'ghost'}
-                    role="radio"
-                    data-tour="view-compact"
-                    aria-label="نمای فشرده"
-                    aria-checked={!summaryOn && view === 'compact'}
-                    onClick={() => {
-                      setView('compact')
-                      setShowShift(false)
-                    }}
-                  >
-                    <LayoutGrid />
-                  </Button>
-                </Tip>
-                <Tip label="خلاصه‌ی شیفت">
-                  <Button
-                    size="icon-lg"
-                    variant={summaryOn ? 'secondary' : 'ghost'}
-                    role="radio"
-                    data-tour="shift-summary"
-                    aria-label="خلاصه‌ی شیفت"
-                    aria-checked={summaryOn}
-                    disabled={!manualShift}
-                    onClick={() => setShowShift(true)}
-                  >
-                    <ChartNoAxesColumn />
-                  </Button>
-                </Tip>
-                </div>
-                <Tip label={costHidden ? 'نمایش هزینه' : 'پنهان کردن هزینه'}>
-                  <Button
-                    size="icon-lg"
+                    size="lg"
                     variant="outline"
-                    aria-label={costHidden ? 'نمایش هزینه تایم‌ها' : 'پنهان کردن هزینه تایم‌ها'}
-                    aria-pressed={costHidden}
-                    onClick={() => setSummaryVisible((v) => !v)}
+                    className="flex-1 max-sm:h-12 sm:flex-none"
+                    data-tour="reserve"
+                    onClick={() => setReserveOpen(true)}
                   >
-                    {costHidden ? <EyeOff /> : <Eye />}
+                    <CalendarClock /> رزرو
                   </Button>
-                </Tip>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  data-tour="reserve"
-                  onClick={() => setReserveOpen(true)}
-                >
-                  <CalendarClock /> رزرو
-                </Button>
-                <Button size="lg" data-tour="add-session" onClick={() => setAddOpen(true)}>
-                  <Plus /> افزودن تایم
-                </Button>
+                  <Button
+                    size="lg"
+                    className="flex-1 max-sm:h-12 sm:flex-none"
+                    data-tour="add-session"
+                    onClick={() => setAddOpen(true)}
+                  >
+                    <Plus /> افزودن تایم
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2.5">
+                {showTypes && (
+                  <ScrollFade
+                    className="-mx-4 flex w-auto items-center gap-2 px-4 pb-0.5 max-sm:w-[calc(100%+2rem)] sm:mx-0 sm:w-auto sm:flex-1 sm:gap-1.5 sm:px-0"
+                    data-tour="type-filter"
+                  >
+                    <Button
+                      variant={activeType === null ? 'default' : 'outline'}
+                      className="shrink-0 rounded-full"
+                      aria-pressed={activeType === null}
+                      onClick={() => setTypeFilter(null)}
+                    >
+                      همه ({found.length})
+                    </Button>
+                    {typeNames.map((t) => (
+                      <Button
+                        key={t}
+                        variant={activeType === t ? 'default' : 'outline'}
+                        className="shrink-0 rounded-full"
+                        aria-pressed={activeType === t}
+                        onClick={() => setTypeFilter(activeType === t ? null : t)}
+                      >
+                        {t} ({found.filter((x) => x.categoryName === t).length})
+                      </Button>
+                    ))}
+                  </ScrollFade>
+                )}
+                <div className="flex items-center gap-1.5 sm:ms-auto">
+                  <Tip label={costHidden ? 'نمایش هزینه' : 'پنهان کردن هزینه'}>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      aria-label={costHidden ? 'نمایش هزینه تایم‌ها' : 'پنهان کردن هزینه تایم‌ها'}
+                      aria-pressed={costHidden}
+                      onClick={() => setSummaryVisible((v) => !v)}
+                    >
+                      {costHidden ? <EyeOff /> : <Eye />}
+                    </Button>
+                  </Tip>
+                  <div
+                    role="radiogroup"
+                    aria-label="نحوه‌ی نمایش"
+                    className="flex items-center gap-0.5 rounded-lg border bg-muted/40 p-0.5"
+                  >
+                    <Tip label="نمای کامل">
+                      <Button
+                        size="icon"
+                        variant={!summaryOn && view === 'detailed' ? 'secondary' : 'ghost'}
+                        role="radio"
+                        data-tour="view-detailed"
+                        aria-label="نمای کامل"
+                        aria-checked={!summaryOn && view === 'detailed'}
+                        onClick={() => {
+                          setView('detailed')
+                          setShowShift(false)
+                        }}
+                      >
+                        <Rows3 />
+                      </Button>
+                    </Tip>
+                    <Tip label="نمای فشرده">
+                      <Button
+                        size="icon"
+                        variant={!summaryOn && view === 'compact' ? 'secondary' : 'ghost'}
+                        role="radio"
+                        data-tour="view-compact"
+                        aria-label="نمای فشرده"
+                        aria-checked={!summaryOn && view === 'compact'}
+                        onClick={() => {
+                          setView('compact')
+                          setShowShift(false)
+                        }}
+                      >
+                        <LayoutGrid />
+                      </Button>
+                    </Tip>
+                    <Tip label="خلاصه‌ی شیفت">
+                      <Button
+                        size="icon"
+                        variant={summaryOn ? 'secondary' : 'ghost'}
+                        role="radio"
+                        data-tour="shift-summary"
+                        aria-label="خلاصه‌ی شیفت"
+                        aria-checked={summaryOn}
+                        disabled={!manualShift}
+                        onClick={() => setShowShift(true)}
+                      >
+                        <ChartNoAxesColumn />
+                      </Button>
+                    </Tip>
+                  </div>
+                </div>
               </div>
             </div>
             {summaryOn && manualShift && (

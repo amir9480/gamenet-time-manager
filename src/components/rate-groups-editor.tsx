@@ -76,11 +76,11 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
           : ''
         return (
           <div key={g.id} className="flex flex-col gap-2 rounded-lg border p-3">
-            <div className="flex items-center gap-2">
+            <div className="grid grid-cols-[1.5rem_1fr_2rem] items-center gap-2 sm:grid-cols-[1.5rem_1fr_1fr_2rem]">
               <Input
                 aria-label="نام نرخ"
                 aria-invalid={!g.name.trim()}
-                className="font-bold"
+                className="col-[2] font-bold sm:col-[2/4]"
                 value={g.name}
                 onChange={(e) => patchGroup(g.id, (x) => ({ ...x, name: e.target.value }))}
               />
@@ -90,6 +90,7 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
                     variant="ghost"
                     size="icon"
                     aria-label="حذف نرخ"
+                    className="size-8 max-md:size-8"
                     disabled={!!blockReason || groups.length <= 1}
                     onClick={() => setPendingDelete({ kind: 'group', id: g.id, name: g.name })}
                   >
@@ -159,6 +160,7 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
                           variant="ghost"
                           size="icon"
                           aria-label="حذف"
+                          className="size-8 max-md:size-8"
                           disabled={inUse || g.prices.length <= 1}
                           onClick={() =>
                             setPendingDelete({ kind: 'price', groupId: g.id, id: p.id, name: p.name })
@@ -172,7 +174,7 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
                 )
               })}
             </RadioGroup>
-            <Button variant="outline" size="sm" className="self-start" onClick={() => addPrice(g)}>
+            <Button variant="outline" size="sm" className="ms-8 self-start" onClick={() => addPrice(g)}>
               <Plus /> افزودن قیمت
             </Button>
           </div>

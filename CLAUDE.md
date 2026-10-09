@@ -10,6 +10,9 @@ The app is released (GitHub releases + Pages) and people run it with real data. 
 - **Stable identifiers**: don't rename the Dexie db names (`gamenet-timer-manager`, `gamenet-security`), table names, localStorage namespace prefix (`gamenet-time-manager:`), the Tauri `identifier` (`com.gamenet.timermanager`, it locates the desktop app's data), the Pages origin/base path, or the release asset name `gamenet-time-manager_<ver>_x64-setup.exe` and `releases/download/` URLs (older desktop builds use them to update). If one must change, migrate the old data/value on first run.
 - Behavior changes users will notice go into `NOTICE_UPDATES` (bump `NOTICE_VERSION`).
 
+## UI design rules
+Before building or changing any UI, read `DESIGN.md` (layout recipes, alignment, spacing, responsive checklist for mobile/tablet/desktop) and follow it.
+
 ## Commands (pnpm only)
 - `pnpm dev` — Vite on `0.0.0.0:3000` (strictPort; Tauri `devUrl` points at `localhost:3000`).
 - `pnpm build` — `tsc -b && vite build` (strict, `noUnusedLocals`); run after every change.

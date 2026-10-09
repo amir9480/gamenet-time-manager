@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
 import { Checkbox } from '@/components/ui/checkbox'
 import { MoneyInput } from '@/components/ui/money-input'
 import {
@@ -46,6 +47,7 @@ import { TourHelpButton } from '@/components/tour-help-button'
 import { readWalletBalance } from '@/lib/db'
 import { formatClock, formatDuration, formatNumber, parseNumber } from '@/lib/format'
 import { startOfDay } from '@/lib/jalali'
+import { cn } from '@/lib/utils'
 import {
   isTourActive,
   markTourSeen,
@@ -156,6 +158,12 @@ export const summaryTour: TourDef = {
       'bottom',
     ),
     sumStep(
+      'sum-seg-device',
+      'دستگاه و نرخ بازه',
+      'اگر دستگاه یا نرخ بازه را اشتباه انتخاب کرده‌اید، همین‌جا عوضش کنید؛ هزینه‌ی همان بازه دوباره حساب می‌شود و در انتها هزینه‌ی آن بازه را می‌بینید.',
+      'top',
+    ),
+    sumStep(
       'sum-pause',
       'توقف موقت',
       'تا زمانی که تایم در حال اجراست، برای اتمام باید آن را متوقف کنید. با توقف، زمان می‌ایستد و می‌توانید صورت‌حساب را تأیید کنید.',
@@ -166,12 +174,6 @@ export const summaryTour: TourDef = {
       'حذف بازه',
       'بازه‌ای که اشتباهی اضافه شده را با این دکمه حذف کنید تا از زمان و هزینه کم شود.',
       'bottom',
-    ),
-    sumStep(
-      'sum-seg-device',
-      'دستگاه و نرخ بازه',
-      'اگر دستگاه یا نرخ بازه را اشتباه انتخاب کرده‌اید، همین‌جا عوضش کنید؛ هزینه‌ی همان بازه دوباره حساب می‌شود و در انتها هزینه‌ی آن بازه را می‌بینید.',
-      'top',
     ),
     sumStep(
       'sum-extra-add',
@@ -282,7 +284,7 @@ function TimeOfDayInput({ value, onChange }: { value: number; onChange: (ts: num
       step="1"
       dir="ltr"
       aria-label="ساعت"
-      className="w-28 appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+      className="w-full appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
       value={`${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`}
       onChange={(e) => {
         const [h, m, s] = e.target.value.split(':').map(Number)
@@ -599,7 +601,7 @@ export function SessionSummaryDialog({
           else requestClose()
         }}
       >
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-1">
               {`اتمام تایم ${deviceName}`}
@@ -612,429 +614,479 @@ export function SessionSummaryDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-4 text-sm">
-            <div className="flex justify-between gap-4">
-              <span>
-                شروع: <b dir="ltr">{start ? formatClock(start) : '—'}</b>
-              </span>
-              <span>
-                {draft.status === 'running' ? 'اکنون' : 'پایان'}:{' '}
-                <b dir="ltr">{end ? formatClock(end) : '—'}</b>
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-2" data-tour="sum-times">
-              <div className="flex items-center justify-between">
-                <Label>بازه‌های زمانی</Label>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex" data-tour="sum-add-past">
-                  <BackdateTimeDialog
-                    session={draft}
-                    settings={settings}
-                    size="sm"
-                    onAdd={(device, category, minutes) =>
-                      setDraft((d) =>
-                        addBackdatedTime(
-                          d,
-                          device,
-                          category,
-                          defaultPriceFor(device, settings.rateGroups) ?? EMPTY_PRICE,
-                          minutes,
-                        ),
-                      )
-                    }
-                  />
+          <div className="grid gap-4 text-sm lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start">
+            {/* Left: what is being billed (times, buffet, prepay). */}
+            <div className="flex min-w-0 flex-col gap-4">
+              <div className="grid grid-cols-2 divide-x divide-x-reverse rounded-xl bg-muted/50 py-2.5 text-center">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs text-muted-foreground">شروع</span>
+                  <b dir="ltr">{start ? formatClock(start) : '—'}</b>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs text-muted-foreground">
+                    {draft.status === 'running' ? 'اکنون' : 'پایان'}
                   </span>
-                  {draft.status !== 'running' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      data-tour="sum-resume"
-                      onClick={() => setDraft((d) => resumeSession(settings, d, Date.now()))}
-                    >
-                      <Play /> ادامه
-                    </Button>
-                  )}
+                  <b dir="ltr">{end ? formatClock(end) : '—'}</b>
                 </div>
               </div>
 
-              {visibleSegments.length === 0 ? (
-                <p className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground">
-                  بازه‌ای ثبت نشده است.
-                </p>
-              ) : (
-                visibleSegments.map(({ seg, index: i }, pos) => {
-                  const first = pos === 0
-                  const device = settings.devices.find((x) => x.id === seg.deviceId)
-                  const groups = devicePriceGroups(device, settings.rateGroups)
-                  const priceOptions = flatPrices(groups)
-                  const priceFallback = priceOptions.some((p) => p.id === seg.typeId)
-                    ? undefined
-                    : { value: seg.typeId, label: `${seg.typeName} (حذف‌شده)` }
-                  const deviceFallback = deviceItems.some((d) => d.value === seg.deviceId)
-                    ? undefined
-                    : { value: seg.deviceId, label: `${seg.deviceName} (حذف‌شده)` }
-                  const open_ = seg.to === null
+              <Section
+                title="بازه‌های زمانی"
+                tour="sum-times"
+                action={
+                  <>
+                    <span className="inline-flex" data-tour="sum-add-past">
+                      <BackdateTimeDialog
+                        session={draft}
+                        settings={settings}
+                        size="sm"
+                        onAdd={(device, category, minutes) =>
+                          setDraft((d) =>
+                            addBackdatedTime(
+                              d,
+                              device,
+                              category,
+                              defaultPriceFor(device, settings.rateGroups) ?? EMPTY_PRICE,
+                              minutes,
+                            ),
+                          )
+                        }
+                      />
+                    </span>
+                    {draft.status !== 'running' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-tour="sum-resume"
+                        onClick={() => setDraft((d) => resumeSession(settings, d, Date.now()))}
+                      >
+                        <Play /> ادامه
+                      </Button>
+                    )}
+                  </>
+                }
+              >
+                {visibleSegments.length === 0 ? (
+                  <Empty>بازه‌ای ثبت نشده است.</Empty>
+                ) : (
+                  visibleSegments.map(({ seg, index: i }, pos) => {
+                    const first = pos === 0
+                    const device = settings.devices.find((x) => x.id === seg.deviceId)
+                    const groups = devicePriceGroups(device, settings.rateGroups)
+                    const priceOptions = flatPrices(groups)
+                    const priceFallback = priceOptions.some((p) => p.id === seg.typeId)
+                      ? undefined
+                      : { value: seg.typeId, label: `${seg.typeName} (حذف‌شده)` }
+                    const deviceFallback = deviceItems.some((d) => d.value === seg.deviceId)
+                      ? undefined
+                      : { value: seg.deviceId, label: `${seg.deviceName} (حذف‌شده)` }
+                    const open_ = seg.to === null
 
-                  return (
-                    <div key={i} className="flex flex-col gap-2 rounded-lg border p-2.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div
-                          className="flex items-center gap-1.5"
-                          data-tour={first ? 'sum-seg-start' : undefined}
-                        >
-                          <span className="text-xs text-muted-foreground">شروع</span>
-                          <JalaliDatePicker
-                            label=""
-                            value={startOfDay(seg.from)}
-                            onChange={(d) => patchSegment(i, { from: withDay(seg.from, d) })}
-                          />
-                          <TimeOfDayInput value={seg.from} onChange={(ts) => patchSegment(i, { from: ts })} />
-                        </div>
-                        {open_ ? (
-                          <span className="text-xs text-muted-foreground">در حال بازی</span>
-                        ) : (
+                    return (
+                      <div key={i} className="flex flex-col gap-3 rounded-lg border bg-card p-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
                           <div
-                            className="flex items-center gap-1.5"
+                            className="@container flex flex-col gap-1.5"
+                            data-tour={first ? 'sum-seg-start' : undefined}
+                          >
+                            <span className="text-xs text-muted-foreground">شروع</span>
+                            <div className="grid grid-cols-1 gap-2 @min-[16rem]:grid-cols-2">
+                              <JalaliDatePicker
+                                label=""
+                                className="w-full"
+                                value={startOfDay(seg.from)}
+                                onChange={(d) => patchSegment(i, { from: withDay(seg.from, d) })}
+                              />
+                              <TimeOfDayInput
+                                value={seg.from}
+                                onChange={(ts) => patchSegment(i, { from: ts })}
+                              />
+                            </div>
+                          </div>
+                          <div
+                            className="@container flex flex-col gap-1.5"
                             data-tour={first ? 'sum-seg-end' : undefined}
                           >
                             <span className="text-xs text-muted-foreground">پایان</span>
-                            <JalaliDatePicker
-                              label=""
-                              value={startOfDay(seg.to!)}
-                              onChange={(d) => patchSegment(i, { to: withDay(seg.to!, d) })}
-                            />
-                            <TimeOfDayInput value={seg.to!} onChange={(ts) => patchSegment(i, { to: ts })} />
-                          </div>
-                        )}
-                        <span className="ms-auto text-xs text-muted-foreground">
-                          {formatDuration(segmentMs(seg, now))}
-                        </span>
-                        {open_ && (
-                          <Tip label="توقف موقت تایم">
-                            <Button
-                              variant="outline"
-                              size="icon-sm"
-                              aria-label="توقف موقت تایم"
-                              data-tour="sum-pause"
-                              onClick={pauseNow}
-                            >
-                              <Pause />
-                            </Button>
-                          </Tip>
-                        )}
-                        <Button
-                          variant="destructive"
-                          size="icon-sm"
-                          aria-label="حذف بازه"
-                          data-tour={first ? 'sum-seg-delete' : undefined}
-                          onClick={() => setPendingDelete({ kind: 'segment', index: i })}
-                        >
-                          <Trash2 />
-                        </Button>
-                      </div>
-                      <div
-                        className="flex flex-wrap items-center gap-2"
-                        data-tour={first ? 'sum-seg-device' : undefined}
-                      >
-                        <Select
-                          items={deviceFallback ? [...deviceItems, deviceFallback] : deviceItems}
-                          value={seg.deviceId}
-                          onValueChange={(v) => pickSegmentDevice(i, seg, v as string)}
-                        >
-                          <SelectTrigger className="w-auto min-w-36" aria-label="دستگاه">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {devicesByCategory.map(({ category, devices }) => (
-                              <SelectGroup key={category.id}>
-                                <SelectLabel>{category.name}</SelectLabel>
-                                {devices.map((d) => (
-                                  <SelectItem key={d.id} value={d.id}>
-                                    {d.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            ))}
-                            {deviceFallback && (
-                              <SelectItem value={deviceFallback.value} disabled>
-                                {deviceFallback.label}
-                              </SelectItem>
+                            {open_ ? (
+                              <span className="flex h-8 items-center text-muted-foreground">
+                                در حال بازی
+                              </span>
+                            ) : (
+                              <div className="grid grid-cols-1 gap-2 @min-[16rem]:grid-cols-2">
+                                <JalaliDatePicker
+                                  label=""
+                                className="w-full"
+                                  value={startOfDay(seg.to!)}
+                                  onChange={(d) => patchSegment(i, { to: withDay(seg.to!, d) })}
+                                />
+                                <TimeOfDayInput
+                                  value={seg.to!}
+                                  onChange={(ts) => patchSegment(i, { to: ts })}
+                                />
+                              </div>
                             )}
-                          </SelectContent>
-                        </Select>
-                        <PriceSelect
-                          groups={groups}
-                          value={seg.typeId}
-                          onChange={(id) => pickSegmentPrice(i, seg, id)}
-                          // Labels show the price in effect when this line started, so a line
-                          // inside a price override shows the override's price.
-                          overrides={settings.priceOverrides}
-                          now={seg.from}
-                          extraItems={priceFallback ? [priceFallback] : []}
-                          extra={
-                            priceFallback && (
-                              <SelectItem value={priceFallback.value} disabled>
-                                {priceFallback.label}
-                              </SelectItem>
-                            )
-                          }
-                          className="w-auto min-w-32"
-                        />
-                        <span className="ms-auto font-bold">
-                          {toman(segmentCost(seg, now))}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2 border-t pt-3">
-              <div className="flex items-center justify-between">
-                <Label>بوفه و سایر هزینه‌ها</Label>
-                <span className="inline-flex" data-tour="sum-extra-add">
-                  <ExtraItemPicker settings={settings} onAdd={(item) => setDraft((d) => addExtraItem(d, item))} />
-                </span>
-              </div>
-              {extraItems.length === 0 ? (
-                <p className="text-xs text-muted-foreground" data-tour="sum-extra-lines">
-                  موردی ثبت نشده است.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2" data-tour="sum-extra-lines">
-                {extraItems.map((i, n) => (
-                  <div key={i.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{i.name}</div>
-                      {i.description && (
-                        <div className="truncate text-xs text-muted-foreground">{i.description}</div>
-                      )}
-                      {!i.catalogId ? (
-                        <div className="mt-1 flex items-center gap-2">
-                          <MoneyInput
-                            className="w-32"
-                            aria-label={`قیمت ${i.name}`}
-                            placeholder="0"
-                            value={i.price > 0 ? formatNumber(i.price) : ''}
-                            onChange={(e) => setOtherItemPrice(i.id, parseNumber(e.target.value))}
-                          />
-                          <span className="text-xs text-muted-foreground">تومان ×</span>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="text-xs text-muted-foreground">{formatNumber(i.price)} تومان × </div>
-                      )}
-                    </div>
-                    <CountInput
-                      label="تعداد"
-                      tour={n === 0 ? 'sum-extra-qty' : undefined}
-                      className="w-20"
-                      value={i.qty}
-                      onCommit={(qty) => setDraft((d) => setExtraItemQty(d, i.id, qty))}
-                    />
-                    <span className="ms-auto font-bold">{toman(i.price * i.qty)}</span>
-                    <Button
-                      variant="destructive"
-                      size="icon-sm"
-                      aria-label={`حذف ${i.name}`}
-                      data-tour={n === 0 ? 'sum-extra-delete' : undefined}
-                      onClick={() => setPendingDelete({ kind: 'item', id: i.id, name: i.name })}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </div>
-                ))}
-                </div>
-              )}
-            </div>
 
-            <div className="flex flex-col gap-2 border-t pt-3">
-              <Label>پیش‌پرداخت</Label>
-              <Button
-                size="sm"
-                variant="outline"
-                className="self-start"
-                data-tour="sum-prepay-add"
-                onClick={addPrepay}
-              >
-                <Plus /> افزودن
-              </Button>
-              {draft.prepayEntries?.length ? (
-                <div className="flex flex-col gap-1" data-tour="sum-prepay-list">
-                  {draft.prepayEntries.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
-                      <div className="flex items-center gap-2">
-                        <MoneyInput
-                          className="w-32"
-                          aria-label="مبلغ پیش‌پرداخت"
-                          placeholder="0"
-                          value={p.amount > 0 ? formatNumber(p.amount) : ''}
-                          onChange={(e) => setPrepayAmount(p.id, parseNumber(e.target.value))}
-                        />
-                        <span className="text-xs text-muted-foreground">تومان</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{formatClock(p.at)}</span>
-                      <Button
-                        variant="destructive"
-                        size="icon-sm"
-                        aria-label="حذف پیش‌پرداخت"
-                        className="ms-auto"
-                        onClick={() => setPendingDelete({ kind: 'prepay', id: p.id, amount: p.amount })}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground" data-tour="sum-prepay-list">
-                  پیش‌پرداختی ثبت نشده است.
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-1.5 border-t pt-2" data-tour="sum-totals">
-              <Row
-                label={costBreakdown.overrides.length ? 'هزینه زمان (نرخ معمول)' : 'جمع هزینه زمان'}
-                value={toman(costBreakdown.base)}
-              />
-              {costBreakdown.overrides.map((o) => (
-                <Row key={o.id} label={`هزینه زمان (${o.label})`} value={toman(o.cost)} />
-              ))}
-              <Row label="جمع بوفه و سایر هزینه‌ها" value={toman(itemsCost)} />
-              <Row label="جمع پیش‌پرداخت" value={toman(prepayAmount)} />
-            </div>
-
-            <div className="flex flex-col gap-1.5 border-t pt-2">
-                <div
-                  className="flex items-center justify-between gap-4 text-base font-bold"
-                  data-tour="sum-final"
-                >
-                  <Label htmlFor="final-total">مبلغ نهایی</Label>
-                  <div className="flex items-center gap-2">
-                    {draft.status === 'running' && (
-                      <Button data-tour="sum-settle" onClick={pauseNow}>
-                        اتمام برای تسویه حساب
-                      </Button>
-                    )}
-                    {!rounding.auto && (
-                      <Tip label={`رند کردن (${ROUND_MODE_LABELS[rounding.mode]} ${formatNumber(rounding.step)} تومان)`}>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          aria-label="رند کردن"
-                          onClick={() => setFinalText(String(roundAmount(finalAmount, rounding)))}
+                        <div
+                          className="grid gap-2 sm:grid-cols-2"
+                          data-tour={first ? 'sum-seg-device' : undefined}
                         >
-                          <Coins />
-                        </Button>
-                      </Tip>
-                    )}
-                    <MoneyInput
-                      id="final-total"
-                      className="w-40 font-bold"
-                      value={finalAmount > 0 ? formatNumber(finalAmount) : finalText}
-                      onChange={(e) => setFinalText(e.target.value)}
-                      disabled={draft.status === 'running'}
+                          <Select
+                            items={deviceFallback ? [...deviceItems, deviceFallback] : deviceItems}
+                            value={seg.deviceId}
+                            onValueChange={(v) => pickSegmentDevice(i, seg, v as string)}
+                          >
+                            <SelectTrigger className="w-full" aria-label="دستگاه">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {devicesByCategory.map(({ category, devices }) => (
+                                <SelectGroup key={category.id}>
+                                  <SelectLabel>{category.name}</SelectLabel>
+                                  {devices.map((d) => (
+                                    <SelectItem key={d.id} value={d.id}>
+                                      {d.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              ))}
+                              {deviceFallback && (
+                                <SelectItem value={deviceFallback.value} disabled>
+                                  {deviceFallback.label}
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <PriceSelect
+                            groups={groups}
+                            value={seg.typeId}
+                            onChange={(id) => pickSegmentPrice(i, seg, id)}
+                            // Labels show the price in effect when this line started, so a line
+                            // inside a price override shows the override's price.
+                            overrides={settings.priceOverrides}
+                            now={seg.from}
+                            extraItems={priceFallback ? [priceFallback] : []}
+                            extra={
+                              priceFallback && (
+                                <SelectItem value={priceFallback.value} disabled>
+                                  {priceFallback.label}
+                                </SelectItem>
+                              )
+                            }
+                            className="w-full"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 border-t pt-2.5">
+                          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                            <span className="whitespace-nowrap text-xs text-muted-foreground">
+                              {formatDuration(segmentMs(seg, now))}
+                            </span>
+                            <span className="whitespace-nowrap font-bold">{toman(segmentCost(seg, now))}</span>
+                          </div>
+                          <div className="ms-auto flex shrink-0 items-center gap-1.5">
+                            {open_ && (
+                              <Tip label="توقف موقت تایم">
+                                <Button
+                                  variant="outline"
+                                  size="icon-sm"
+                                  className="max-md:size-9"
+                                  aria-label="توقف موقت تایم"
+                                  data-tour="sum-pause"
+                                  onClick={pauseNow}
+                                >
+                                  <Pause />
+                                </Button>
+                              </Tip>
+                            )}
+                            <Button
+                              variant="destructive"
+                              size="icon-sm"
+                              className="max-md:size-9"
+                              aria-label="حذف بازه"
+                              data-tour={first ? 'sum-seg-delete' : undefined}
+                              onClick={() => setPendingDelete({ kind: 'segment', index: i })}
+                            >
+                              <Trash2 />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </Section>
+
+              <Section
+                title="بوفه و سایر هزینه‌ها"
+                action={
+                  <span className="inline-flex" data-tour="sum-extra-add">
+                    <ExtraItemPicker
+                      settings={settings}
+                      onAdd={(item) => setDraft((d) => addExtraItem(d, item))}
                     />
-                    <span className="text-sm font-normal text-muted-foreground">تومان</span>
+                  </span>
+                }
+              >
+                {extraItems.length === 0 ? (
+                  <Empty tour="sum-extra-lines">موردی ثبت نشده است.</Empty>
+                ) : (
+                  <div className="flex flex-col gap-2" data-tour="sum-extra-lines">
+                    {extraItems.map((i, n) => (
+                      <div key={i.id} className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">{i.name}</div>
+                            {i.description && (
+                              <div className="truncate text-xs text-muted-foreground">
+                                {i.description}
+                              </div>
+                            )}
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="icon-sm"
+                            className="max-md:size-9"
+                            aria-label={`حذف ${i.name}`}
+                            data-tour={n === 0 ? 'sum-extra-delete' : undefined}
+                            onClick={() => setPendingDelete({ kind: 'item', id: i.id, name: i.name })}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex min-w-0 flex-col gap-1">
+                            <span className="text-xs text-muted-foreground">قیمت واحد (تومان)</span>
+                            {!i.catalogId ? (
+                              <MoneyInput
+                                className="w-full"
+                                aria-label={`قیمت ${i.name}`}
+                                placeholder="0"
+                                value={i.price > 0 ? formatNumber(i.price) : ''}
+                                onChange={(e) => setOtherItemPrice(i.id, parseNumber(e.target.value))}
+                              />
+                            ) : (
+                              <Input readOnly dir="ltr" value={formatNumber(i.price)} />
+                            )}
+                          </div>
+                          <div className="flex min-w-0 flex-col gap-1">
+                            <span className="text-xs text-muted-foreground">تعداد</span>
+                            <CountInput
+                              label="تعداد"
+                              tour={n === 0 ? 'sum-extra-qty' : undefined}
+                              className="w-full"
+                              value={i.qty}
+                              onCommit={(qty) => setDraft((d) => setExtraItemQty(d, i.id, qty))}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 border-t pt-2.5">
+                          <span className="text-xs text-muted-foreground">جمع</span>
+                          <span className="font-bold">{toman(i.price * i.qty)}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                )}
+              </Section>
+
+              <Section
+                title="پیش‌پرداخت"
+                action={
+                  <Button size="sm" variant="outline" data-tour="sum-prepay-add" onClick={addPrepay}>
+                    <Plus /> افزودن
+                  </Button>
+                }
+              >
+                {draft.prepayEntries?.length ? (
+                  <div className="flex flex-col gap-2" data-tour="sum-prepay-list">
+                    {draft.prepayEntries.map((p) => (
+                      <div key={p.id} className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            ثبت‌شده در{' '}
+                            <span dir="ltr">{formatClock(p.at)}</span>
+                          </span>
+                          <Button
+                            variant="destructive"
+                            size="icon-sm"
+                            aria-label="حذف پیش‌پرداخت"
+                            className="max-md:size-9"
+                            onClick={() => setPendingDelete({ kind: 'prepay', id: p.id, amount: p.amount })}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-muted-foreground">مبلغ (تومان)</span>
+                          <MoneyInput
+                            className="w-full"
+                            aria-label="مبلغ پیش‌پرداخت"
+                            placeholder="0"
+                            value={p.amount > 0 ? formatNumber(p.amount) : ''}
+                            onChange={(e) => setPrepayAmount(p.id, parseNumber(e.target.value))}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Empty tour="sum-prepay-list">پیش‌پرداختی ثبت نشده است.</Empty>
+                )}
+              </Section>
+            </div>
+
+            {/* Right: the bill and how it gets settled. */}
+            <div className="flex min-w-0 flex-col gap-4 rounded-xl border bg-muted/30 p-4">
+              <div className="flex flex-col gap-2" data-tour="sum-totals">
+                <Row
+                  label={costBreakdown.overrides.length ? 'هزینه زمان (نرخ معمول)' : 'جمع هزینه زمان'}
+                  value={toman(costBreakdown.base)}
+                />
+                {costBreakdown.overrides.map((o) => (
+                  <Row key={o.id} label={`هزینه زمان (${o.label})`} value={toman(o.cost)} />
+                ))}
+                <Row label="جمع بوفه و سایر هزینه‌ها" value={toman(itemsCost)} />
+                <Row label="جمع پیش‌پرداخت" value={toman(prepayAmount)} />
+              </div>
+
+              <Separator />
+
+              <div className="flex flex-col gap-2" data-tour="sum-final">
+                <Label htmlFor="final-total" className="text-base font-bold">
+                  مبلغ نهایی
+                </Label>
+                <div className="flex items-center gap-2">
+                  <MoneyInput
+                    id="final-total"
+                    className="h-11 flex-1 text-lg font-bold"
+                    value={finalAmount > 0 ? formatNumber(finalAmount) : finalText}
+                    onChange={(e) => setFinalText(e.target.value)}
+                    disabled={draft.status === 'running'}
+                  />
+                  <span className="text-sm text-muted-foreground">تومان</span>
+                  {!rounding.auto && (
+                    <Tip label={`رند کردن (${ROUND_MODE_LABELS[rounding.mode]} ${formatNumber(rounding.step)} تومان)`}>
+                      <Button
+                        variant="outline"
+                        size="icon-lg"
+                        aria-label="رند کردن"
+                        onClick={() => setFinalText(String(roundAmount(finalAmount, rounding)))}
+                      >
+                        <Coins />
+                      </Button>
+                    </Tip>
+                  )}
                 </div>
                 {edited && (
                   <span className="text-xs text-muted-foreground">مجموع محاسبه‌شده: {toman(total)}</span>
                 )}
+                {draft.status === 'running' && (
+                  <Button size="lg" data-tour="sum-settle" onClick={pauseNow}>
+                    اتمام برای تسویه حساب
+                  </Button>
+                )}
+              </div>
 
-                <div className="flex flex-col gap-1.5" data-tour="sum-customer">
-                  <Label htmlFor="end-customer">مشتری</Label>
-                  <CustomerSelect
-                    id="end-customer"
-                    customers={settings.customers}
-                    value={draft.customerId}
-                    onChange={(customerId) => {
-                      setDraft((d) => ({ ...d, customerId }))
-                      setGuestChargebackDone(false)
-                    }}
-                  />
-                </div>
+              <Separator />
 
-                <div className="rounded-lg border bg-muted/30 p-2 text-sm" data-tour="sum-settlement">
-                  {!!pickedCustomer && walletBalance !== undefined && (
-                    <Row
-                      label="اعتبار فعلی مشتری"
-                      value={
-                        walletBalance >= 0
-                          ? `${formatNumber(walletBalance)} تومان`
-                          : `بدهی ${formatNumber(Math.abs(walletBalance))} تومان`
-                      }
-                    />
-                  )}
-                  <Row label="پوشش از اعتبار" value={toman(settlement.walletCreditUsed)} />
-                  <Row label="پوشش از پیش‌پرداخت" value={toman(settlement.prepayUsed)} />
+              <div className="flex flex-col gap-1.5" data-tour="sum-customer">
+                <Label htmlFor="end-customer">مشتری</Label>
+                <CustomerSelect
+                  id="end-customer"
+                  customers={settings.customers}
+                  value={draft.customerId}
+                  onChange={(customerId) => {
+                    setDraft((d) => ({ ...d, customerId }))
+                    setGuestChargebackDone(false)
+                  }}
+                />
+              </div>
+
+              <div
+                className="flex flex-col gap-2 rounded-lg border bg-background p-3"
+                data-tour="sum-settlement"
+              >
+                {!!pickedCustomer && walletBalance !== undefined && (
                   <Row
-                    label="باقی‌مانده برای تسویه"
-                    value={toman(settlement.payableNow)}
-                    className={settlement.payableNow === 0 ? 'font-bold text-green-600' : 'font-bold'}
+                    label="اعتبار فعلی مشتری"
+                    value={
+                      walletBalance >= 0
+                        ? `${formatNumber(walletBalance)} تومان`
+                        : `بدهی ${formatNumber(Math.abs(walletBalance))} تومان`
+                    }
                   />
-                  {settlement.prepayReturned > 0 && (
-                    <Row
-                      label={pickedCustomer ? 'بازگشت به کیف پول مشتری' : 'باقی‌مانده‌ی قابل عودت به مهمان'}
-                      value={toman(settlement.prepayReturned)}
-                    />
+                )}
+                <Row label="پوشش از اعتبار" value={toman(settlement.walletCreditUsed)} />
+                <Row label="پوشش از پیش‌پرداخت" value={toman(settlement.prepayUsed)} />
+                {settlement.prepayReturned > 0 && (
+                  <Row
+                    label={pickedCustomer ? 'بازگشت به کیف پول مشتری' : 'باقی‌مانده‌ی قابل عودت به مهمان'}
+                    value={toman(settlement.prepayReturned)}
+                  />
+                )}
+                <Separator />
+                <Row
+                  label="باقی‌مانده برای تسویه"
+                  value={toman(settlement.payableNow)}
+                  className={cn(
+                    'text-base font-bold',
+                    settlement.payableNow === 0 && 'text-green-600',
+                  )}
+                />
+              </div>
+
+              {settlement.payableNow > 0 && (
+                <div className="flex flex-col gap-2" data-tour="sum-paytype">
+                  <span className="text-sm font-medium">نحوه‌ی تسویه‌ی باقی‌مانده</span>
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="نحوه‌ی پرداخت">
+                    <Button
+                      variant={onAccount ? 'outline' : 'default'}
+                      aria-pressed={!onAccount}
+                      onClick={() => setOnAccount(false)}
+                    >
+                      <Wallet /> پرداخت شد
+                    </Button>
+                    <Tip label={pickedCustomer ? undefined : 'برای نسیه، ابتدا برای تایم مشتری انتخاب کنید'}>
+                      <span className="flex">
+                        <Button
+                          className="flex-1"
+                          variant={onAccount ? 'destructive' : 'outline'}
+                          aria-pressed={onAccount}
+                          disabled={!pickedCustomer}
+                          onClick={() => setOnAccount(true)}
+                        >
+                          <NotebookPen /> نسیه
+                        </Button>
+                      </span>
+                    </Tip>
+                  </div>
+                  {onAccount && pickedCustomer && (
+                    <span className="text-xs text-destructive">
+                      {toman(settlement.payableNow)} به بدهی «{pickedCustomer.name}» اضافه می‌شود.
+                    </span>
                   )}
                 </div>
+              )}
 
-                {settlement.payableNow > 0 && (
-                  <>
-                    <div className="flex items-center justify-between gap-4 pt-1" data-tour="sum-paytype">
-                      <span className="text-sm font-normal">نحوه‌ی تسویه‌ی باقی‌مانده</span>
-                      <div className="flex gap-1.5" role="group" aria-label="نحوه‌ی پرداخت">
-                        <Button
-                          size="sm"
-                          variant={onAccount ? 'outline' : 'default'}
-                          aria-pressed={!onAccount}
-                          onClick={() => setOnAccount(false)}
-                        >
-                          <Wallet /> پرداخت شد
-                        </Button>
-                        <Tip label={pickedCustomer ? undefined : 'برای نسیه، ابتدا برای تایم مشتری انتخاب کنید'}>
-                          <span>
-                            <Button
-                              size="sm"
-                              variant={onAccount ? 'destructive' : 'outline'}
-                              aria-pressed={onAccount}
-                              disabled={!pickedCustomer}
-                              onClick={() => setOnAccount(true)}
-                            >
-                              <NotebookPen /> نسیه
-                            </Button>
-                          </span>
-                        </Tip>
-                      </div>
-                    </div>
-                    {onAccount && pickedCustomer && (
-                      <span className="text-xs text-destructive">
-                        {toman(settlement.payableNow)} به بدهی «{pickedCustomer.name}» اضافه می‌شود.
-                      </span>
-                    )}
-                  </>
-                )}
-
-                {guestNeedsChargeback && (
-                  <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs">
-                    <p className="text-destructive">
-                      مشتری مهمان است و {toman(settlement.prepayReturned)} از پیش‌پرداخت اضافه می‌ماند.
-                      باید مبلغ را به مشتری برگردانید یا پیش از اتمام، یک مشتری انتخاب کنید تا مبلغ به
-                      اعتبار او اضافه شود.
-                    </p>
-                    <Label className="mt-2 flex items-center gap-2">
-                      <Checkbox
-                        checked={guestChargebackDone}
-                        onCheckedChange={(v) => setGuestChargebackDone(v === true)}
-                      />
-                      برگشت مبلغ انجام شد
-                    </Label>
-                  </div>
-                )}
+              {guestNeedsChargeback && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-xs">
+                  <p className="text-destructive">
+                    مشتری مهمان است و {toman(settlement.prepayReturned)} از پیش‌پرداخت اضافه می‌ماند.
+                    باید مبلغ را به مشتری برگردانید یا پیش از اتمام، یک مشتری انتخاب کنید تا مبلغ به
+                    اعتبار او اضافه شود.
+                  </p>
+                  <Label className="mt-2 flex items-center gap-2">
+                    <Checkbox
+                      checked={guestChargebackDone}
+                      onCheckedChange={(v) => setGuestChargebackDone(v === true)}
+                    />
+                    برگشت مبلغ انجام شد
+                  </Label>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1089,6 +1141,40 @@ export function SessionSummaryDialog({
   )
 }
 
+// A titled block of the dialog: heading + actions on one line, content below.
+function Section({
+  title,
+  action,
+  tour,
+  children,
+}: {
+  title: string
+  action?: React.ReactNode
+  tour?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border p-3 sm:p-4" data-tour={tour}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-bold">{title}</h3>
+        {action && <div className="flex items-center gap-2">{action}</div>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function Empty({ children, tour }: { children: React.ReactNode; tour?: string }) {
+  return (
+    <p
+      className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground"
+      data-tour={tour}
+    >
+      {children}
+    </p>
+  )
+}
+
 function Row({
   label,
   value,
@@ -1099,8 +1185,8 @@ function Row({
   className?: string
 }) {
   return (
-    <div className={`flex justify-between gap-4 ${className ?? ''}`}>
-      <span>{label}</span>
+    <div className={cn('flex justify-between gap-4 max-sm:flex-col max-sm:gap-0.5', className)}>
+      <span className="max-sm:text-xs max-sm:opacity-70">{label}</span>
       <span className="shrink-0">{value}</span>
     </div>
   )

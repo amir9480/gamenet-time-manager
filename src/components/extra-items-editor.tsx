@@ -112,7 +112,7 @@ export function ExtraItemsEditor({ categories, items, usage, onChange }: Props) 
               return (
               <div
                 key={i.id}
-                className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_9rem_2rem] sm:items-center"
+                className="grid grid-cols-2 gap-2 rounded-md border bg-muted/40 p-2 sm:grid-cols-[1fr_7rem_9rem_2rem] sm:items-center sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0"
               >
                 <Input
                   aria-label="نام مورد"

@@ -145,7 +145,15 @@ export function SecuritySettings() {
           }}
         >
           <h3 className="font-bold">{FORM_TITLES[mode]}</h3>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div
+            className={
+              mode === 'change'
+                ? 'grid gap-4 sm:grid-cols-3'
+                : mode === 'set'
+                  ? 'grid gap-4 sm:grid-cols-2'
+                  : 'grid gap-4 sm:max-w-xs'
+            }
+          >
             {mode !== 'set' && (
               <PinField id="pin-current" label="رمز فعلی" value={current} onChange={setCurrent} />
             )}
@@ -156,27 +164,29 @@ export function SecuritySettings() {
               </>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {mode === 'remove'
-              ? 'برای حذف قفل، رمز فعلی را وارد کنید. اطلاعات برنامه حفظ می‌شود.'
-              : `رمز باید ${formatNumber(PIN_MIN)} تا ${formatNumber(PIN_MAX)} رقم (فقط عدد) باشد.`}
-          </p>
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           )}
-          <div className="flex gap-2">
-            <Button
-              type="submit"
-              variant={mode === 'remove' ? 'destructive' : 'default'}
-              disabled={busy}
-            >
-              {mode === 'remove' ? 'حذف رمز' : 'ذخیره رمز'}
-            </Button>
-            <Button type="button" variant="outline" onClick={close}>
-              انصراف
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+            <p className="min-w-48 flex-1 text-xs text-muted-foreground">
+              {mode === 'remove'
+                ? 'برای حذف قفل، رمز فعلی را وارد کنید. اطلاعات برنامه حفظ می‌شود.'
+                : `رمز باید ${formatNumber(PIN_MIN)} تا ${formatNumber(PIN_MAX)} رقم (فقط عدد) باشد.`}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="submit"
+                variant={mode === 'remove' ? 'destructive' : 'default'}
+                disabled={busy}
+              >
+                {mode === 'remove' ? 'حذف رمز' : 'ذخیره رمز'}
+              </Button>
+              <Button type="button" variant="outline" onClick={close}>
+                انصراف
+              </Button>
+            </div>
           </div>
         </form>
       )}
