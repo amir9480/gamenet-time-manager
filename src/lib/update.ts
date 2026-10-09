@@ -1,12 +1,13 @@
 // Update checks. Desktop (Tauri): compares the running version with the newest GitHub release,
 // downloads its installer, starts it detached and closes the app. Web (PWA): the service worker
 // reports a waiting new version; the release (when newer) only supplies the version and notes.
-// Skipped versions live in localStorage under a non-`gamenet-` key (not part of backups).
+// Skipped versions live in localStorage.
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { APP_VERSION, isTauri } from '@/lib/platform'
 import { compareVersions, fetchLatestRelease, type ReleaseInfo } from '@/lib/release'
+import { prefKey } from '@/lib/store'
 
-const SKIP_KEY = 'gn-skipped-update'
+const SKIP_KEY = prefKey('skipped-update')
 // Update checks run at startup and then every CHECK_EVERY.
 const CHECK_EVERY = 10 * 60_000
 

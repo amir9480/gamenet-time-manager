@@ -14,7 +14,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { MoneyInput } from '@/components/ui/money-input'
 import { Tip } from '@/components/tip'
-import { OnboardingItemDialog } from '@/components/onboarding-item-dialog'
 import { useTheme } from '@/components/theme-provider'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { toFa } from '@/lib/jalali'
@@ -25,7 +24,6 @@ import {
   PREFERRED_DEFAULT_PRICE,
   defaultChoice,
   settingsFromChoice,
-  type ExtraSample,
   type OnboardingChoice,
   type OnboardingItem,
 } from '@/lib/samples'
@@ -60,7 +58,6 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
   const { title } = useTheme()
   const [choice, setChoice] = useState<OnboardingChoice>(defaultChoice)
   const [step, setStep] = useState(0)
-  const [addFor, setAddFor] = useState<ExtraSample | null>(null)
 
   const checkedDevices = DEVICE_SAMPLES.filter((d) => choice.devices[d.id].checked)
   const checkedExtras = EXTRA_SAMPLES.filter((e) => choice.extras[e.id])
@@ -286,7 +283,12 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-bold">{e.name}</h3>
                     <Tip label={`یک مورد جدید به لیست ${e.name} اضافه کنید`}>
-                      <Button size="sm" onClick={() => setAddFor(e)}>
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          setItems(e.id, (items) => [...items, { id: uid(), name: '', price: 0 }])
+                        }
+                      >
                         <Plus /> افزودن مورد
                       </Button>
                     </Tip>
@@ -299,7 +301,20 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                       key={i.id}
                       className="grid grid-cols-[1fr_2rem] items-center gap-2 sm:grid-cols-[1fr_11rem_2rem]"
                     >
-                      <span className="col-span-2 truncate sm:col-span-1">{i.name}</span>
+                      <Input
+                        aria-label={`نام مورد ${e.name}`}
+                        aria-invalid={!i.name.trim()}
+                        placeholder="نام مورد"
+                        value={i.name}
+                        onChange={(ev) =>
+                          setItems(e.id, (items) =>
+                            items.map((x) =>
+                              x.id === i.id ? { ...x, name: ev.target.value } : x,
+                            ),
+                          )
+                        }
+                        className="col-span-2 sm:col-span-1"
+                      />
                       <Money>
                         <MoneyInput
                           aria-label={`قیمت ${i.name}`}
@@ -368,17 +383,6 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {addFor && (
-        <OnboardingItemDialog
-          open
-          onOpenChange={(o) => !o && setAddFor(null)}
-          categoryName={addFor.name}
-          onAdd={(name, price) =>
-            setItems(addFor.id, (items) => [...items, { id: uid(), name, price }])
-          }
-        />
-      )}
     </>
   )
 }

@@ -1,7 +1,8 @@
 // "Install the app" state for the web version: the browser's PWA install prompt plus whether the
-// app already runs installed. The install dialog auto-opens once (`gn-install-seen`).
+// app already runs installed. The install dialog auto-opens once.
 import { useSyncExternalStore } from 'react'
 import { isStandalone, isTauri } from '@/lib/platform'
+import { prefKey } from '@/lib/store'
 
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<unknown> }
 
@@ -44,7 +45,7 @@ export const useInstall = () => {
   return { canPrompt, offer: !isTauri() && !isStandalone() && !done }
 }
 
-const SEEN_KEY = 'gn-install-seen'
+const SEEN_KEY = prefKey('install-seen')
 export const installSeen = () => {
   try {
     return localStorage.getItem(SEEN_KEY) === '1'

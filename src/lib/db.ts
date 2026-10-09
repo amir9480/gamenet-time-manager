@@ -20,6 +20,7 @@ import {
   type PriceOverride,
   type RateGroup,
   type Session,
+  STORAGE_PREFIX,
   type Settings,
   type WalletTransaction,
 } from '@/lib/store'
@@ -541,7 +542,7 @@ export const markOnboarded = () => db.meta.put({ key: 'onboarded', value: '1' })
 // ---- backup: export / import / clear ----------------------------------------------
 
 const BACKUP_APP = 'gamenet-timer-manager'
-const PREF_PREFIX = 'gamenet-'
+const PREF_PREFIX = STORAGE_PREFIX
 
 // Every table, soft-deleted catalog rows included, so ids stay linked to history.
 const BACKUP_TABLE_NAMES = [

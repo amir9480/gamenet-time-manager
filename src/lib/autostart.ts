@@ -1,9 +1,10 @@
 // Desktop app only: run on Windows startup by default. It is turned on once, on the first run
-// (`gn-autostart-init`, not `gamenet-` so backups don't carry it); after that the Settings switch
+// (stored in localStorage); after that the Settings switch
 // decides and its choice is kept.
 import { isTauri } from '@/lib/platform'
+import { prefKey } from '@/lib/store'
 
-const INIT_KEY = 'gn-autostart-init'
+const INIT_KEY = prefKey('autostart-init')
 
 export const initAutostart = async () => {
   if (!isTauri()) return

@@ -812,6 +812,10 @@ export type Usage = {
   extraItemIds: Set<string>
 }
 
+export const STORAGE_PREFIX = 'gamenet-time-manager:'
+
+export const prefKey = (name: string) => `${STORAGE_PREFIX}${name}`
+
 export const usageOf = (sessions: Session[]): Usage => ({
   deviceIds: new Set(sessions.map((s) => s.deviceId)),
   customerIds: new Set(sessions.flatMap((s) => (s.customerId ? [s.customerId] : []))),

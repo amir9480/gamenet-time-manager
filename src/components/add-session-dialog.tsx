@@ -26,6 +26,8 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { MoneyInput } from '@/components/ui/money-input'
 import { requestNotificationPermission } from '@/lib/attention'
+import { isTourActive, registerTour, tourEl, tourSel, type TourContext, type TourDef } from '@/lib/tour'
+import type { DriveStep } from 'driver.js'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { toFa } from '@/lib/jalali'
 import { rank, type Field } from '@/lib/search'
@@ -123,6 +125,151 @@ export function RadioCard({
     </Label>
   )
 }
+
+// Guide of this dialog (F1 while it is open, or chained from the home page guide). The steps point
+// at the `data-tour` attributes below, so keep the two in sync when the markup changes.
+export const addSessionTour: TourDef = {
+  id: 'add-session',
+  present: tourSel('add-search'),
+  priority: 10,
+  steps: (ctx: TourContext): DriveStep[] => [
+    {
+      element: tourSel('add-search'),
+      waitForElement: 2000,
+      popover: {
+        title: 'جستجوی سریع',
+        description:
+          'اگر نام دستگاه یا نوع آن را می‌دانید، همین‌جا جستجو کنید و مستقیم به مرحله‌ی بعد بروید.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('add-picker'),
+      skipMissingElement: true,
+      onHighlighted: (_el, _step, { driver: d }) => {
+        // Moves on by itself once the picked device reaches the customer step.
+        ctx.stopWatch()
+        ctx.watch(() => {
+          if (tourEl(tourSel('add-customer'))) {
+            ctx.stopWatch()
+            d.moveNext()
+          } else d.refresh()
+        }, 250)
+      },
+      onDeselected: ctx.stopWatch,
+      popover: {
+        title: 'یا مرحله‌به‌مرحله انتخاب کنید',
+        description:
+          'نوع دستگاه، دستگاه و نرخ ساعتی را انتخاب کنید. با انتخاب هر کارت، خودکار به مرحله‌ی بعد می‌روید. آزاد بودن دستگاه‌ها با نقطه‌ی قرمز مشخص می‌شود.',
+        side: 'bottom',
+        showButtons: ['close'],
+      },
+    },
+    ctx.forceCustomer
+      ? {
+          element: tourSel('add-customer-new'),
+          waitForElement: 1500,
+          advanceOnClick: true,
+          data: { id: 'customer' },
+          popover: {
+            title: 'مشتری جدید',
+            description:
+              'برای پیگیری مشتریان‌تان باید آن‌ها را ثبت کنید. حالا روی دکمه‌ی «مشتری جدید» کلیک کنید تا یک مشتری بسازیم. بعداً اگر مشتری مهمان بود، این کادر را خالی بگذارید.',
+            side: 'bottom',
+            showButtons: ['close'],
+          },
+        }
+      : {
+          element: tourSel('add-customer'),
+          waitForElement: 1500,
+          disableActiveInteraction: true,
+          data: { id: 'customer' },
+          popover: {
+            title: 'مشتری (اختیاری)',
+            description:
+              'اگر می‌خواهید مشتریان‌تان را پیگیری کنید، مشتری‌های ثبت‌شده را از همین کادر انتخاب کنید یا با دکمه‌ی «مشتری جدید» کنار آن مشتری تازه بسازید؛ بلافاصله به همین تایم اضافه می‌شود. این مرحله اختیاری است و اگر مشتری مهمان است، آن را خالی بگذارید.',
+            side: 'bottom',
+          },
+        },
+    ...(ctx.forceCustomer
+      ? [
+          {
+            element: tourSel('new-customer'),
+            waitForElement: 2000,
+            // The target is the customer dialog itself, so it disappearing is expected here.
+            data: { id: 'customer-form', keepAlive: true },
+            onHighlighted: (_el, _step, { driver: d }) => {
+              ctx.stopWatch()
+              ctx.watch(() => {
+                if (tourEl(tourSel('new-customer'))) return
+                ctx.stopWatch()
+                const picked = (tourEl(`${tourSel('add-customer')} input[role="combobox"]`) as HTMLInputElement | null)?.value
+                // Saved: carry on. Cancelled: back to the forced step.
+                if (picked) d.moveNext()
+                else d.moveTo(d.getConfig().steps!.findIndex((x) => x.data?.id === 'customer'))
+              }, 200)
+            },
+            onDeselected: ctx.stopWatch,
+            popover: {
+              title: 'مشخصات مشتری',
+              description:
+                'نام مشتری را وارد کنید و «ذخیره» را بزنید. شماره‌ی تماس اختیاری است و می‌توانید آن را خالی بگذارید. مشتری بلافاصله به این تایم اضافه می‌شود.',
+              side: 'bottom' as const,
+              showButtons: [] as [],
+            },
+          } satisfies DriveStep,
+          {
+            element: tourSel('add-customer'),
+            disableActiveInteraction: true,
+            popover: {
+              title: 'انتخاب مشتری',
+              description:
+                'مشتری‌ای که همین الان ساختید در این کادر انتخاب شد. برای تایم‌های بعدی، اگر مشتری از قبل ثبت شده باشد، آن را از همین کادر انتخاب یا جستجو کنید.',
+              side: 'bottom' as const,
+            },
+          } satisfies DriveStep,
+        ]
+      : []),
+    {
+      element: tourSel('add-limit-time'),
+      popover: {
+        title: 'محدودیت زمانی',
+        description:
+          'اگر تعداد دقیقه‌ای وارد کنید، با تمام شدن آن مدت هشدار پایان تایم برای شما پخش می‌شود. تایم خودکار تمام نمی‌شود؛ فقط هشدار می‌گیرید.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('add-limit-cost'),
+      popover: {
+        title: 'محدودیت هزینه',
+        description:
+          'اگر مبلغی وارد کنید، وقتی هزینه‌ی تایم به آن مبلغ برسد هشدار می‌گیرید. مثلاً برای مشتری که فقط مقدار مشخصی پول دارد.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('add-prepay'),
+      popover: {
+        title: 'پیش‌پرداخت',
+        description:
+          'اگر مشتری پول را پیشاپیش داده است، مبلغ را در «پیش‌پرداخت» وارد کنید. با زدن تیک «تنظیم خودکار محدودیت هزینه»، محدودیت هزینه‌ی تایم همان مبلغ می‌شود تا از پولی که داده بیشتر بازی نکند.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('add-footer'),
+      popover: {
+        title: 'شروع تایم',
+        description:
+          'حالا «شروع تایم» را بزنید. هر زمان با کلید F1 می‌توانید این راهنما را دوباره ببینید.',
+        side: 'top',
+        doneBtnText: 'پایان',
+      },
+    },
+  ],
+}
+registerTour(addSessionTour)
 
 export function AddSessionDialog({
   open,
@@ -381,8 +528,10 @@ export function AddSessionDialog({
     <>
       <Dialog
         open={open}
-        onOpenChange={(o) => {
+        onOpenChange={(o, details) => {
           if (o) onOpenChange(true)
+          // The guide's popover lives outside the dialog; clicking it must not close the dialog.
+          else if (isTourActive() && details.reason === 'outside-press') return
           else requestClose()
         }}
       >
@@ -410,12 +559,14 @@ export function AddSessionDialog({
             onInputValueChange={setQuery}
             itemToStringLabel={(it: SearchItem) => `${it.label} ${it.sub}`}
           >
-            <ComboboxInput
-              placeholder="جستجوی سریع نوع دستگاه یا دستگاه…"
-              aria-label="جستجوی سریع"
-              showTrigger={false}
-              className="w-full"
-            />
+            <div data-tour="add-search">
+              <ComboboxInput
+                placeholder="جستجوی سریع نوع دستگاه یا دستگاه…"
+                aria-label="جستجوی سریع"
+                showTrigger={false}
+                className="w-full"
+              />
+            </div>
             <ComboboxContent>
               <ComboboxEmpty>موردی پیدا نشد</ComboboxEmpty>
               <ComboboxList>
@@ -432,6 +583,7 @@ export function AddSessionDialog({
             </ComboboxContent>
           </Combobox>
 
+          <div className="grid gap-4" data-tour={step !== 'customer' ? 'add-picker' : undefined}>
           <div className="flex items-center justify-between gap-3">
             <h3 className="font-bold">{TITLES[step]}</h3>
             {steps.length > 1 && (
@@ -533,38 +685,15 @@ export function AddSessionDialog({
                   'دستگاه آزادی انتخاب نشده است.'
                 )}
               </p>
-              <CustomerSelect
-                customers={settings.customers}
-                value={customerId}
-                onChange={setCustomerId}
-              />
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="new-limit-time">محدودیت زمانی (اختیاری، دقیقه)</Label>
-                <MinutesInput
-                  id="new-limit-time"
-                  placeholder="بدون محدودیت"
-                  value={timeLimit}
-                  onChange={(e) => setTimeLimit(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="new-limit-cost">محدودیت هزینه (اختیاری، تومان)</Label>
-                <MoneyInput
-                  id="new-limit-cost"
-                  placeholder="بدون محدودیت"
-                  disabled={prepaySetsLimit && prepayLimitEnabled}
-                  value={
-                    prepaySetsLimit && prepayLimitEnabled
-                      ? formatNumber(prepayAmount)
-                      : parseNumber(costLimit) > 0
-                        ? formatNumber(Math.floor(parseNumber(costLimit)))
-                        : costLimit
-                  }
-                  onChange={(e) => setCostLimit(e.target.value)}
+              <div data-tour="add-customer">
+                <CustomerSelect
+                  customers={settings.customers}
+                  value={customerId}
+                  onChange={setCustomerId}
                 />
               </div>
 
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5" data-tour="add-prepay">
                 <Label htmlFor="new-prepay">پیش‌پرداخت (اختیاری، تومان)</Label>
                 <MoneyInput
                   id="new-prepay"
@@ -582,10 +711,37 @@ export function AddSessionDialog({
                   </Label>
                 )}
               </div>
+
+              <div className="flex flex-col gap-1.5" data-tour="add-limit-time">
+                <Label htmlFor="new-limit-time">محدودیت زمانی (اختیاری، دقیقه)</Label>
+                <MinutesInput
+                  id="new-limit-time"
+                  placeholder="بدون محدودیت"
+                  value={timeLimit}
+                  onChange={(e) => setTimeLimit(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5" data-tour="add-limit-cost">
+                <Label htmlFor="new-limit-cost">محدودیت هزینه (اختیاری، تومان)</Label>
+                <MoneyInput
+                  id="new-limit-cost"
+                  placeholder="بدون محدودیت"
+                  disabled={prepaySetsLimit && prepayLimitEnabled}
+                  value={
+                    prepaySetsLimit && prepayLimitEnabled
+                      ? formatNumber(prepayAmount)
+                      : parseNumber(costLimit) > 0
+                        ? formatNumber(Math.floor(parseNumber(costLimit)))
+                        : costLimit
+                  }
+                  onChange={(e) => setCostLimit(e.target.value)}
+                />
+              </div>
             </div>
           )}
+          </div>
 
-          <DialogFooter>
+          <DialogFooter data-tour="add-footer">
             <Button variant="outline" onClick={requestClose}>
               انصراف
             </Button>

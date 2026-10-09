@@ -133,7 +133,7 @@ export function ShiftSummary({
               <Button size="lg" variant="outline" onClick={onReserve}>
                 <CalendarClock /> رزرو
               </Button>
-              <Button size="lg" onClick={onAdd}>
+              <Button size="lg" data-tour="add-session" onClick={onAdd}>
                 <Plus /> افزودن تایم
               </Button>
             </div>

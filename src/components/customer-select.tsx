@@ -65,6 +65,7 @@ export function CustomerSelect({ customers, value, onChange, id, autoFocus }: Pr
           variant="outline"
           size="icon"
           aria-label="مشتری جدید"
+          data-tour="add-customer-new"
           onClick={() => setNewOpen(true)}
         >
           <UserPlus />

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { addCustomer, updateCustomer } from '@/lib/db'
+import { isTourActive } from '@/lib/tour'
 import type { Customer } from '@/lib/store'
 
 type Props = {
@@ -49,15 +50,16 @@ export function NewCustomerDialog({ open, onOpenChange, onCreated, customer: edi
     <>
       <Dialog
         open={open}
-        onOpenChange={(o) => {
+        onOpenChange={(o, details) => {
           if (o) {
             setName('')
             setPhone('')
             onOpenChange(true)
-          } else requestClose()
+          } else if (isTourActive() && details.reason === 'outside-press') return
+          else requestClose()
         }}
       >
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm" data-tour={editing ? undefined : 'new-customer'}>
           <DialogHeader>
             <DialogTitle>{editing ? 'ویرایش مشتری' : 'مشتری جدید'}</DialogTitle>
             <DialogDescription>نام مشتری الزامی و شماره‌ی تماس اختیاری است.</DialogDescription>

@@ -1,7 +1,8 @@
 // "Before you start" notice: shown before onboarding and again whenever NOTICE_VERSION grows.
 // To announce an update, bump NOTICE_VERSION and add its bullet points to NOTICE_UPDATES.
-// The accepted version lives in localStorage under a non-`gamenet-` key, so it is not part of
-// the JSON backup (restoring a backup never skips the notice).
+// The accepted version lives in localStorage.
+import { prefKey } from '@/lib/store'
+
 export const NOTICE_VERSION = 1
 
 export const NOTICE_LIMITS = [
@@ -16,7 +17,7 @@ export const NOTICE_LIMITS = [
 // Bullet points per version, shown to users who accepted an older one.
 export const NOTICE_UPDATES: Record<number, string[]> = {}
 
-const KEY = 'gn-notice'
+const KEY = prefKey('notice')
 
 export const acceptedNoticeVersion = (): number => {
   try {

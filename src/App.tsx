@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { CalendarClock, ChartNoAxesColumn, Eye, EyeOff, History, LayoutGrid, Moon, Lock, Download, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
-import { AddSessionDialog } from '@/components/add-session-dialog'
+import { AddSessionDialog, addSessionTour } from '@/components/add-session-dialog'
 import { AppIcon } from '@/components/app-icon'
 import { InstallDialog } from '@/components/install-dialog'
 import { HistoryDialog } from '@/components/history-dialog'
@@ -11,6 +11,7 @@ import { LiveClock } from '@/components/live-clock'
 import { LockScreen } from '@/components/lock-screen'
 import { NoticeDialog } from '@/components/notice-dialog'
 import { OnboardingDialog } from '@/components/onboarding-dialog'
+import { TourPromptDialog } from '@/components/tour-prompt-dialog'
 import { SessionCard } from '@/components/session-card'
 import { CustomersDialog } from '@/components/customers-dialog'
 import { ShiftSummary } from '@/components/shift-summary'
@@ -27,6 +28,7 @@ import { rank } from '@/lib/search'
 import { installSeen, markInstallSeen, useInstall } from '@/lib/install'
 import { APP_VERSION, REPO_URL } from '@/lib/platform'
 import { lockNow, useSecurity } from '@/lib/security'
+import { isTourActive, registerTour, skipTours, startGuide, tourSel, tourSkipped, type TourDef } from '@/lib/tour'
 import { useInstance } from '@/lib/single-instance'
 import { useIdleLock } from '@/lib/use-idle-lock'
 import { useOverrideSplitter } from '@/lib/use-override-splitter'
@@ -44,6 +46,7 @@ import {
 } from '@/lib/db'
 import {
   createSession,
+  prefKey,
   sessionSearchFields,
   useLocalStorage,
   usageOf,
@@ -51,6 +54,28 @@ import {
   type FlatPrice,
   type Session,
 } from '@/lib/store'
+
+// Guide of this page: points at «افزودن تایم»; clicking it continues with the add-session guide.
+// The `data-tour="add-session"` buttons below are its targets.
+const mainTour: TourDef = {
+  id: 'main',
+  present: tourSel('add-session'),
+  priority: 0,
+  steps: (ctx) => [
+    {
+      element: tourSel('add-session'),
+      advanceOnClick: true,
+      onHighlighted: (el) => el?.addEventListener('click', () => ctx.chainTo(addSessionTour), { once: true }),
+      popover: {
+        title: 'شروع اولین تایم',
+        description: 'برای ساخت یک تایم جدید، روی «افزودن تایم» کلیک کنید.',
+        side: 'bottom',
+        showButtons: ['close'],
+      },
+    },
+  ],
+}
+registerTour(mainTour)
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
@@ -91,23 +116,48 @@ function Main() {
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [showShift, setShowShift] = useState(false)
-  const [summaryVisible, setSummaryVisible] = useLocalStorage('gamenet-shift-summary-visible', () => true)
+  const [summaryVisible, setSummaryVisible] = useLocalStorage(prefKey('shift-summary-visible'), () => true)
   const costHidden = !summaryVisible
   const [installOpen, setInstallOpen] = useState(false)
   const { offer: offerInstall } = useInstall()
+  // The guide is offered right after onboarding.
+  const [tourAsk, setTourAsk] = useState(false)
+  const [tourBusy, setTourBusy] = useState(false)
   const ready = noticeOk && !onboarding && !importing
+  const hasDevices = settings ? settings.devices.length > 0 : false
+
+  const runTour = (force = false) => {
+    if (isTourActive()) return
+    setTourBusy(true)
+    startGuide(() => setTourBusy(false), { forceCustomer: force })
+  }
+  // F1 replays the guide (not while another dialog is open).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'F1' || !ready || !hasDevices || isTourActive()) return
+      // Only the add-session dialog has a guide; any other open dialog blocks it.
+      const dialogs = document.querySelectorAll('[role="dialog"],[role="alertdialog"]')
+      const addDialog = document.querySelector('[data-tour="add-search"]')
+      if (dialogs.length > (addDialog ? 1 : 0)) return
+      e.preventDefault()
+      runTour()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   // Only a brand-new database gets the onboarding dialog.
   useEffect(() => {
     needsOnboarding().then(setOnboarding)
   }, [])
-  // The install offer opens once by itself (after the notice/onboarding); the top-bar button reopens it.
+  // The install offer opens once by itself before other startup dialogs; the top-bar button
+  // reopens it later.
   useEffect(() => {
-    if (ready && offerInstall && !installSeen()) {
+    if (!tourBusy && offerInstall && !installSeen()) {
       markInstallSeen()
       setInstallOpen(true)
     }
-  }, [ready, offerInstall])
+  }, [tourBusy, offerInstall])
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general')
 
   // Shift summary: shown instead of the welcome page while the last ended session is recent.
@@ -288,7 +338,7 @@ function Main() {
                 <Button size="lg" variant="outline" onClick={() => setReserveOpen(true)}>
                   <CalendarClock /> رزرو
                 </Button>
-                <Button size="lg" onClick={() => setAddOpen(true)}>
+                <Button size="lg" data-tour="add-session" onClick={() => setAddOpen(true)}>
                   <Plus /> افزودن تایم
                 </Button>
               </div>
@@ -404,7 +454,7 @@ function Main() {
                 <Button size="lg" variant="outline" onClick={() => setReserveOpen(true)}>
                   <CalendarClock /> رزرو
                 </Button>
-                <Button size="lg" onClick={() => setAddOpen(true)}>
+                <Button size="lg" data-tour="add-session" onClick={() => setAddOpen(true)}>
                   <Plus /> افزودن تایم
                 </Button>
               </div>
@@ -474,7 +524,7 @@ function Main() {
       </footer>
 
       <NoticeDialog
-        open={!noticeOk}
+        open={!installOpen && !noticeOk}
         since={noticeSince}
         onAccept={() => {
           acceptNotice()
@@ -483,7 +533,7 @@ function Main() {
       />
 
       <OnboardingDialog
-        open={noticeOk && onboarding && !importing}
+        open={!installOpen && noticeOk && onboarding && !importing}
         settings={settings}
         onImport={() => {
           setImporting(true)
@@ -493,6 +543,19 @@ function Main() {
           await saveSettings(next)
           await markOnboarded()
           setOnboarding(false)
+          if (!tourSkipped()) setTourAsk(true)
+        }}
+      />
+
+      <TourPromptDialog
+        open={!installOpen && tourAsk}
+        onStart={() => {
+          setTourAsk(false)
+          runTour(true)
+        }}
+        onSkip={() => {
+          skipTours()
+          setTourAsk(false)
         }}
       />
 
