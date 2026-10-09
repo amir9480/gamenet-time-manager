@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Coins, NotebookPen, Pause, Plus, Trash2, Wallet } from 'lucide-react'
+import { Coins, NotebookPen, Pause, Play, Plus, Trash2, Wallet } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,13 +50,13 @@ import {
   ROUND_MODE_LABELS,
   addBackdatedTime,
   addExtraItem,
-  addSegment,
   categoryName,
   defaultPriceFor,
   devicePriceGroups,
   extraItemsCost,
   flatPrices,
   pauseSession,
+  resumeSession,
   prepayTotal,
   removeExtraItem,
   removeSessionPrepay,
@@ -65,7 +65,6 @@ import {
   settleSessionAmount,
   segmentCost,
   segmentMs,
-  selectedPrice,
   sessionCostBreakdown,
   splitByOverrides,
   extendCostLimit,
@@ -282,15 +281,21 @@ export function SessionSummaryDialog({
   const pauseNow = () => {
     const ts = Date.now()
     const paused = splitByOverrides(pauseSession(draft, ts), settings, ts)
-    onUpdate(() => paused)
+    // Draft only: the stop isn't committed until ذخیره / تایید و اتمام, so cancelling asks first.
     setDraftRaw(paused)
-    setBaseline(paused)
     const seedTotal =
       paused.segments.reduce((sum, seg) => sum + segmentCost(seg, ts), 0) +
       extraItemsCost(paused)
     const seedFinal = String(rounding.auto ? roundAmount(seedTotal, rounding) : seedTotal)
     setFinalText(seedFinal)
     setInitialFinalText(seedFinal)
+  }
+
+  // Commits the edited session without ending it.
+  const saveChanges = () => {
+    onUpdate(() => draft)
+    setBaseline(draft)
+    onOpenChange(false)
   }
 
   const confirmDelete = () => {
@@ -354,28 +359,6 @@ export function SessionSummaryDialog({
     patchSegment(index, { typeId: price.id, typeName: price.name, price: price.price })
   }
 
-  const addNewSegment = () => {
-    // A 5-minute block ending right as the running segment started (or now, if nothing is
-    // running) — never clamped to `now` itself, which would create a zero-length segment that
-    // the <3s filter would immediately hide.
-    const openSeg = draft.segments.find((seg) => seg.to === null)
-    const to = openSeg ? openSeg.from : now
-    const from = to - 5 * 60_000
-    const price = selectedPrice(settings, draft)
-    setDraft((d) =>
-      addSegment(d, {
-        from,
-        to,
-        typeId: price.id,
-        typeName: price.name,
-        price: price.price,
-        deviceId: d.deviceId,
-        deviceName: d.deviceName,
-        categoryName: d.categoryName,
-      }),
-    )
-  }
-
   // Skipped while closed: the dialog isn't mounted elsewhere, but this component always is
   // (session-card.tsx), re-rendering every second for a running session even when closed.
   const deviceItems = open ? settings.devices.map((d) => ({ value: d.id, label: d.name })) : []
@@ -388,7 +371,11 @@ export function SessionSummaryDialog({
   const visibleSegments = open
     ? segments
         .map((seg, index) => ({ seg, index }))
-        .filter(({ seg }) => segmentMs(seg, now) >= MIN_BILLABLE_MS)
+        // A start set in the future gives a negative raw span; keep it visible so it can be fixed.
+        .filter(({ seg }) => {
+          const raw = (seg.to ?? now) - seg.from
+          return raw < 0 || raw >= MIN_BILLABLE_MS
+        })
     : []
 
   return (
@@ -435,9 +422,13 @@ export function SessionSummaryDialog({
                       )
                     }
                   />
-                  {session.status !== 'running' && (
-                    <Button variant="outline" size="sm" onClick={addNewSegment}>
-                      <Plus /> افزودن بازه
+                  {draft.status !== 'running' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDraft((d) => resumeSession(settings, d, Date.now()))}
+                    >
+                      <Play /> ادامه
                     </Button>
                   )}
                 </div>
@@ -652,6 +643,11 @@ export function SessionSummaryDialog({
                 <div className="flex items-center justify-between gap-4 text-base font-bold">
                   <label htmlFor="final-total">مبلغ نهایی</label>
                   <div className="flex items-center gap-2">
+                    {draft.status === 'running' && (
+                      <Button onClick={pauseNow}>
+                        اتمام برای تسویه حساب
+                      </Button>
+                    )}
                     {!rounding.auto && (
                       <Tip label={`رند کردن (${ROUND_MODE_LABELS[rounding.mode]} ${formatNumber(rounding.step)} تومان)`}>
                         <Button
@@ -777,9 +773,10 @@ export function SessionSummaryDialog({
             <Button variant="outline" onClick={requestClose}>
               انصراف
             </Button>
-            {draft.status === 'running' ? (
-              <Button onClick={pauseNow}>توقف تایم</Button>
-            ) : (
+            <Button onClick={saveChanges}>
+              ذخیره
+            </Button>
+            {draft.status !== 'running' && (
               <Button disabled={!canConfirm} onClick={confirmEnd}>تایید و اتمام تایم</Button>
             )}
           </DialogFooter>

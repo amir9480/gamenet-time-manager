@@ -1,8 +1,9 @@
 <div dir="rtl" align="right">
 
-<h1 align="center">
+<div align="center">
   <img alt="نرم افزار مدیریت زمان گیم نت" src="public/img/banner.png" width="100%">
-</h1>
+</div>
+<h1 align="center">نرم‌افزار مدیریت زمان گیم‌نت</h1>
 
 <p align="center">
   <a href="https://amir9480.github.io/gamenet-time-manager/"><img alt="PWA online" src="https://img.shields.io/badge/PWA-online-5a0fc8?logo=pwa&logoColor=white"></a>

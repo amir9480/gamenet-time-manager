@@ -328,7 +328,7 @@ function Main() {
                   <Input
                     aria-label="جستجوی تایم‌ها"
                     placeholder="جستجو در تایم‌ها…"
-                    className="h-9 w-full ps-8 pe-8 text-sm"
+                    className="h-9 w-full ps-8 pe-8 text-sm max-sm:h-11"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
@@ -460,14 +460,13 @@ function Main() {
         <span dir="ltr">v{APP_VERSION}</span>
         <span aria-hidden>·</span>
         <span>
-          ساخته‌شده توسط{' '}
           <a
             href={REPO_URL}
             target="_blank"
             rel="noreferrer"
             className="underline underline-offset-2 hover:text-foreground"
           >
-            Amir Alizadeh
+            نرم‌افزار مدیریت زمان گیم‌نت
           </a>
         </span>
       </footer>

@@ -351,7 +351,7 @@ ${limitLines.join('\n')}` : ''
             extra={<SelectItem value={SWITCH_DEVICE}>تغییر دستگاه…</SelectItem>}
             trigger={
               <Tip label="تغییر نرخ یا دستگاه">
-                <SelectTrigger size="sm" className="w-full text-xs" aria-label="نرخ">
+                <SelectTrigger size="sm" className="w-full text-xs max-md:data-[size=sm]:h-11" aria-label="نرخ">
                   <SelectValue />
                 </SelectTrigger>
               </Tip>
@@ -362,14 +362,14 @@ ${limitLines.join('\n')}` : ''
             <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-1">
               {running ? (
                 <Tip label="توقف موقت تایم">
-                  <Button size="sm" className="flex-1" onClick={pause}>
+                  <Button size="sm" className="sm:flex-1" onClick={pause}>
                     <Pause /> توقف
                   </Button>
                 </Tip>
               ) : (
                 <>
                   <Tip label={reserved ? 'شروع تایم' : 'ادامه‌ی تایم'}>
-                    <Button size="sm" className="flex-1" onClick={resume}>
+                    <Button size="sm" className="sm:flex-1" onClick={resume}>
                       <Play /> {reserved ? 'شروع' : 'ادامه'}
                     </Button>
                   </Tip>
@@ -378,7 +378,7 @@ ${limitLines.join('\n')}` : ''
                       <Button
                         size="sm"
                         variant="destructive"
-                        className="flex-1"
+                        className="sm:flex-1"
                         onClick={() => setCancelOpen(true)}
                       >
                         <X /> لغو
@@ -386,7 +386,7 @@ ${limitLines.join('\n')}` : ''
                     </Tip>
                   ) : (
                     <Tip label="پایان تایم و مشاهده صورت‌حساب">
-                      <Button size="sm" variant="destructive" className="flex-1" onClick={openSummary}>
+                      <Button size="sm" variant="destructive" className="sm:flex-1" onClick={openSummary}>
                         <Square /> اتمام
                       </Button>
                     </Tip>
