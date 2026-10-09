@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { CalendarClock, ChartNoAxesColumn, CircleHelp, Eye, EyeOff, History, LayoutGrid, Moon, Lock, Download, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
 import { AddSessionDialog, addSessionTour } from '@/components/add-session-dialog'
 import { AppIcon } from '@/components/app-icon'
+import { CloseGuard } from '@/components/close-guard'
 import { InstallDialog } from '@/components/install-dialog'
 import { HistoryDialog } from '@/components/history-dialog'
 import { LimitAlarmDialog, LockedLimitAlarmDialog } from '@/components/limit-alarm-dialog'
@@ -763,6 +764,7 @@ export default function App() {
         ) : (
           <Main key={epoch} />
         )}
+        {instance === 'active' && <CloseGuard />}
       </TooltipProvider>
     </ThemeProvider>
   )
