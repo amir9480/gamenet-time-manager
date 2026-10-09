@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { CalendarClock, ChartNoAxesColumn, Eye, EyeOff, History, LayoutGrid, Moon, Lock, Download, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
+import { CalendarClock, ChartNoAxesColumn, CircleHelp, Eye, EyeOff, History, LayoutGrid, Moon, Lock, Download, Plus, Rows3, Search, Sun, Users, X } from 'lucide-react'
 import { AddSessionDialog, addSessionTour } from '@/components/add-session-dialog'
 import { AppIcon } from '@/components/app-icon'
 import { InstallDialog } from '@/components/install-dialog'
@@ -29,7 +29,7 @@ import { installSeen, markInstallSeen, useInstall } from '@/lib/install'
 import { APP_VERSION, REPO_URL } from '@/lib/platform'
 import { lockNow, useSecurity } from '@/lib/security'
 import type { DriveStep } from 'driver.js'
-import { isTourActive, registerTour, setTourFollowUp, skipTours, startGuide, startTourById, takeTourFollowUp, tourSel, tourSkipped, type TourDef } from '@/lib/tour'
+import { isTourActive, registerTour, resetTours, setTourFollowUp, skipTours, startGuide, startTourById, takeTourFollowUp, tourSel, tourSkipped, type TourDef } from '@/lib/tour'
 import { useInstance } from '@/lib/single-instance'
 import { useIdleLock } from '@/lib/use-idle-lock'
 import { useOverrideSplitter } from '@/lib/use-override-splitter'
@@ -207,7 +207,7 @@ function Main() {
   const runTour = (force = false) => {
     if (isTourActive()) return
     setTourBusy(true)
-    startGuide(() => setTourBusy(false), { forceCustomer: force })
+    if (!startGuide(() => setTourBusy(false), { forceCustomer: force })) setTourBusy(false)
   }
   // F1 replays the guide (not while another dialog is open).
   useEffect(() => {
@@ -335,7 +335,7 @@ function Main() {
       <header className="sticky top-0 z-40 -mx-4 -mt-4 flex flex-wrap items-center justify-between gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:-mt-6 md:px-6">
         <div className="flex items-center gap-2 sm:gap-3">
           <AppIcon className="size-8 sm:size-10" />
-          <h1 className="text-lg font-bold sm:text-2xl">{title}</h1>
+          <h1 className="text-lg font-bold sm:text-2xl select-none">{title}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {(sessions.length > 0 || shift) && <LiveClock size="small" />}
@@ -606,7 +606,21 @@ function Main() {
       </main>
 
       <footer className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t pt-4 text-xs text-muted-foreground">
-        <span dir="ltr">v{APP_VERSION}</span>
+        <span className="flex items-center gap-1">
+          <span dir="ltr">v{APP_VERSION}</span>
+          <Tip label="راهنمای گام به گام">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-6 text-muted-foreground max-md:h-auto"
+              aria-label="راهنمای گام به گام"
+              disabled={tourBusy}
+              onClick={() => setTourAsk(true)}
+            >
+              <CircleHelp />
+            </Button>
+          </Tip>
+        </span>
         <span aria-hidden>·</span>
         <span>
           <a
@@ -648,6 +662,7 @@ function Main() {
         open={!installOpen && tourAsk}
         onStart={() => {
           setTourAsk(false)
+          resetTours()
           runTour(true)
         }}
         onSkip={() => {

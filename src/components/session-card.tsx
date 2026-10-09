@@ -661,12 +661,12 @@ ${limitLines.join('\n')}` : ''
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="flex flex-col gap-1.5">
-              <Label>زمان گذشته</Label>
-              {backdateButton}
-            </div>
-            <div className="flex flex-col gap-1.5">
               <Label>محدودیت</Label>
               {limitButton}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>زمان گذشته</Label>
+              {backdateButton}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>بوفه و سایر هزینه‌ها</Label>

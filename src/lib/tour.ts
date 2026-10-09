@@ -46,6 +46,18 @@ export const tourSkipped = () => tourSeen('skip')
 
 export const skipTours = () => markTourSeen('skip')
 
+// Forgets every guide flag (seen-once ones and the skip flag) so all guides show again.
+export const resetTours = () => {
+  try {
+    const prefix = tourKey('')
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith(prefix)) localStorage.removeItem(key)
+    }
+  } catch {
+    // ignore
+  }
+}
+
 let active: Driver | null = null
 export const isTourActive = () => active !== null
 
