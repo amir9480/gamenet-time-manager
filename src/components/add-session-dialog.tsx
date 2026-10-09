@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { MoneyInput } from '@/components/ui/money-input'
 import { requestNotificationPermission } from '@/lib/attention'
+import { TourHelpButton } from '@/components/tour-help-button'
 import { isTourActive, registerTour, setTourFollowUp, tourEl, tourSel, type TourContext, type TourDef } from '@/lib/tour'
 import type { DriveStep } from 'driver.js'
 import { formatNumber, parseNumber } from '@/lib/format'
@@ -105,15 +106,19 @@ export function RadioCard({
   value,
   checked,
   disabled,
+  tour,
   children,
 }: {
   value: string
   checked: boolean
   disabled?: boolean
+  // `data-tour` name, for the guides that point at this card.
+  tour?: string
   children: ReactNode
 }) {
   return (
     <Label
+      data-tour={tour}
       className={cn(
         'flex items-center gap-2.5 rounded-lg border p-3 transition-colors',
         disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-muted/50',
@@ -551,7 +556,10 @@ export function AddSessionDialog({
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{switchMode ? 'تغییر دستگاه' : reserve ? 'رزرو تایم' : 'افزودن تایم'}</DialogTitle>
+            <DialogTitle className="flex items-center gap-1">
+              {switchMode ? 'تغییر دستگاه' : reserve ? 'رزرو تایم' : 'افزودن تایم'}
+              <TourHelpButton tour="add-session" />
+            </DialogTitle>
             {switchMode && session && (
               <DialogDescription>
                 از این لحظه، زمان با دستگاه و نرخ جدید محاسبه می‌شود؛ زمان گذشته با نرخ قبلی می‌ماند و

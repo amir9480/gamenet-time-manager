@@ -213,10 +213,13 @@ function Main() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'F1' || !ready || !hasDevices || isTourActive()) return
-      // Only the add-session dialog has a guide; any other open dialog blocks it.
+      // Only dialogs with a guide (add-session, extra cost picker + its question) can be replayed;
+      // any other open dialog blocks it.
       const dialogs = document.querySelectorAll('[role="dialog"],[role="alertdialog"]')
-      const addDialog = document.querySelector('[data-tour="add-search"]')
-      if (dialogs.length > (addDialog ? 1 : 0)) return
+      const guided = ['add-search', 'extra-search', 'offer-new'].filter((n) =>
+        document.querySelector(tourSel(n)),
+      ).length
+      if (dialogs.length > guided) return
       e.preventDefault()
       runTour()
     }

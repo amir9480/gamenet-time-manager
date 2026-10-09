@@ -218,11 +218,15 @@
   padding: 0.25rem 0.75rem;
   font-size: 0.8125rem;
 }
-.gn-tour .driver-popover-next-btn,
-.gn-tour .driver-popover-footer .driver-popover-done-btn {
+.gn-tour .driver-popover-footer button.driver-popover-next-btn,
+.gn-tour .driver-popover-footer button.driver-popover-done-btn {
   background: var(--primary);
   color: var(--primary-foreground);
   border-color: transparent;
+}
+.gn-tour .driver-popover-footer button.driver-popover-next-btn:hover,
+.gn-tour .driver-popover-footer button.driver-popover-done-btn:hover {
+  background: color-mix(in oklab, var(--primary) 85%, black);
 }
 .gn-tour .driver-popover-arrow-side-top.driver-popover-arrow { border-top-color: var(--popover); }
 .gn-tour .driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color: var(--popover); }

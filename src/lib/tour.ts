@@ -6,23 +6,45 @@ import { driver, type Driver, type DriveStep, type PopoverDOM } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import { prefKey } from '@/lib/store'
 
-const SKIP_KEY = prefKey('tour-skip')
+// Every guide flag lives under `<global prefix>tour:<name>` (e.g. `tour:skip`, `tour:paused-seen`).
+export const tourKey = (name: string) => prefKey(`tour:${name}`)
 
-export const tourSkipped = () => {
+// Flags used before the `tour:` namespace existed; moved over on first run.
+for (const [from, to] of [
+  ['tour-skip', 'skip'],
+  ['tour-paused-seen', 'paused-seen'],
+]) {
   try {
-    return localStorage.getItem(SKIP_KEY) === '1'
+    const old = localStorage.getItem(prefKey(from))
+    if (old !== null) {
+      if (localStorage.getItem(tourKey(to)) === null) localStorage.setItem(tourKey(to), old)
+      localStorage.removeItem(prefKey(from))
+    }
+  } catch {
+    // ignore
+  }
+}
+
+// «Seen once» flags for guides that show a single time.
+export const tourSeen = (name: string) => {
+  try {
+    return localStorage.getItem(tourKey(name)) === '1'
   } catch {
     return true
   }
 }
 
-export const skipTours = () => {
+export const markTourSeen = (name: string) => {
   try {
-    localStorage.setItem(SKIP_KEY, '1')
+    localStorage.setItem(tourKey(name), '1')
   } catch {
     // ignore
   }
 }
+
+export const tourSkipped = () => tourSeen('skip')
+
+export const skipTours = () => markTourSeen('skip')
 
 let active: Driver | null = null
 export const isTourActive = () => active !== null

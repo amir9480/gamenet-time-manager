@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { DriveStep } from 'driver.js'
 import { ArrowLeft, ArrowRight, Minus, Plus } from 'lucide-react'
 import { RadioCard } from '@/components/add-session-dialog'
 import {
@@ -34,10 +35,22 @@ import { MoneyInput } from '@/components/ui/money-input'
 import { RadioGroup } from '@/components/ui/radio-group'
 import { SaveExtraItemDialog } from '@/components/save-extra-item-dialog'
 import { Tip } from '@/components/tip'
+import { TourHelpButton } from '@/components/tour-help-button'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { toFa } from '@/lib/jalali'
 import { rank, type Field } from '@/lib/search'
+import {
+  isTourActive,
+  markTourSeen,
+  registerTour,
+  startTour,
+  tourEl,
+  tourSeen,
+  tourSel,
+  tourSkipped,
+  type TourDef,
+} from '@/lib/tour'
 import { OTHER_ITEM_NAME, type CatalogItem, type ExtraItem, type Settings } from '@/lib/store'
 
 type StepKey = 'category' | 'product' | 'count'
@@ -65,6 +78,149 @@ type Props = {
   onAdd: (item: Omit<ExtraItem, 'id'>) => void
   // Small icon-only trigger for the compact session card.
   compact?: boolean
+}
+
+// The mounted picker hands the guide a lever, so it can send the dialog back to its first step.
+const pickerCtl: {
+  toStart?: () => void
+  hasItems?: () => boolean
+} = {}
+
+// Guide of this dialog (opens by itself the first time, or F1 while it is open). The steps point at
+// the `data-tour` attributes below, so keep the two in sync when the markup changes. The user picks
+// the product (or «سایر هزینه‌ها») themselves; the guide then explains the matching count step.
+export const extraPickerTour: TourDef = {
+  id: 'extra-picker',
+  present: tourSel('extra-search'),
+  priority: 20,
+  steps: (ctx): DriveStep[] => {
+    const hasItems = !!pickerCtl.hasItems?.()
+    const search: DriveStep = {
+      element: tourSel('extra-search'),
+      waitForElement: 2000,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'جستجوی سریع',
+        description:
+          'نام محصول یا دسته‌بندی را بنویسید تا همان را مستقیم انتخاب کنید و به مرحله‌ی تعداد بروید. «سایر هزینه‌ها» هم در نتیجه‌ها هست.',
+        side: 'bottom',
+      },
+    }
+    const other: DriveStep = {
+      element: tourSel('extra-fields-other'),
+      waitForElement: 1500,
+      disableActiveInteraction: true,
+      data: { keepAlive: true },
+      popover: {
+        title: 'قیمت، توضیحات و تعداد',
+        description:
+          'برای «سایر هزینه‌ها» قیمت واحد را بنویسید، در صورت نیاز توضیح بدهید (مثلاً بابت چه چیزی) و تعداد را مشخص کنید. جمع همان لحظه حساب می‌شود.',
+        side: 'top',
+        onPrevClick: (_el, _step, { driver: d }) => {
+          pickerCtl.toStart?.()
+          if (hasItems) d.moveTo(1)
+          else d.movePrevious()
+        },
+      },
+    }
+    if (!hasItems) return [search, other]
+    return [
+      search,
+      {
+        element: tourSel('extra-choices'),
+        waitForElement: 1500,
+        skipMissingElement: true,
+        data: { keepAlive: true },
+        // The list stays clickable: the guide continues by itself once something is picked.
+        onHighlighted: (_el, _step, { driver: d }) => {
+          ctx.watch(() => {
+            if (tourEl(tourSel('extra-fields-item'))) {
+              ctx.stopWatch()
+              d.moveTo(2)
+            } else if (tourEl(tourSel('extra-fields-other'))) {
+              ctx.stopWatch()
+              d.moveTo(3)
+            } else if (!d.getActiveElement()?.isConnected) {
+              // Picking a category swaps the list for the product list: highlight the new one.
+              ctx.stopWatch()
+              d.moveTo(1)
+            }
+          }, 300)
+        },
+        popover: {
+          title: 'انتخاب محصول',
+          description:
+            'یکی از محصولات بوفه را انتخاب کنید (اگر چند دسته دارید، اول دسته و بعد محصول؛ قیمت‌ها از تنظیمات > بوفه می‌آیند). اگر چیزی در فهرست نیست، «سایر هزینه‌ها» را بزنید: می‌تواند یک محصول جدید باشد که هنوز ثبت نکرده‌اید، یا هزینه‌ای با توضیح متنی که دیگر تکرار نمی‌شود. با انتخاب شما، راهنما ادامه پیدا می‌کند.',
+          side: 'top',
+          showButtons: ['previous', 'close'],
+          onPrevClick: (_el, _step, { driver: d }) => {
+            ctx.stopWatch()
+            d.movePrevious()
+          },
+        },
+      },
+      {
+        element: tourSel('extra-fields-item'),
+        waitForElement: 1500,
+        skipMissingElement: true,
+        disableActiveInteraction: true,
+        data: { keepAlive: true },
+        popover: {
+          title: 'تعداد',
+          description:
+            'برای محصول بوفه فقط تعداد را مشخص می‌کنید؛ قیمت از فهرست می‌آید و جمع همان لحظه حساب می‌شود.',
+          side: 'top',
+          nextBtnText: 'پایان',
+          onNextClick: (_el, _step, { driver: d }) => d.destroy(),
+          onPrevClick: (_el, _step, { driver: d }) => {
+            pickerCtl.toStart?.()
+            d.moveTo(1)
+          },
+        },
+      },
+      other,
+    ]
+  },
+}
+
+// Shown when a «سایر هزینه‌ها» line is being added: keep it as a reusable product or as a text-only cost.
+export const extraOfferTour: TourDef = {
+  id: 'extra-offer',
+  present: tourSel('offer-new'),
+  priority: 30,
+  steps: (): DriveStep[] => [
+    {
+      element: tourSel('offer-new'),
+      waitForElement: 1500,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'محصول جدید بوفه',
+        description:
+          'این هزینه به فهرست بوفه اضافه می‌شود تا دفعه‌ی بعد مستقیم انتخابش کنید. پس از آن نام، دسته‌بندی و قیمت را تأیید می‌کنید.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('offer-other'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'فقط به عنوان توضیح متنی',
+        description:
+          'هزینه فقط برای همین تایم و با همان توضیحی که نوشتید ثبت می‌شود و در فهرست بوفه نمی‌ماند؛ مناسب هزینه‌ای که دیگر تکرار نمی‌شود.',
+        side: 'top',
+      },
+    },
+  ],
+}
+
+registerTour(extraPickerTour)
+registerTour(extraOfferTour)
+
+// Starts a once-only guide shortly after its dialog appeared (unless guides were skipped).
+const offerTour = (def: TourDef, flag: string) => {
+  if (tourSkipped() || tourSeen(flag) || isTourActive()) return
+  markTourSeen(flag)
+  startTour(def, () => {})
 }
 
 function QtyField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -156,10 +312,27 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
   }
 
   useEffect(() => {
-    if (open) restart()
+    if (!open) return
+    restart()
+    const t = window.setTimeout(() => offerTour(extraPickerTour, 'extra-picker-seen'), 400)
+    return () => window.clearTimeout(t)
     // Only when the dialog opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  // Offered right after the user confirmed a «سایر هزینه‌ها» line.
+  useEffect(() => {
+    if (!offerAsk) return
+    const t = window.setTimeout(() => offerTour(extraOfferTour, 'extra-offer-seen'), 400)
+    return () => window.clearTimeout(t)
+  }, [offerAsk])
+
+  pickerCtl.hasItems = () => !noCatalog
+  pickerCtl.toStart = () => {
+    const c = resolve(EMPTY)
+    setChoice(c)
+    setStep(stepsFor(c)[0])
+  }
 
   const item = catalog.find((c) => c.id === choice.itemId)
   const steps = stepsFor(choice)
@@ -264,8 +437,10 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
     <>
       <Dialog
         open={open}
-        onOpenChange={(o) => {
+        onOpenChange={(o, details) => {
           if (o) setOpen(true)
+          // The guide's popover lives outside the dialog; clicking it must not close the dialog.
+          else if (isTourActive() && details.reason === 'outside-press') return
           else requestClose()
         }}
       >
@@ -289,7 +464,10 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
         </Tip>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>خرید از بوفه یا افزودن سایر هزینه‌ها</DialogTitle>
+            <DialogTitle className="flex items-center gap-1">
+              خرید از بوفه یا افزودن سایر هزینه‌ها
+              <TourHelpButton tour="extra-picker" />
+            </DialogTitle>
           </DialogHeader>
 
           <Combobox
@@ -308,6 +486,7 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
               aria-label="جستجوی سریع"
               showTrigger={false}
               className="w-full"
+              data-tour="extra-search"
             />
             <ComboboxContent>
               <ComboboxEmpty>موردی پیدا نشد</ComboboxEmpty>
@@ -336,6 +515,7 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
           {step === 'category' && (
             <RadioGroup
               className="sm:grid-cols-2"
+              data-tour="extra-choices"
               value={choice.custom ? OTHER_VALUE : choice.categoryId}
               onValueChange={(v) =>
                 v === OTHER_VALUE
@@ -351,7 +531,7 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
                   </span>
                 </RadioCard>
               ))}
-              <RadioCard value={OTHER_VALUE} checked={choice.custom}>
+              <RadioCard value={OTHER_VALUE} checked={choice.custom} tour="extra-other">
                 <span className="flex flex-1 items-center justify-between gap-2">
                   <span className="font-medium">{OTHER_ITEM_NAME}</span>
                   <span className="text-xs text-muted-foreground">قیمت دلخواه</span>
@@ -363,6 +543,7 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
           {step === 'product' && (
             <RadioGroup
               className="sm:grid-cols-2"
+              data-tour="extra-choices"
               value={productRadio}
               onValueChange={(v) =>
                 v === OTHER_VALUE
@@ -378,7 +559,7 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
                   </span>
                 </RadioCard>
               ))}
-              <RadioCard value={OTHER_VALUE} checked={choice.custom}>
+              <RadioCard value={OTHER_VALUE} checked={choice.custom} tour="extra-other">
                 <span className="flex flex-1 items-center justify-between gap-2">
                   <span className="font-medium">{OTHER_ITEM_NAME}</span>
                   <span className="text-xs text-muted-foreground">قیمت دلخواه</span>
@@ -388,7 +569,10 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
           )}
 
           {step === 'count' && (
-            <div className="flex flex-col gap-3">
+            <div
+              className="flex flex-col gap-3"
+              data-tour={choice.custom ? 'extra-fields-other' : 'extra-fields-item'}
+            >
               <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 p-2.5 text-sm">
                 <span>
                   <b>{choice.custom ? OTHER_ITEM_NAME : item?.name}</b>
@@ -470,15 +654,19 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
       <AlertDialog open={offerAsk} onOpenChange={setOfferAsk}>
         <AlertDialogContent className="data-[size=default]:sm:max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>این مورد به بوفه اضافه شود؟</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-1">
+              این مورد به بوفه اضافه شود؟
+              <TourHelpButton tour="extra-offer" />
+            </AlertDialogTitle>
             <AlertDialogDescription>
               می‌توانید «{offer?.name || OTHER_ITEM_NAME}» را با قیمت {formatNumber(offer?.price ?? 0)} تومان
               در فهرست بوفه ذخیره کنید تا دفعه‌ی بعد مستقیم انتخاب شود.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-wrap">
-            <AlertDialogCancel onClick={addAsOther}>افزودن به عنوان سایر هزینه‌ها</AlertDialogCancel>
+            <AlertDialogCancel data-tour="offer-other" onClick={addAsOther}>افزودن به عنوان سایر هزینه‌ها</AlertDialogCancel>
             <AlertDialogAction
+              data-tour="offer-new"
               onClick={() => {
                 setOfferAsk(false)
                 setOfferSave(true)

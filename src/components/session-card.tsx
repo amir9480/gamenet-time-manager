@@ -26,7 +26,16 @@ import { SessionSummaryDialog } from '@/components/session-summary-dialog'
 import { Timer } from '@/components/timer'
 import { Tip } from '@/components/tip'
 import type { DriveStep } from 'driver.js'
-import { tourLatest, tourSel } from '@/lib/tour'
+import {
+  isTourActive,
+  markTourSeen,
+  startTour,
+  tourSeen,
+  tourLatest,
+  tourSel,
+  tourSkipped,
+  type TourDef,
+} from '@/lib/tour'
 import { formatDuration, formatIdle, formatNumber } from '@/lib/format'
 import { formatJalaliDateTime } from '@/lib/jalali'
 import { useNow } from '@/lib/use-now'
@@ -193,6 +202,44 @@ export const sessionCardSteps = (): DriveStep[] => [
   },
 ]
 
+// Shown once, the first time any card is paused (its buttons turn into ادامه / اتمام).
+
+const pausedTour: TourDef = {
+  id: 'paused-card',
+  present: tourSel('card-resume'),
+  priority: 0,
+  steps: () => [
+    {
+      element: tourSel('card-resume'),
+      waitForElement: 1500,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'ادامه',
+        description:
+          'تایم متوقف شد و دیگر هزینه‌ای حساب نمی‌شود. با «ادامه» همین تایم از همان‌جا دوباره شروع می‌شود.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('card-end'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'اتمام',
+        description:
+          'تایم را برای همیشه تمام می‌کند و صورت‌حساب نهایی را نشان می‌دهد؛ همان‌جا مبلغ را می‌توانید ویرایش و پرداخت یا نسیه را ثبت کنید.',
+        side: 'top',
+      },
+    },
+  ],
+}
+
+// Called after a card is paused: explains the two new buttons, once, unless guides were skipped.
+const offerPausedTour = () => {
+  if (tourSkipped() || tourSeen('paused-seen') || isTourActive()) return
+  markTourSeen('paused-seen')
+  window.setTimeout(() => startTour(pausedTour, () => {}), 250)
+}
+
 export function SessionCard({
   session,
   sessions,
@@ -284,7 +331,10 @@ ${limitLines.join('\n')}` : ''
   const limitTip = `${hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}${limitLine}`
 
   const resume = () => onUpdate((s) => resumeSession(settings, s, Date.now()))
-  const pause = () => onUpdate((s) => pauseSession(s, Date.now()))
+  const pause = () => {
+    onUpdate((s) => pauseSession(s, Date.now()))
+    offerPausedTour()
+  }
   const requestType = (id: string) => {
     if (id === SWITCH_DEVICE) setSwitchOpen(true)
     else if (id !== type.id) setPendingTypeId(id)
@@ -490,7 +540,12 @@ ${limitLines.join('\n')}` : ''
   ) : (
     <>
       <Tip label={reserved ? 'شروع تایم' : 'ادامه‌ی تایم'}>
-        <Button size={sm} className={flexBtn} onClick={resume}>
+        <Button
+          size={sm}
+          className={flexBtn}
+          data-tour={reserved ? undefined : 'card-resume'}
+          onClick={resume}
+        >
           <Play /> {reserved ? 'شروع' : 'ادامه'}
         </Button>
       </Tip>
@@ -507,7 +562,13 @@ ${limitLines.join('\n')}` : ''
         </Tip>
       ) : (
         <Tip label="پایان تایم و مشاهده صورت‌حساب">
-          <Button size={sm} variant="destructive" className={flexBtn} onClick={openSummary}>
+          <Button
+            size={sm}
+            variant="destructive"
+            className={flexBtn}
+            data-tour="card-end"
+            onClick={openSummary}
+          >
             <Square /> اتمام
           </Button>
         </Tip>
