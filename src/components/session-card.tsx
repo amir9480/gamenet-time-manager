@@ -659,7 +659,7 @@ ${limitLines.join('\n')}` : ''
       data-tour="session-card"
       data-tour-at={first?.from ?? session.reservedAt ?? 0}
     >
-      <CardContent className={cn('flex flex-col', compact ? 'gap-3' : 'gap-4')}>
+      <CardContent className={cn('flex flex-1 flex-col', compact ? 'gap-3' : 'gap-4')}>
         {/* Header: who/where on one side, status + customer on the other. */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 flex-col gap-1">
@@ -692,7 +692,7 @@ ${limitLines.join('\n')}` : ''
             {statsPanel}
             {priceSelect}
             {extraBadges}
-            <div className="flex items-center gap-1.5">
+            <div className="mt-auto flex items-center gap-1.5">
               <div className="flex flex-1 gap-1.5">{actionButtons}</div>
               {limitButton}
               {backdateButton}

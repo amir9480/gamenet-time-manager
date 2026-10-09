@@ -265,7 +265,11 @@ export function SettingsDialog({
     draft.rateGroups.length > 0 &&
     named(draft.rateGroups) &&
     draft.rateGroups.every((g) => g.prices.length > 0 && named(g.prices) && g.prices.every((p) => p.price > 0))
+  const emptyCategory = draft.deviceCategories.find(
+    (c) => !draft.devices.some((d) => d.categoryId === c.id),
+  )
   const devicesValid =
+    !emptyCategory &&
     named(draft.deviceCategories) &&
     named(draft.devices) &&
     draft.devices.every((d) => d.rateIds.length > 0)
@@ -657,7 +661,9 @@ export function SettingsDialog({
                     ? 'مقادیر افزایش سریع محدودیت باید بیشتر از صفر باشند.'
                     : overrideError
                       ? overrideError
-                      : 'نام‌ها باید تکمیل و قیمت‌ها بیشتر از صفر باشند و هر دستگاه یک نرخ داشته باشد.'}
+                      : emptyCategory
+                        ? `برای نوع دستگاه ${emptyCategory.name.trim() ? `«${emptyCategory.name.trim()}»` : 'بدون نام'} حداقل یک دستگاه اضافه کنید.`
+                        : 'نام‌ها باید تکمیل و قیمت‌ها بیشتر از صفر باشند و هر دستگاه یک نرخ داشته باشد.'}
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={requestClose}>
