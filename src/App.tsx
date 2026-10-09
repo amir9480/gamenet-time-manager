@@ -216,7 +216,7 @@ function Main() {
       // Only dialogs with a guide (add-session, extra cost picker + its question) can be replayed;
       // any other open dialog blocks it.
       const dialogs = document.querySelectorAll('[role="dialog"],[role="alertdialog"]')
-      const guided = ['add-search', 'extra-search', 'offer-new', 'limit-time', 'alarm-extend', 'backdate-minutes'].filter((n) =>
+      const guided = ['add-search', 'extra-search', 'offer-new', 'limit-time', 'alarm-extend', 'backdate-minutes', 'sum-times'].filter((n) =>
         document.querySelector(tourSel(n)),
       ).length
       if (dialogs.length > guided) return

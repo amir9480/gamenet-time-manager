@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { DriveStep } from 'driver.js'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Coins, NotebookPen, Pause, Play, Plus, Trash2, Wallet } from 'lucide-react'
 import {
@@ -41,9 +42,20 @@ import { JalaliDatePicker } from '@/components/jalali-date-picker'
 import { PriceSelect } from '@/components/price-select'
 import { useTheme } from '@/components/theme-provider'
 import { Tip } from '@/components/tip'
+import { TourHelpButton } from '@/components/tour-help-button'
 import { readWalletBalance } from '@/lib/db'
 import { formatClock, formatDuration, formatNumber, parseNumber } from '@/lib/format'
 import { startOfDay } from '@/lib/jalali'
+import {
+  isTourActive,
+  markTourSeen,
+  registerTour,
+  startTour,
+  tourSeen,
+  tourSel,
+  tourSkipped,
+  type TourDef,
+} from '@/lib/tour'
 import { onSessionUpdated } from '@/lib/session-events'
 import {
   EMPTY_PRICE,
@@ -68,10 +80,9 @@ import {
   segmentMs,
   sessionCostBreakdown,
   splitByOverrides,
-  extendCostLimit,
   setExtraItemQty,
   updateSegment,
-  addSessionPrepay,
+  uid,
   type Segment,
   type Session,
   type Settings,
@@ -89,6 +100,167 @@ type Props = {
   // goes on the customer's account.
   onConfirm?: (session: Session, finalTotal?: number, onAccount?: boolean) => void
 }
+
+// Guide of this dialog (opens by itself the first time, or F1 / the «?» button). It goes from the top
+// of the dialog to the bottom; steps whose target isn't there (no end time, not running, nothing to
+// pay...) are skipped. The steps point at the `data-tour` attributes below, so keep the two in sync
+// when the markup changes.
+const sumStep = (
+  name: string,
+  title: string,
+  description: string,
+  side: 'top' | 'bottom' = 'top',
+  first = false,
+): DriveStep => ({
+  element: tourSel(name),
+  skipMissingElement: true,
+  disableActiveInteraction: true,
+  ...(first ? { waitForElement: 2000 } : {}),
+  popover: { title, description, side },
+})
+
+export const summaryTour: TourDef = {
+  id: 'summary',
+  present: tourSel('sum-times'),
+  priority: 70,
+  steps: (): DriveStep[] => [
+    sumStep(
+      'sum-times',
+      'بازه‌های زمانی',
+      'زمان بازی تایم از یک یا چند بازه ساخته می‌شود؛ هر بازه یک دوره‌ی پیوسته روی یک دستگاه و یک نرخ است. با توقف و ادامه، یا تغییر نرخ و دستگاه، بازه‌ی تازه‌ای ساخته می‌شود.',
+      'bottom',
+      true,
+    ),
+    sumStep(
+      'sum-add-past',
+      'افزودن زمان گذشته',
+      'اگر مشتری از قبل از ثبت تایم بازی کرده، دقایق فراموش‌شده را از اینجا اضافه کنید.',
+      'bottom',
+    ),
+    sumStep(
+      'sum-resume',
+      'ادامه',
+      'تایم متوقف شده است؛ اگر هنوز تمام نشده، با «ادامه» دوباره شروع می‌شود.',
+      'bottom',
+    ),
+    sumStep(
+      'sum-seg-start',
+      'تاریخ و ساعت شروع',
+      'زمان شروع اولین بازه. اگر اشتباه ثبت شده، تاریخ یا ساعت را اینجا اصلاح کنید تا مدت و هزینه دوباره حساب شود.',
+      'bottom',
+    ),
+    sumStep(
+      'sum-seg-end',
+      'تاریخ و ساعت پایان',
+      'اگر بازه تمام شده باشد، زمان پایان آن را هم اینجا می‌بینید و می‌توانید اصلاحش کنید. بازه‌ای که هنوز در حال بازی است پایان ندارد.',
+      'bottom',
+    ),
+    sumStep(
+      'sum-pause',
+      'توقف موقت',
+      'تا زمانی که تایم در حال اجراست، برای اتمام باید آن را متوقف کنید. با توقف، زمان می‌ایستد و می‌توانید صورت‌حساب را تأیید کنید.',
+      'bottom',
+    ),
+    sumStep(
+      'sum-seg-delete',
+      'حذف بازه',
+      'بازه‌ای که اشتباهی اضافه شده را با این دکمه حذف کنید تا از زمان و هزینه کم شود.',
+      'bottom',
+    ),
+    sumStep(
+      'sum-seg-device',
+      'دستگاه و نرخ بازه',
+      'اگر دستگاه یا نرخ بازه را اشتباه انتخاب کرده‌اید، همین‌جا عوضش کنید؛ هزینه‌ی همان بازه دوباره حساب می‌شود و در انتها هزینه‌ی آن بازه را می‌بینید.',
+      'top',
+    ),
+    sumStep(
+      'sum-extra-add',
+      'افزودن بوفه و سایر هزینه‌ها',
+      'اگر مشتری چیزی از بوفه گرفته یا هزینه‌ی دیگری دارد که ثبت نشده، از اینجا اضافه کنید.',
+      'bottom',
+    ),
+    sumStep(
+      'sum-extra-lines',
+      'موارد بوفه و سایر هزینه‌ها',
+      'هر مورد ثبت‌شده در یک خط است، با نام، قیمت واحد و جمع آن. اگر موردی ثبت نشده باشد، همین پیام خالی را می‌بینید.',
+      'top',
+    ),
+    sumStep(
+      'sum-extra-qty',
+      'تعداد',
+      'تعداد هر مورد را تغییر دهید؛ جمع همان خط و مبلغ نهایی دوباره حساب می‌شود. برای «سایر هزینه‌ها» قیمت هم قابل ویرایش است.',
+      'top',
+    ),
+    sumStep(
+      'sum-extra-delete',
+      'حذف مورد',
+      'موردی که اشتباه اضافه شده را حذف کنید.',
+      'top',
+    ),
+    sumStep(
+      'sum-prepay-add',
+      'افزودن پیش‌پرداخت',
+      'اگر مشتری پولی از قبل داده و فراموش کرده‌اید ثبت کنید، از اینجا اضافه کنید تا از مبلغ قابل پرداخت کم شود.',
+      'bottom',
+    ),
+    sumStep(
+      'sum-prepay-list',
+      'پیش‌پرداخت‌های ثبت‌شده',
+      'هر پیش‌پرداخت با مبلغ و ساعت ثبتش نشان داده می‌شود و قابل ویرایش یا حذف است. اگر پیش‌پرداختی نباشد، پیام خالی را می‌بینید.',
+      'top',
+    ),
+    sumStep(
+      'sum-totals',
+      'جمع هزینه‌ها',
+      'جمع هزینه‌ی زمان، بوفه و سایر هزینه‌ها، و پیش‌پرداخت‌ها به‌صورت جداگانه. اگر نرخ ویژه‌ای (مثل ساعت‌های خاص) اعمال شده باشد، هزینه‌ی زمان هم جدا نشان داده می‌شود.',
+      'top',
+    ),
+    sumStep(
+      'sum-final',
+      'مبلغ نهایی',
+      'جمع کل تایم. پس از توقف می‌توانید آن را ویرایش کنید (مثلاً تخفیف بدهید) یا با دکمه‌ی رند کردن به نزدیک‌ترین مبلغ گرد کنید. این مبلغ به‌طور پیش‌فرض خودکار رند می‌شود؛ مضرب و نوع رند کردن (یا خاموش کردن آن) را در تنظیمات > عمومی می‌توانید تغییر دهید.',
+      'top',
+    ),
+    sumStep(
+      'sum-settle',
+      'اتمام برای تسویه حساب',
+      'تایم هنوز در حال اجراست؛ با این دکمه متوقف می‌شود تا مبلغ نهایی قطعی شود و بتوانید تایم را تمام کنید.',
+      'top',
+    ),
+    sumStep(
+      'sum-customer',
+      'مشتری',
+      'مشتری این تایم را انتخاب یا عوض کنید. با انتخاب مشتری، اعتبار و بدهی او در تسویه حساب می‌شود و نسیه هم فعال می‌شود.',
+      'top',
+    ),
+    sumStep(
+      'sum-settlement',
+      'جزئیات پرداخت مشتری',
+      'نشان می‌دهد چه مقدار از اعتبار مشتری و پیش‌پرداخت‌ها پوشش داده شده و چه مبلغی باقی می‌ماند تا از مشتری دریافت کنید. اگر پیش‌پرداخت بیشتر از مبلغ باشد، مازاد به کیف پول مشتری برمی‌گردد.',
+      'top',
+    ),
+    sumStep(
+      'sum-paytype',
+      'نحوه‌ی پرداخت',
+      '«پرداخت شد» یعنی مبلغ باقی‌مانده را همین الان گرفته‌اید. «نسیه» آن را به بدهی مشتری اضافه می‌کند و فقط وقتی فعال است که برای تایم مشتری انتخاب شده باشد.',
+      'top',
+    ),
+    sumStep(
+      'sum-save',
+      'ذخیره',
+      'تغییراتی که در این پنجره داده‌اید را بدون پایان دادن به تایم ذخیره می‌کند.',
+      'top',
+    ),
+    sumStep(
+      'sum-confirm',
+      'تایید و اتمام تایم',
+      'پس از توقف تایم، با این دکمه تایم پایان می‌یابد و در تاریخچه ثبت می‌شود.',
+      'top',
+    ),
+  ],
+}
+
+registerTour(summaryTour)
 
 const toman = (n: number) => `${formatNumber(n)} تومان`
 
@@ -130,11 +302,13 @@ function CountInput({
   onCommit,
   className,
   label,
+  tour,
 }: {
   value: number
   onCommit: (n: number) => void
   className?: string
   label: string
+  tour?: string
 }) {
   const [text, setText] = useState(() => (value > 0 ? formatNumber(value) : String(value)))
   useEffect(() => setText(value > 0 ? formatNumber(value) : String(value)), [value])
@@ -144,6 +318,7 @@ function CountInput({
       dir="ltr"
       inputMode="numeric"
       aria-label={label}
+      data-tour={tour}
       className={className}
       value={text}
       onChange={(e) => setText(e.target.value)}
@@ -178,7 +353,6 @@ export function SessionSummaryDialog({
   const [finalText, setFinalText] = useState('')
   const [initialFinalText, setInitialFinalText] = useState('')
   const [onAccount, setOnAccount] = useState(false)
-  const [prepayText, setPrepayText] = useState('')
   const [guestChargebackDone, setGuestChargebackDone] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<
     | { kind: 'segment'; index: number }
@@ -204,7 +378,6 @@ export function SessionSummaryDialog({
     const seedFinal = String(rounding.auto ? roundAmount(seedTotal, rounding) : seedTotal)
     setFinalText(seedFinal)
     setInitialFinalText(seedFinal)
-    setPrepayText('')
     setGuestChargebackDone(false)
     setOnAccount(false)
     // Only (re)seed when opened.
@@ -259,8 +432,31 @@ export function SessionSummaryDialog({
   const guestNeedsChargeback = !pickedCustomer && settlement.prepayReturned > 0
   const canConfirm = !guestNeedsChargeback || guestChargebackDone
 
+  const firstValidationError =
+    draft.extraItems.find((i) => !i.catalogId && i.price <= 0)
+      ? 'قیمت همه‌ی موارد «سایر هزینه‌ها» باید بیشتر از صفر باشد.'
+      : draft.extraItems.find((i) => i.qty <= 0)
+      ? 'تعداد همه‌ی موارد بوفه باید بیشتر از صفر باشد.'
+      : (draft.prepayEntries ?? []).find((p) => p.amount <= 0)
+        ? 'مبلغ همه‌ی پیش‌پرداخت‌ها باید بیشتر از صفر باشد.'
+        : null
+  const hasValidationError = firstValidationError !== null
+  const canSave = !hasValidationError
+  const canFinish = canConfirm && !hasValidationError
+
   const dirty = open && (JSON.stringify(draft) !== JSON.stringify(baseline) || finalChanged || onAccount)
   const { requestClose, dialog } = useDiscardGuard(dirty, () => onOpenChange(false))
+
+  // The first time the dialog opens, the guide starts by itself (unless guides were skipped).
+  useEffect(() => {
+    if (!open) return
+    const t = window.setTimeout(() => {
+      if (tourSkipped() || tourSeen('summary-seen') || isTourActive()) return
+      markTourSeen('summary-seen')
+      startTour(summaryTour, () => {})
+    }, 500)
+    return () => window.clearTimeout(t)
+  }, [open])
 
   const confirmEnd = () => {
     if (!canConfirm) return
@@ -308,17 +504,30 @@ export function SessionSummaryDialog({
   }
 
   const addPrepay = () => {
-    const amount = Math.floor(parseNumber(prepayText))
-    if (amount <= 0) return
-    const shouldAdjustLimit =
-      draft.status === 'running' &&
-      window.confirm('این پیش‌پرداخت به محدودیت هزینه هم اضافه شود؟')
+    setDraft((d) => ({
+      ...d,
+      prepayEntries: [...(d.prepayEntries ?? []), { id: uid(), amount: 0, at: Date.now() }],
+    }))
+  }
+
+  const setPrepayAmount = (id: string, amount: number) => {
+    const next = Math.max(0, Math.floor(amount))
     setDraft((d) => {
-      const withPrepay = addSessionPrepay(d, amount, Date.now())
-      if (!shouldAdjustLimit) return withPrepay
-      return extendCostLimit(withPrepay, amount, Date.now())
+      return {
+        ...d,
+        prepayEntries: (d.prepayEntries ?? []).map((p) => (p.id === id ? { ...p, amount: next } : p)),
+      }
     })
-    setPrepayText('')
+  }
+
+  const setOtherItemPrice = (id: string, price: number) => {
+    const next = Math.max(0, Math.floor(price))
+    setDraft((d) => ({
+      ...d,
+      extraItems: d.extraItems.map((i) =>
+        i.id === id && !i.catalogId ? { ...i, price: next } : i,
+      ),
+    }))
   }
 
   // The currently open segment (none if the session is paused/ended): its device/price are
@@ -381,10 +590,21 @@ export function SessionSummaryDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : requestClose())}>
+      <Dialog
+        open={open}
+        onOpenChange={(o, details) => {
+          if (o) onOpenChange(true)
+          // The guide's popover lives outside the dialog; clicking it must not close the dialog.
+          else if (isTourActive() && details.reason === 'outside-press') return
+          else requestClose()
+        }}
+      >
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>{`اتمام تایم ${deviceName}`}</DialogTitle>
+            <DialogTitle className="flex items-center gap-1">
+              {`اتمام تایم ${deviceName}`}
+              <TourHelpButton tour="summary" />
+            </DialogTitle>
             <DialogDescription>
               {draft.status === 'running'
                 ? 'برای اتمام، ابتدا تایم را متوقف کنید. پس از توقف می‌توانید تایید و اتمام را بزنید.'
@@ -403,10 +623,11 @@ export function SessionSummaryDialog({
               </span>
             </div>
 
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2" data-tour="sum-times">
               <div className="flex items-center justify-between">
                 <Label>بازه‌های زمانی</Label>
                 <div className="flex items-center gap-2">
+                  <span className="inline-flex" data-tour="sum-add-past">
                   <BackdateTimeDialog
                     session={draft}
                     settings={settings}
@@ -423,10 +644,12 @@ export function SessionSummaryDialog({
                       )
                     }
                   />
+                  </span>
                   {draft.status !== 'running' && (
                     <Button
                       variant="outline"
                       size="sm"
+                      data-tour="sum-resume"
                       onClick={() => setDraft((d) => resumeSession(settings, d, Date.now()))}
                     >
                       <Play /> ادامه
@@ -440,7 +663,8 @@ export function SessionSummaryDialog({
                   بازه‌ای ثبت نشده است.
                 </p>
               ) : (
-                visibleSegments.map(({ seg, index: i }) => {
+                visibleSegments.map(({ seg, index: i }, pos) => {
+                  const first = pos === 0
                   const device = settings.devices.find((x) => x.id === seg.deviceId)
                   const groups = devicePriceGroups(device, settings.rateGroups)
                   const priceOptions = flatPrices(groups)
@@ -455,7 +679,10 @@ export function SessionSummaryDialog({
                   return (
                     <div key={i} className="flex flex-col gap-2 rounded-lg border p-2.5">
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex items-center gap-1.5">
+                        <div
+                          className="flex items-center gap-1.5"
+                          data-tour={first ? 'sum-seg-start' : undefined}
+                        >
                           <span className="text-xs text-muted-foreground">شروع</span>
                           <JalaliDatePicker
                             label=""
@@ -467,7 +694,10 @@ export function SessionSummaryDialog({
                         {open_ ? (
                           <span className="text-xs text-muted-foreground">در حال بازی</span>
                         ) : (
-                          <div className="flex items-center gap-1.5">
+                          <div
+                            className="flex items-center gap-1.5"
+                            data-tour={first ? 'sum-seg-end' : undefined}
+                          >
                             <span className="text-xs text-muted-foreground">پایان</span>
                             <JalaliDatePicker
                               label=""
@@ -482,7 +712,13 @@ export function SessionSummaryDialog({
                         </span>
                         {open_ && (
                           <Tip label="توقف موقت تایم">
-                            <Button variant="outline" size="icon-sm" aria-label="توقف موقت تایم" onClick={pauseNow}>
+                            <Button
+                              variant="outline"
+                              size="icon-sm"
+                              aria-label="توقف موقت تایم"
+                              data-tour="sum-pause"
+                              onClick={pauseNow}
+                            >
                               <Pause />
                             </Button>
                           </Tip>
@@ -491,12 +727,16 @@ export function SessionSummaryDialog({
                           variant="destructive"
                           size="icon-sm"
                           aria-label="حذف بازه"
+                          data-tour={first ? 'sum-seg-delete' : undefined}
                           onClick={() => setPendingDelete({ kind: 'segment', index: i })}
                         >
                           <Trash2 />
                         </Button>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div
+                        className="flex flex-wrap items-center gap-2"
+                        data-tour={first ? 'sum-seg-device' : undefined}
+                      >
                         <Select
                           items={deviceFallback ? [...deviceItems, deviceFallback] : deviceItems}
                           value={seg.deviceId}
@@ -554,22 +794,41 @@ export function SessionSummaryDialog({
             <div className="flex flex-col gap-2 border-t pt-3">
               <div className="flex items-center justify-between">
                 <Label>بوفه و سایر هزینه‌ها</Label>
-                <ExtraItemPicker settings={settings} onAdd={(item) => setDraft((d) => addExtraItem(d, item))} />
+                <span className="inline-flex" data-tour="sum-extra-add">
+                  <ExtraItemPicker settings={settings} onAdd={(item) => setDraft((d) => addExtraItem(d, item))} />
+                </span>
               </div>
               {extraItems.length === 0 ? (
-                <p className="text-xs text-muted-foreground">موردی ثبت نشده است.</p>
+                <p className="text-xs text-muted-foreground" data-tour="sum-extra-lines">
+                  موردی ثبت نشده است.
+                </p>
               ) : (
-                extraItems.map((i) => (
+                <div className="flex flex-col gap-2" data-tour="sum-extra-lines">
+                {extraItems.map((i, n) => (
                   <div key={i.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-medium">{i.name}</div>
                       {i.description && (
                         <div className="truncate text-xs text-muted-foreground">{i.description}</div>
                       )}
-                      <div className="text-xs text-muted-foreground">{formatNumber(i.price)} تومان × </div>
+                      {!i.catalogId ? (
+                        <div className="mt-1 flex items-center gap-2">
+                          <MoneyInput
+                            className="w-32"
+                            aria-label={`قیمت ${i.name}`}
+                            placeholder="0"
+                            value={i.price > 0 ? formatNumber(i.price) : ''}
+                            onChange={(e) => setOtherItemPrice(i.id, parseNumber(e.target.value))}
+                          />
+                          <span className="text-xs text-muted-foreground">تومان ×</span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">{formatNumber(i.price)} تومان × </div>
+                      )}
                     </div>
                     <CountInput
                       label="تعداد"
+                      tour={n === 0 ? 'sum-extra-qty' : undefined}
                       className="w-20"
                       value={i.qty}
                       onCommit={(qty) => setDraft((d) => setExtraItemQty(d, i.id, qty))}
@@ -579,37 +838,42 @@ export function SessionSummaryDialog({
                       variant="destructive"
                       size="icon-sm"
                       aria-label={`حذف ${i.name}`}
+                      data-tour={n === 0 ? 'sum-extra-delete' : undefined}
                       onClick={() => setPendingDelete({ kind: 'item', id: i.id, name: i.name })}
                     >
                       <Trash2 />
                     </Button>
                   </div>
-                ))
+                ))}
+                </div>
               )}
             </div>
 
             <div className="flex flex-col gap-2 border-t pt-3">
               <Label>پیش‌پرداخت</Label>
-              <div className="flex w-full items-center gap-2">
-                <MoneyInput
-                  className="flex-1"
-                  placeholder="مبلغ"
-                  value={parseNumber(prepayText) > 0 ? formatNumber(Math.floor(parseNumber(prepayText))) : prepayText}
-                  onChange={(e) => setPrepayText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addPrepay()}
-                />
-                <span className="shrink-0 text-sm text-muted-foreground">تومان</span>
-                <Button size="sm" variant="outline" onClick={addPrepay}>
-                  <Plus /> افزودن
-                </Button>
-              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="self-start"
+                data-tour="sum-prepay-add"
+                onClick={addPrepay}
+              >
+                <Plus /> افزودن
+              </Button>
               {draft.prepayEntries?.length ? (
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1" data-tour="sum-prepay-list">
                   {draft.prepayEntries.map((p) => (
                     <div key={p.id} className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
-                      <span className="font-medium" dir="ltr">
-                        {formatNumber(p.amount)} تومان
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <MoneyInput
+                          className="w-32"
+                          aria-label="مبلغ پیش‌پرداخت"
+                          placeholder="0"
+                          value={p.amount > 0 ? formatNumber(p.amount) : ''}
+                          onChange={(e) => setPrepayAmount(p.id, parseNumber(e.target.value))}
+                        />
+                        <span className="text-xs text-muted-foreground">تومان</span>
+                      </div>
                       <span className="text-xs text-muted-foreground">{formatClock(p.at)}</span>
                       <Button
                         variant="destructive"
@@ -624,11 +888,13 @@ export function SessionSummaryDialog({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">پیش‌پرداختی ثبت نشده است.</p>
+                <p className="text-xs text-muted-foreground" data-tour="sum-prepay-list">
+                  پیش‌پرداختی ثبت نشده است.
+                </p>
               )}
             </div>
 
-            <div className="flex flex-col gap-1.5 border-t pt-2">
+            <div className="flex flex-col gap-1.5 border-t pt-2" data-tour="sum-totals">
               <Row
                 label={costBreakdown.overrides.length ? 'هزینه زمان (نرخ معمول)' : 'جمع هزینه زمان'}
                 value={toman(costBreakdown.base)}
@@ -641,11 +907,14 @@ export function SessionSummaryDialog({
             </div>
 
             <div className="flex flex-col gap-1.5 border-t pt-2">
-                <div className="flex items-center justify-between gap-4 text-base font-bold">
+                <div
+                  className="flex items-center justify-between gap-4 text-base font-bold"
+                  data-tour="sum-final"
+                >
                   <Label htmlFor="final-total">مبلغ نهایی</Label>
                   <div className="flex items-center gap-2">
                     {draft.status === 'running' && (
-                      <Button onClick={pauseNow}>
+                      <Button data-tour="sum-settle" onClick={pauseNow}>
                         اتمام برای تسویه حساب
                       </Button>
                     )}
@@ -675,7 +944,7 @@ export function SessionSummaryDialog({
                   <span className="text-xs text-muted-foreground">مجموع محاسبه‌شده: {toman(total)}</span>
                 )}
 
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1.5" data-tour="sum-customer">
                   <Label htmlFor="end-customer">مشتری</Label>
                   <CustomerSelect
                     id="end-customer"
@@ -688,7 +957,7 @@ export function SessionSummaryDialog({
                   />
                 </div>
 
-                <div className="rounded-lg border bg-muted/30 p-2 text-sm">
+                <div className="rounded-lg border bg-muted/30 p-2 text-sm" data-tour="sum-settlement">
                   {!!pickedCustomer && walletBalance !== undefined && (
                     <Row
                       label="اعتبار فعلی مشتری"
@@ -716,7 +985,7 @@ export function SessionSummaryDialog({
 
                 {settlement.payableNow > 0 && (
                   <>
-                    <div className="flex items-center justify-between gap-4 pt-1">
+                    <div className="flex items-center justify-between gap-4 pt-1" data-tour="sum-paytype">
                       <span className="text-sm font-normal">نحوه‌ی تسویه‌ی باقی‌مانده</span>
                       <div className="flex gap-1.5" role="group" aria-label="نحوه‌ی پرداخت">
                         <Button
@@ -770,14 +1039,19 @@ export function SessionSummaryDialog({
           </div>
 
           <DialogFooter>
+            {hasValidationError && (
+              <span role="alert" className="me-auto text-sm text-destructive">
+                {firstValidationError}
+              </span>
+            )}
             <Button variant="outline" onClick={requestClose}>
               انصراف
             </Button>
-            <Button onClick={saveChanges}>
+            <Button data-tour="sum-save" disabled={!canSave} onClick={saveChanges}>
               ذخیره
             </Button>
             {draft.status !== 'running' && (
-              <Button disabled={!canConfirm} onClick={confirmEnd}>تایید و اتمام تایم</Button>
+              <Button data-tour="sum-confirm" disabled={!canFinish} onClick={confirmEnd}>تایید و اتمام تایم</Button>
             )}
           </DialogFooter>
         </DialogContent>
@@ -810,6 +1084,7 @@ export function SessionSummaryDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
     </>
   )
 }
