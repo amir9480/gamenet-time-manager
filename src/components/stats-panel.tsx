@@ -95,14 +95,17 @@ function Kpi({ label, value, extra }: { label: string; value: ReactNode; extra?:
 function ChartCard({
   title,
   empty,
+  tour,
   children,
 }: {
   title: string
   empty?: boolean
+  // `data-tour` name, for the guide of the history dialog.
+  tour?: string
   children: ReactNode
 }) {
   return (
-    <Card>
+    <Card data-tour={tour}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
@@ -131,7 +134,10 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
 
   if (entries.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+      <p
+        className="rounded-lg border border-dashed p-8 text-center text-muted-foreground"
+        data-tour="stats-kpis"
+      >
         در این بازه داده‌ای برای نمایش نیست.
       </p>
     )
@@ -159,7 +165,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4" data-tour="stats-kpis">
         <Kpi
           label="مجموع درآمد"
           value={toman(k.total)}
@@ -203,7 +209,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
         </div>
       </div>
 
-      <ChartCard title="درآمد روزانه" empty={daily.length === 0}>
+      <ChartCard title="درآمد روزانه" empty={daily.length === 0} tour="stats-daily">
         <ChartContainer config={dailyConfig} className="h-64 w-full">
           <BarChart data={daily}>
             <CartesianGrid vertical={false} />
@@ -226,7 +232,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
         </ChartContainer>
       </ChartCard>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2" data-tour="stats-hours">
         <ChartCard title="تایم‌ها در ساعات شبانه‌روز (بر اساس شروع)">
           <ChartContainer config={hourConfig} className="h-56 w-full">
             <BarChart data={hourly}>
@@ -271,7 +277,7 @@ export function StatsPanel({ entries, previousEntries, range }: Props) {
         </ChartCard>
       </div>
 
-      <ChartCard title="مشتریان برتر" empty={names.length === 0}>
+      <ChartCard title="مشتریان برتر" empty={names.length === 0} tour="stats-customers">
         <ChartContainer
           config={nameConfig}
           className="w-full"

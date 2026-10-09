@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { DriveStep } from 'driver.js'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ChevronLeft, ChevronRight, NotebookPen, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -26,12 +27,115 @@ import { HistoryDialog } from '@/components/history-dialog'
 import { CustomerDebtsDialog } from './customer-debts-dialog'
 import { customerFields } from '@/components/customer-select'
 import { Tip } from '@/components/tip'
+import { TourHelpButton } from '@/components/tour-help-button'
 import { buildIndex, searchIndex } from '@/lib/search'
 import { deleteCustomer, readCustomerSpend, readDebts } from '@/lib/db'
 import { formatNumber } from '@/lib/format'
 import type { Customer, Usage } from '@/lib/store'
+import {
+  isTourActive,
+  markTourSeen,
+  registerTour,
+  startTour,
+  tourSeen,
+  tourSel,
+  tourSkipped,
+  type TourDef,
+} from '@/lib/tour'
 
 const PAGE_SIZE = 8
+
+// Guide of this dialog (opens by itself the first time, or F1 / the «?» button). The row steps use
+// the first customer and are skipped when there is none. The steps point at the `data-tour`
+// attributes below, so keep the two in sync when the markup changes.
+export const customersTour: TourDef = {
+  id: 'customers',
+  present: tourSel('cust-search'),
+  priority: 85,
+  steps: (): DriveStep[] => [
+    {
+      element: tourSel('cust-search'),
+      waitForElement: 2000,
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'جستجوی مشتری',
+        description:
+          'مشتری را با نام یا شماره‌ی تماس پیدا کنید؛ جدیدترین مشتریان بالای فهرست‌اند.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('cust-debtors'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'بدهکاران',
+        description:
+          'فقط مشتریانی را نشان می‌دهد که بدهی (نسیه) پرداخت‌نشده دارند. تعداد آن‌ها کنار دکمه است و مجموع بدهی مشتریان بالای فهرست دیده می‌شود.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('cust-add'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'مشتری جدید',
+        description:
+          'نام و شماره‌ی تماس مشتری را ثبت کنید. هنگام شروع تایم هم می‌توانید همان‌جا مشتری جدید بسازید.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('cust-name'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'آمار مشتری',
+        description:
+          'با زدن روی نام مشتری، تاریخچه و آمار همین مشتری را به تفکیک روز، نوع دستگاه و نحوه‌ی پرداخت می‌بینید.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('cust-wallet'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'کیف پول: اعتبار و بدهی',
+        description:
+          'مانده‌ی حساب مشتری: عدد قرمز بدهی (نسیه) و عدد سبز اعتبار است. با زدن روی آن، تراکنش‌های مشتری را می‌بینید و می‌توانید پرداخت یا واریزی ثبت کنید.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('cust-edit'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'ویرایش',
+        description:
+          'نام یا شماره‌ی تماس مشتری را اصلاح کنید.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('cust-delete'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'حذف',
+        description:
+          'مشتری را حذف می‌کند. اگر مشتری در یک تایم فعال باشد یا بدهی پرداخت‌نشده داشته باشد، حذف ممکن نیست؛ تاریخچه‌ی قبلی او می‌ماند.',
+        side: 'top',
+      },
+    },
+  ],
+}
+
+registerTour(customersTour)
+
 
 type Props = {
   open: boolean
@@ -68,11 +172,24 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
   const current = Math.min(page, pages - 1)
   const shown = matches.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE)
 
+  // The first time the dialog opens, the guide starts by itself (unless guides were skipped).
+  useEffect(() => {
+    if (!open) return
+    const t = window.setTimeout(() => {
+      if (tourSkipped() || tourSeen('customers-seen') || isTourActive()) return
+      markTourSeen('customers-seen')
+      startTour(customersTour, () => {})
+    }, 500)
+    return () => window.clearTimeout(t)
+  }, [open])
+
   return (
     <>
       <Dialog
         open={open}
-        onOpenChange={(o) => {
+        onOpenChange={(o, details) => {
+          // The guide's popover lives outside the dialog; clicking it must not close the dialog.
+          if (!o && isTourActive() && details.reason === 'outside-press') return
           if (o) {
             setQ('')
             setPage(0)
@@ -82,14 +199,17 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
       >
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>مشتریان</DialogTitle>
+            <DialogTitle className="flex items-center gap-1">
+              مشتریان
+              <TourHelpButton tour="customers" />
+            </DialogTitle>
             <DialogDescription>
               مشتریان هنگام شروع تایم قابل انتخاب هستند (اختیاری) و در تاریخچه و آمار فیلتر می‌شوند.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative w-full sm:flex-1">
+            <div className="relative w-full sm:flex-1" data-tour="cust-search">
               <Search className="pointer-events-none absolute inset-s-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 aria-label="جستجوی مشتری"
@@ -106,6 +226,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
               className="w-full sm:w-auto"
               variant={debtorsOnly ? 'default' : 'outline'}
               aria-pressed={debtorsOnly}
+              data-tour="cust-debtors"
               disabled={debts === undefined}
               onClick={() => {
                 setDebtorsOnly(!debtorsOnly)
@@ -114,7 +235,12 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
             >
               <NotebookPen /> بدهکاران{debts ? ` (${formatNumber(debtors.length)})` : ''}
             </Button>
-            <Button className="w-full sm:w-auto" variant="outline" onClick={() => setAdding(true)}>
+            <Button
+              className="w-full sm:w-auto"
+              variant="outline"
+              data-tour="cust-add"
+              onClick={() => setAdding(true)}
+            >
               <Plus /> مشتری جدید
             </Button>
           </div>
@@ -139,7 +265,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                 <span>مانده کیف پول</span>
                 <span />
               </div>
-              {shown.map((c) => {
+              {shown.map((c, n) => {
                 const busy = usage.customerIds.has(c.id)
                 const indebted = balanceOf(c.id) < 0
                 return (
@@ -151,6 +277,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                       variant="ghost"
                       size="xs"
                       className="justify-start truncate px-1 text-sm"
+                      data-tour={n === 0 ? 'cust-name' : undefined}
                       onClick={() => setStatsFor(c)}
                     >
                       {c.name}
@@ -178,6 +305,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                                 variant="ghost"
                                 size="xs"
                                 className="justify-start px-1 text-muted-foreground"
+                                data-tour={n === 0 ? 'cust-wallet' : undefined}
                                 onClick={() => setDebtsFor(c)}
                               >
                                 0
@@ -190,6 +318,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                               variant="ghost"
                               size="xs"
                               className="justify-start px-1"
+                              data-tour={n === 0 ? 'cust-wallet' : undefined}
                               onClick={() => setDebtsFor(c)}
                             >
                               {info.balance < 0 ? (
@@ -214,6 +343,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                           variant="ghost"
                           size="icon"
                           aria-label="ویرایش"
+                          data-tour={n === 0 ? 'cust-edit' : undefined}
                           onClick={() => setEditing(c)}
                         >
                           <Pencil />
@@ -234,6 +364,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                             size="icon"
                             aria-label="حذف"
                             disabled={busy || indebted}
+                            data-tour={n === 0 ? 'cust-delete' : undefined}
                             onClick={() => setPendingDelete(c)}
                           >
                             <Trash2 />

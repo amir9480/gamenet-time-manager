@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { DriveStep } from 'driver.js'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,17 @@ import { MoneyInput } from '@/components/ui/money-input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { JalaliDatePicker } from '@/components/jalali-date-picker'
 import { useDiscardGuard } from '@/components/discard-dialog'
+import { TourHelpButton } from '@/components/tour-help-button'
+import {
+  isTourActive,
+  markTourSeen,
+  registerTour,
+  startTour,
+  tourSeen,
+  tourSel,
+  tourSkipped,
+  type TourDef,
+} from '@/lib/tour'
 import {
   addWalletTransaction,
   deleteWalletTransaction,
@@ -34,7 +45,7 @@ import {
   updateWalletTransaction,
 } from '@/lib/db'
 import { formatNumber, parseNumber } from '@/lib/format'
-import { endOfDay, formatJalaliDateTime, startOfDay } from '@/lib/jalali'
+import { endOfDay, formatJalaliDateTime, jalaliToDate, startOfDay } from '@/lib/jalali'
 import type { Customer, WalletTransaction } from '@/lib/store'
 
 const PAGE_SIZE = 12
@@ -48,6 +59,103 @@ const KIND_LABEL: Record<WalletTransaction['kind'], string> = {
   'manual-adjustment': 'اصلاح دستی',
 }
 
+// Guides of this dialog and of its «افزودن اعتبار» question (both open by themselves the first time,
+// or via F1 / the «?» button). The steps point at the `data-tour` attributes below, so keep the two
+// in sync when the markup changes.
+export const walletTour: TourDef = {
+  id: 'wallet',
+  present: tourSel('wal-totals'),
+  priority: 100,
+  steps: (): DriveStep[] => [
+    {
+      element: tourSel('wal-totals'),
+      waitForElement: 2000,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'جمع مخارج، اعتبارها و مانده',
+        description:
+          'جمع مخارج و جمع اعتبارهای مشتری و مانده‌ی کیف پول. مانده‌ی منفی (قرمز) یعنی مشتری بدهکار است و مانده‌ی مثبت (سبز) یعنی اعتبار دارد.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('wal-range'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'بازه‌ی تاریخ',
+        description:
+          'به‌طور پیش‌فرض همه‌ی تراکنش‌ها از ۱۴۰۰/۰۱/۰۱ تا امروز نشان داده می‌شوند. برای دیدن یک بازه‌ی مشخص، تاریخ شروع و پایان را تغییر دهید. مانده‌ی کیف پول همیشه کل تراکنش‌ها را در نظر می‌گیرد.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('wal-list'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'فهرست تراکنش‌ها',
+        description:
+          'هر خط یک تراکنش است: تاریخ، نوع (مثل بدهی تایم یا اعتبار باقی‌مانده) و مبلغ؛ مبلغ قرمز کاهش و سبز افزایش اعتبار است. اگر تراکنشی نباشد، این پیام خالی را می‌بینید.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('wal-row-actions'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'ویرایش و حذف اعتبار دستی',
+        description:
+          'اعتباری که دستی اضافه کرده‌اید تا ۲۴ ساعت بعد از ثبت قابل ویرایش یا حذف است؛ برای اصلاح اشتباه در مبلغ. تراکنش‌های دیگر قابل تغییر نیستند.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('wal-add'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'افزودن اعتبار',
+        description:
+          'اعتبار دستی به کیف پول مشتری اضافه کنید؛ برای پیش‌پرداخت یا برای صفر کردن بدهی او.',
+        side: 'top',
+      },
+    },
+  ],
+}
+
+export const walletCreditTour: TourDef = {
+  id: 'wallet-credit',
+  present: tourSel('wal-credit-amount'),
+  priority: 110,
+  steps: (): DriveStep[] => [
+    {
+      element: tourSel('wal-credit-amount'),
+      waitForElement: 2000,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'مبلغ اعتبار',
+        description:
+          'مبلغی که مشتری پرداخته را بنویسید. دو کاربرد دارد: ۱) پیش‌پرداخت: اعتبار در کیف پول می‌ماند و هنگام تسویه‌ی تایم‌های بعدی خودکار از آن کم می‌شود. ۲) تسویه‌ی بدهی: اگر مشتری بدهکار است، همین مبلغ از بدهی او کم می‌شود؛ با واردکردن کل بدهی، مانده‌ی او صفر می‌شود.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('wal-credit-submit'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'ثبت اعتبار',
+        description:
+          'مبلغ به کیف پول اضافه می‌شود و در فهرست تراکنش‌ها به‌صورت «اصلاح دستی» می‌آید.',
+        side: 'top',
+      },
+    },
+  ],
+}
+
+registerTour(walletTour)
+registerTour(walletCreditTour)
+
 export function CustomerDebtsDialog({
   customer,
   onClose,
@@ -55,8 +163,8 @@ export function CustomerDebtsDialog({
   customer: Customer
   onClose: () => void
 }) {
-  const [rangeOn, setRangeOn] = useState(false)
-  const [fromDay, setFromDay] = useState(startOfDay(Date.now()))
+  // Starts from the beginning of 1400/01/01 up to today, so everything shows until narrowed.
+  const [fromDay, setFromDay] = useState(() => startOfDay(jalaliToDate({ y: 1400, m: 1, d: 1 }).getTime()))
   const [toDay, setToDay] = useState(startOfDay(Date.now()))
   const [page, setPage] = useState(0)
   const [creditOpen, setCreditOpen] = useState(false)
@@ -68,11 +176,10 @@ export function CustomerDebtsDialog({
   const allRows = useLiveQuery(() => readCustomerWalletTransactions(customer.id), [customer.id])
   const rows = useMemo(() => {
     if (!allRows) return allRows
-    if (!rangeOn) return allRows
     const from = startOfDay(fromDay)
     const to = endOfDay(toDay)
     return allRows.filter((x) => x.at >= from && x.at <= to)
-  }, [allRows, rangeOn, fromDay, toDay])
+  }, [allRows, fromDay, toDay])
   const balance = useMemo(
     () => allRows?.reduce((sum, x) => sum + x.amount, 0),
     [allRows],
@@ -91,6 +198,18 @@ export function CustomerDebtsDialog({
     const debits = list.filter((x) => x.amount < 0).reduce((sum, x) => sum + Math.abs(x.amount), 0)
     return { credits, debits }
   }, [rows])
+
+  // Each guide starts by itself the first time its dialog appears (unless guides were skipped).
+  const autoStart = (flag: string, tour: TourDef) => {
+    const t = window.setTimeout(() => {
+      if (tourSkipped() || tourSeen(flag) || isTourActive()) return
+      markTourSeen(flag)
+      startTour(tour, () => {})
+    }, 500)
+    return () => window.clearTimeout(t)
+  }
+  useEffect(() => autoStart('wallet-seen', walletTour), [])
+  useEffect(() => (creditOpen ? autoStart('wallet-credit-seen', walletCreditTour) : undefined), [creditOpen])
 
   const creditAmount = Math.floor(parseNumber(creditText))
   const saveCredit = async () => {
@@ -114,6 +233,8 @@ export function CustomerDebtsDialog({
 
   const manualCreditEditable = (row: WalletTransaction) =>
     row.kind === 'manual-adjustment' && row.amount > 0 && Date.now() - row.at <= 24 * 60 * 60 * 1000
+  // The guide points at the first row whose credit can still be edited.
+  const firstEditableId = shown.find(manualCreditEditable)?.id
 
   const editingAmount = Math.floor(parseNumber(editingText))
   const saveEditing = async () => {
@@ -138,16 +259,26 @@ export function CustomerDebtsDialog({
 
   return (
     <>
-      <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <Dialog
+        open
+        onOpenChange={(o, details) => {
+          // The guide's popover lives outside the dialog; clicking it must not close the dialog.
+          if (!o && isTourActive() && details.reason === 'outside-press') return
+          if (!o) onClose()
+        }}
+      >
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>تراکنش‌های کیف پول {customer.name}</DialogTitle>
+          <DialogTitle className="flex items-center gap-1">
+            تراکنش‌های کیف پول {customer.name}
+            <TourHelpButton tour="wallet" />
+          </DialogTitle>
           <DialogDescription>
             مانده‌ی منفی یعنی بدهی و مانده‌ی مثبت یعنی اعتبار. این بخش فقط برای مشاهده است.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 gap-2 text-center text-sm sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 text-center text-sm sm:grid-cols-3" data-tour="wal-totals">
           <div className="rounded-lg border p-2">
             <div className="text-xs text-muted-foreground">جمع مخارج</div>
             {rows ? (
@@ -177,17 +308,7 @@ export function CustomerDebtsDialog({
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <Checkbox
-              checked={rangeOn}
-              onCheckedChange={(v) => {
-                setRangeOn(v === true)
-                setPage(0)
-              }}
-            />
-            اعمال بازه‌ی تاریخ
-          </Label>
+        <div className="grid gap-2 sm:grid-cols-2" data-tour="wal-range">
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">از تاریخ</Label>
             <JalaliDatePicker
@@ -219,10 +340,12 @@ export function CustomerDebtsDialog({
             ))}
           </div>
         ) : rows.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">تراکنشی ثبت نشده است.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground" data-tour="wal-list">
+            تراکنشی ثبت نشده است.
+          </p>
         ) : (
           <div className="flex flex-col gap-2">
-            <div className="flex flex-col divide-y rounded-lg border">
+            <div className="flex flex-col divide-y rounded-lg border" data-tour="wal-list">
               <div className="grid grid-cols-[9rem_1fr_8rem] gap-2 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                 <span>تاریخ</span>
                 <span>نوع</span>
@@ -239,6 +362,7 @@ export function CustomerDebtsDialog({
                     {manualCreditEditable(r) && (
                       <>
                         <Button
+                          data-tour={r.id === firstEditableId ? 'wal-row-actions' : undefined}
                           variant="ghost"
                           size="icon-sm"
                           aria-label="ویرایش اعتبار"
@@ -303,7 +427,7 @@ export function CustomerDebtsDialog({
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setCreditOpen(true)}>
+          <Button variant="outline" data-tour="wal-add" onClick={() => setCreditOpen(true)}>
             <Plus /> افزودن اعتبار
           </Button>
           <Button variant="outline" onClick={onClose}>
@@ -319,12 +443,15 @@ export function CustomerDebtsDialog({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>افزودن اعتبار</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-1">
+              افزودن اعتبار
+              <TourHelpButton tour="wallet-credit" />
+            </AlertDialogTitle>
             <AlertDialogDescription>
               مبلغی که ثبت می‌کنید به کیف پول مشتری اضافه می‌شود.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5" data-tour="wal-credit-amount">
             <Label htmlFor="wallet-credit">مبلغ اعتبار</Label>
             <div className="flex items-center gap-2">
               <MoneyInput
@@ -340,7 +467,7 @@ export function CustomerDebtsDialog({
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>انصراف</AlertDialogCancel>
-            <AlertDialogAction disabled={creditAmount <= 0} onClick={saveCredit}>
+            <AlertDialogAction data-tour="wal-credit-submit" disabled={creditAmount <= 0} onClick={saveCredit}>
               ثبت اعتبار
             </AlertDialogAction>
           </AlertDialogFooter>

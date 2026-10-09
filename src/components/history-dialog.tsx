@@ -1,4 +1,5 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import type { DriveStep } from 'driver.js'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ChevronDown, ChevronLeft, ChevronRight, Download, Trash2 } from 'lucide-react'
 import {
@@ -37,6 +38,7 @@ import {
 } from '@/components/ui/table'
 import { FilterCombobox } from '@/components/filter-combobox'
 import { StatsPanel } from '@/components/stats-panel'
+import { TourHelpButton } from '@/components/tour-help-button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { JalaliDatePicker } from '@/components/jalali-date-picker'
 import { db, deleteHistoryEntry } from '@/lib/db'
@@ -55,7 +57,191 @@ import {
   type Preset,
 } from '@/lib/jalali'
 import { historyDebt, segmentCost, segmentMs, type HistoryEntry } from '@/lib/store'
+import {
+  isTourActive,
+  markTourSeen,
+  registerTour,
+  startTour,
+  tourSeen,
+  tourSel,
+  tourSkipped,
+  type TourDef,
+} from '@/lib/tour'
 import { cn } from '@/lib/utils'
+
+const clickTab = (name: string) => (document.querySelector(tourSel(name)) as HTMLElement | null)?.click()
+
+// Guide of this dialog (opens by itself the first time, or F1 / the «?» button). It goes through the
+// filters, the history tab, then the statistics tab; steps whose target isn't there are skipped.
+// The steps point at the `data-tour` attributes below (and in stats-panel.tsx), so keep them in sync.
+export const historyTour: TourDef = {
+  id: 'history',
+  present: tourSel('hist-presets'),
+  priority: 95,
+  steps: (): DriveStep[] => [
+    {
+      element: tourSel('hist-presets'),
+      waitForElement: 2000,
+      disableActiveInteraction: true,
+      onHighlightStarted: () => clickTab('hist-tab-history'),
+      popover: {
+        title: 'بازه‌ی زمانی',
+        description:
+          'تایم‌های پایان‌یافته‌ی کدام روزها را می‌خواهید ببینید؟ یکی از بازه‌های آماده (امروز، دیروز، این هفته، این ماه یا همه) را بزنید. تاریخچه و آمار هر دو بر اساس همین بازه حساب می‌شوند.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('hist-dates'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'بازه‌ی دلخواه',
+        description: 'برای یک بازه‌ی دقیق، تاریخ شروع و پایان را به‌صورت شمسی انتخاب کنید. (با انتخاب «همه» این بخش لازم نیست.)',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('hist-export'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'خروجی گزارش',
+        description:
+          'تایم‌های فیلترشده را به‌صورت اکسل، CSV یا PDF (چاپ) ذخیره کنید. وقتی در این بازه تایمی نباشد، این دکمه غیرفعال است.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('hist-f-customer'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'فیلتر مشتری',
+        description: 'فقط تایم‌های یک مشتری یا تایم‌های بدون مشتری را ببینید. درآمد و آمار هم فقط برای همان انتخاب حساب می‌شود.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('hist-f-category'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'فیلتر نوع دستگاه',
+        description: 'فقط تایم‌های یک نوع دستگاه (مثلاً پلی‌استیشن) را نشان می‌دهد.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('hist-f-pay'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'فیلتر نحوه‌ی پرداخت',
+        description: 'بین تایم‌های پرداخت‌شده، تایم‌های بدهی (نسیه) یا هر دو جابه‌جا شوید.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('hist-tabs'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'تاریخچه و آمار',
+        description: 'با «تاریخچه» فهرست تایم‌ها به تفکیک روز را می‌بینید و با «آمار» نمودارها و شاخص‌های همان بازه را.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('hist-summary'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'خلاصه‌ی بازه',
+        description: 'تعداد تایم، مجموع زمان، درآمد زمان و بوفه، و مجموع درآمدِ تایم‌های فیلترشده.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('hist-list'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'فهرست تایم‌ها',
+        description:
+          'هر روز با جمع درآمدش آمده و زیر آن تایم‌های همان روز. روی هر تایم بزنید تا جزئیات (بازه‌ها، بوفه، پرداخت) باز شود یا با دکمه‌ی حذف از تاریخچه پاک شود. اگر تایمی نباشد، این پیام خالی را می‌بینید.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('hist-range-delete'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'حذف تاریخچه‌ی بازه',
+        description: 'همه‌ی تایم‌های فیلترشده را یک‌جا از تاریخچه پاک می‌کند (قبلش تأیید می‌گیرد).',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('hist-tab-stats'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'تب آمار',
+        description: 'حالا به آمار می‌رویم: با «بعدی» این تب باز می‌شود.',
+        side: 'bottom',
+        onNextClick: (_el, _step, { driver: d }) => {
+          clickTab('hist-tab-stats')
+          d.moveNext()
+        },
+      },
+    },
+    {
+      element: tourSel('stats-kpis'),
+      waitForElement: 1500,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'شاخص‌ها',
+        description:
+          'درآمد کل، تعداد تایم، میانگین درآمد و مدت هر تایم، پردرآمدترین روز و شلوغ‌ترین ساعت؛ با مقایسه نسبت به بازه‌ی قبلی. نوار پایین سهم زمان بازی و بوفه از درآمد را نشان می‌دهد.',
+        side: 'bottom',
+        onPrevClick: (_el, _step, { driver: d }) => {
+          clickTab('hist-tab-history')
+          d.movePrevious()
+        },
+      },
+    },
+    {
+      element: tourSel('stats-daily'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'درآمد روزانه',
+        description: 'نمودار درآمد هر روز، جدا شده به زمان بازی و بوفه. با نگه داشتن موس روی هر ستون، مبلغ دقیق را می‌بینید.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('stats-hours'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'ساعت‌ها و روزهای هفته',
+        description: 'نمودار اول نشان می‌دهد تایم‌ها بیشتر در چه ساعت‌هایی شروع می‌شوند و نمودار دوم درآمد هر روز هفته را.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('stats-customers'),
+      skipMissingElement: true,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'مشتریان برتر و نمودارهای بعدی',
+        description:
+          'پردرآمدترین مشتریان؛ و در ادامه‌ی همین صفحه سهم هر نوع دستگاه، درآمد دستگاه‌ها، نرخ‌های پرمصرف و فروش بوفه.',
+        side: 'top',
+      },
+    },
+  ],
+}
+
+registerTour(historyTour)
 
 type Props = {
   open: boolean
@@ -94,6 +280,17 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
   const [categoryFilter, setCategoryFilter] = useState('all')
   // 'all' | 'paid' | 'account' (نسیه): switches the list and the stats between both kinds.
   const [payFilter, setPayFilter] = useState('all')
+
+  // The first time the dialog opens, the guide starts by itself (unless guides were skipped).
+  useEffect(() => {
+    if (!open) return
+    const t = window.setTimeout(() => {
+      if (tourSkipped() || tourSeen('history-seen') || isTourActive()) return
+      markTourSeen('history-seen')
+      startTour(historyTour, () => {})
+    }, 500)
+    return () => window.clearTimeout(t)
+  }, [open])
 
   const rangeEntries = useLiveQuery(
     () => db.history.where('endedAt').between(range.from, range.to, true, true).reverse().toArray(),
@@ -193,11 +390,19 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o, details) => {
+        // The guide's popover lives outside the dialog; clicking it must not close the dialog.
+        if (!o && isTourActive() && details.reason === 'outside-press') return
+        onOpenChange(o)
+      }}
+    >
       <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle className="text-lg">
+          <DialogTitle className="flex items-center gap-1 text-lg">
             {fixedCustomer ? `آمار و تاریخچه‌ی ${fixedCustomer.name}` : 'تاریخچه تایم‌ها'}
+            <TourHelpButton tour="history" />
           </DialogTitle>
           <DialogDescription>
             {fixedCustomer
@@ -207,7 +412,7 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
         </DialogHeader>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2" data-tour="hist-presets">
             {PRESETS.map((p) => (
               <Button
                 key={p.id}
@@ -222,7 +427,9 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
           <div className="flex flex-col gap-2 sm:ms-auto sm:flex-row sm:flex-wrap sm:items-center">
             <DropdownMenu>
               <DropdownMenuTrigger
-                render={<Button size="sm" variant="outline" disabled={!entries?.length} />}
+                render={
+                  <Button size="sm" variant="outline" disabled={!entries?.length} data-tour="hist-export" />
+                }
               >
                 <Download /> خروجی گزارش
               </DropdownMenuTrigger>
@@ -235,7 +442,7 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
               </DropdownMenuContent>
             </DropdownMenu>
           {preset !== 'all' && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2" data-tour="hist-dates">
               <JalaliDatePicker
                 label="از"
                 value={startOfDay(range.from)}
@@ -253,7 +460,7 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
 
         <div className={cn('grid gap-3', fixedCustomer ? 'sm:grid-cols-2' : 'sm:grid-cols-3')}>
           {!fixedCustomer && (
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5" data-tour="hist-f-customer">
               <Label className="text-xs text-muted-foreground">مشتری</Label>
               <FilterCombobox
                 aria-label="فیلتر مشتری"
@@ -266,7 +473,7 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
               />
             </div>
           )}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5" data-tour="hist-f-category">
             <Label className="text-xs text-muted-foreground">نوع دستگاه</Label>
             <FilterCombobox
               aria-label="فیلتر نوع دستگاه"
@@ -278,7 +485,7 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
               }}
             />
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5" data-tour="hist-f-pay">
             <Label className="text-xs text-muted-foreground">نحوه‌ی پرداخت</Label>
             <FilterCombobox
               aria-label="فیلتر نحوه‌ی پرداخت"
@@ -293,13 +500,17 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
         </div>
 
         <Tabs defaultValue="history">
-          <TabsList>
-            <TabsTrigger value="history">تاریخچه</TabsTrigger>
-            <TabsTrigger value="stats">آمار</TabsTrigger>
+          <TabsList data-tour="hist-tabs">
+            <TabsTrigger value="history" data-tour="hist-tab-history">
+              تاریخچه
+            </TabsTrigger>
+            <TabsTrigger value="stats" data-tour="hist-tab-stats">
+              آمار
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="history" className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4" data-tour="hist-summary">
           <Stat label="تعداد تایم" value={toFa(formatNumber(summary.count))} />
           <Stat label="مجموع زمان" value={toFa(formatDuration(summary.durationMs))} ltr />
           <Stat label="درآمد زمان" value={toman(summary.timeCost)} />
@@ -311,11 +522,14 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
         </div>
 
         {entries === undefined ? null : groups.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+          <p
+            className="rounded-lg border border-dashed p-8 text-center text-muted-foreground"
+            data-tour="hist-list"
+          >
             تایمی با این مشخصات ثبت نشده است.
           </p>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3" data-tour="hist-list">
             <div className="flex flex-col gap-3 sm:hidden">
               {visible.map((g) => (
                 <div key={g.key} className="flex flex-col gap-2">
@@ -516,6 +730,7 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
                 variant="destructive"
                 size="sm"
                 className="w-full sm:w-auto"
+                data-tour="hist-range-delete"
                 onClick={() => setPending({ kind: 'range' })}
               >
                 <Trash2 /> حذف تاریخچه‌ی این بازه

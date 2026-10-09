@@ -1,3 +1,4 @@
+import type { DriveStep } from 'driver.js'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Check, Settings as SettingsIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +22,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TourHelpButton } from '@/components/tour-help-button'
+import {
+  isTourActive,
+  markTourSeen,
+  registerTour,
+  startTour,
+  tourSeen,
+  tourSel,
+  tourSkipped,
+  type TourDef,
+} from '@/lib/tour'
 import { useDiscardGuard } from '@/components/discard-dialog'
 import { DataTab } from '@/components/data-tab'
 import { SecuritySettings } from '@/components/security-settings'
@@ -79,6 +91,80 @@ type Draft = Settings & {
 }
 
 const isTauri = () => '__TAURI_INTERNALS__' in window
+
+// Guide of this dialog (opens by itself the first time, or F1 / the «?» button): only what each tab
+// is for; the details are explained next to each section. The steps point at the `data-tour`
+// attributes on the tabs below, so keep the two in sync when tabs are added, renamed or removed.
+export const settingsTour: TourDef = {
+  id: 'settings-dialog',
+  present: tourSel('settings-tab-general'),
+  priority: 80,
+  steps: (): DriveStep[] => [
+    {
+      element: tourSel('settings-tab-general'),
+      waitForElement: 2000,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'عمومی',
+        description:
+          'ظاهر و رفتار برنامه: تم و رنگ، عنوان و آیکن، اندازه‌ی رابط و نوشته‌ها، نحوه‌ی نمایش کارت‌ها، رند کردن مبلغ نهایی، افزایش سریع محدودیت و اجرای خودکار برنامه.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('settings-tab-rates'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'نرخ‌ها',
+        description:
+          'گروه‌های نرخ و قیمت ساعتی هر کدام (با یک قیمت پیش‌فرض)، و بازه‌های قیمت ویژه. هر دستگاه از این نرخ‌ها استفاده می‌کند.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('settings-tab-devices'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'دستگاه‌ها',
+        description:
+          'نوع دستگاه‌ها (مثل پی‌سی یا پلی‌استیشن) و خود دستگاه‌ها؛ هر دستگاه را به یک یا چند گروه نرخ وصل می‌کنید. می‌توانید چند دستگاه را یک‌جا بسازید.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('settings-tab-extras'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'بوفه و سایر هزینه‌ها',
+        description:
+          'دسته‌بندی‌ها و محصولات بوفه را با قیمتشان اضافه یا ویرایش کنید تا هنگام ثبت هزینه‌ی اضافه‌ی هر تایم قابل انتخاب باشند.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('settings-tab-security'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'امنیت',
+        description:
+          'قفل برنامه با رمز ۴ تا ۸ رقمی و زمان قفل خودکار هنگام بی‌کاری.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('settings-tab-data'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'داده‌ها',
+        description:
+          'پشتیبان‌گیری و بازیابی از فایل، پاک کردن تاریخچه، و بازگردانی کامل برنامه به حالت اول. این بخش فوراً اعمال می‌شود و جزو دکمه‌ی ذخیره نیست.',
+        side: 'bottom',
+      },
+    },
+  ],
+}
+
+registerTour(settingsTour)
 
 export function SettingsDialog({
   settings,
@@ -247,14 +333,27 @@ export function SettingsDialog({
     onOpenChange(false)
   }
 
+  // The first time the dialog opens, the guide starts by itself (unless guides were skipped).
+  useEffect(() => {
+    if (!open) return
+    const t = window.setTimeout(() => {
+      if (tourSkipped() || tourSeen('settings-seen') || isTourActive()) return
+      markTourSeen('settings-seen')
+      startTour(settingsTour, () => {})
+    }, 500)
+    return () => window.clearTimeout(t)
+  }, [open])
+
   const dot = (ok: boolean) => !ok && <span className="size-2 rounded-full bg-destructive" />
 
   return (
     <>
       <Dialog
         open={open}
-        onOpenChange={(o) => {
+        onOpenChange={(o, details) => {
           if (o) onOpenChange(true)
+          // The guide's popover lives outside the dialog; clicking it must not close the dialog.
+          else if (isTourActive() && details.reason === 'outside-press') return
           else requestClose()
         }}
       >
@@ -265,18 +364,21 @@ export function SettingsDialog({
         </Tip>
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>تنظیمات</DialogTitle>
+            <DialogTitle className="flex items-center gap-1">
+              تنظیمات
+              <TourHelpButton tour="settings-dialog" />
+            </DialogTitle>
             <DialogDescription>برای اعمال تغییرات، دکمه ذخیره را بزنید.</DialogDescription>
           </DialogHeader>
 
           <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className="gap-4">
             <TabsList className="w-full max-w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <TabsTrigger value="general" className="shrink-0">عمومی</TabsTrigger>
-              <TabsTrigger value="rates" className="shrink-0">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
-              <TabsTrigger value="devices" className="shrink-0">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
-              <TabsTrigger value="extras" className="shrink-0">بوفه و سایر هزینه‌ها {dot(extrasValid)}</TabsTrigger>
-              <TabsTrigger value="security" className="shrink-0">امنیت</TabsTrigger>
-              <TabsTrigger value="data" className="shrink-0">داده‌ها</TabsTrigger>
+              <TabsTrigger value="general" className="shrink-0" data-tour="settings-tab-general">عمومی</TabsTrigger>
+              <TabsTrigger value="rates" className="shrink-0" data-tour="settings-tab-rates">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
+              <TabsTrigger value="devices" className="shrink-0" data-tour="settings-tab-devices">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
+              <TabsTrigger value="extras" className="shrink-0" data-tour="settings-tab-extras">بوفه و سایر هزینه‌ها {dot(extrasValid)}</TabsTrigger>
+              <TabsTrigger value="security" className="shrink-0" data-tour="settings-tab-security">امنیت</TabsTrigger>
+              <TabsTrigger value="data" className="shrink-0" data-tour="settings-tab-data">داده‌ها</TabsTrigger>
             </TabsList>
 
             <TabsContent value="general" className="flex flex-col gap-4">
