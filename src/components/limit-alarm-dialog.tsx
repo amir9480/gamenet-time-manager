@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import type { DriveStep } from 'driver.js'
 import { AlarmClock, Pause, Plus, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,10 +14,21 @@ import {
 import { LimitDialog } from '@/components/limit-dialog'
 import { PinConfirmDialog } from '@/components/pin-confirm-dialog'
 import { useTheme } from '@/components/theme-provider'
+import { TourHelpButton } from '@/components/tour-help-button'
 import { ALARM_INTERVAL_MS, playAlarm } from '@/lib/alarm'
 import { alertLimitReached } from '@/lib/attention'
 import { readSessions, readSettings } from '@/lib/db'
 import { formatDuration, formatNumber } from '@/lib/format'
+import {
+  isTourActive,
+  markTourSeen,
+  registerTour,
+  startTour,
+  tourSeen,
+  tourSel,
+  tourSkipped,
+  type TourDef,
+} from '@/lib/tour'
 import { useNow } from '@/lib/use-now'
 import { useOverrideSplitter } from '@/lib/use-override-splitter'
 import {
@@ -33,6 +45,59 @@ import {
   type Session,
   type Settings,
 } from '@/lib/store'
+
+// Guide of this dialog (opens by itself the first time, or F1 / the «?» button). The steps point at
+// the `data-tour` attributes below, so keep the two in sync when the markup changes.
+export const limitAlarmTour: TourDef = {
+  id: 'limit-alarm',
+  present: tourSel('alarm-extend'),
+  priority: 50,
+  steps: (): DriveStep[] => [
+    {
+      element: tourSel('alarm-info'),
+      waitForElement: 2000,
+      disableActiveInteraction: true,
+      popover: {
+        title: 'محدودیت تمام شد',
+        description:
+          'یکی از محدودیت‌های زمانی یا هزینه‌ای یک تایم به پایان رسیده و هشدار می‌دهد. تا یکی از گزینه‌های زیر را انتخاب نکنید، این پنجره بسته نمی‌شود و تایم همچنان در حال اجراست. اگر چند محدودیت منتظر باشند، یکی‌یکی نشان داده می‌شوند.',
+        side: 'bottom',
+      },
+    },
+    {
+      element: tourSel('alarm-extend'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'افزایش سریع',
+        description:
+          'محدودیت را با یک کلیک به اندازه‌ی مقدار آماده افزایش می‌دهد (دقیقه برای محدودیت زمانی، تومان برای هزینه‌ای) و تایم ادامه پیدا می‌کند. این مقدارها را در تنظیمات > عمومی می‌توانید تغییر دهید.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('alarm-edit'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'ویرایش محدودیت',
+        description:
+          'اگر مقدار دلخواه دیگری می‌خواهید، پنجره‌ی محدودیت باز می‌شود تا مقدار جدید را وارد کنید یا محدودیت را کاملاً بردارید.',
+        side: 'top',
+      },
+    },
+    {
+      element: tourSel('alarm-stop'),
+      disableActiveInteraction: true,
+      popover: {
+        title: 'توقف تایم',
+        description:
+          'اگر مشتری بازی را تمام کرده یا باید منتظر بماند، تایم متوقف می‌شود و هزینه‌ای حساب نمی‌شود. بعداً از روی کارت می‌توانید آن را ادامه دهید یا پایان دهید.',
+        side: 'top',
+      },
+    },
+  ],
+}
+
+registerTour(limitAlarmTour)
 
 type Props = {
   sessions: Session[]
@@ -67,15 +132,26 @@ function AlarmBody({
   const costRemaining = remainingCost(session, now)
   const over = -((isCost ? costRemaining : timeRemaining) ?? 0)
 
+  // The first time a limit runs out, the guide starts by itself (unless guides were skipped).
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (tourSkipped() || tourSeen('limit-alarm-seen') || isTourActive()) return
+      markTourSeen('limit-alarm-seen')
+      startTour(limitAlarmTour, () => {})
+    }, 500)
+    return () => window.clearTimeout(t)
+  }, [])
+
   return (
     <>
-      <DialogHeader className="items-center text-center">
+      <DialogHeader className="items-center text-center" data-tour="alarm-info">
         <span className="flex size-14 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlarmClock className="size-8 animate-pulse" />
         </span>
         <DialogTitle className="text-lg">
           محدودیت {isCost ? 'هزینه' : 'زمانی'} {session.deviceName}
           {customer && <> ({customer.name})</>} تمام شد
+          <TourHelpButton tour="limit-alarm" />
         </DialogTitle>
         <DialogDescription>
           برای ادامه، محدودیت را افزایش دهید یا تایم را متوقف کنید.
@@ -99,6 +175,7 @@ function AlarmBody({
       <DialogFooter className="sm:flex-col sm:justify-stretch">
         <Button
           size="lg"
+          data-tour="alarm-extend"
           onClick={() =>
             onUpdate((s) =>
               isCost
@@ -111,12 +188,13 @@ function AlarmBody({
           {isCost ? `${formatNumber(quickExtend.cost)} تومان` : `${formatNumber(quickExtend.minutes)} دقیقه`}{' '}
           بیشتر
         </Button>
-        <Button size="lg" variant="outline" onClick={() => setEditOpen(true)}>
+        <Button size="lg" variant="outline" data-tour="alarm-edit" onClick={() => setEditOpen(true)}>
           <Pencil /> ویرایش محدودیت
         </Button>
         <Button
           size="lg"
           variant="destructive"
+          data-tour="alarm-stop"
           onClick={() => onUpdate((s) => pauseSession(s, Date.now()))}
         >
           <Pause /> توقف تایم
