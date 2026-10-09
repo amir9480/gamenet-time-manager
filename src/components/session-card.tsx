@@ -286,286 +286,257 @@ ${limitLines.join('\n')}` : ''
     </>
   )
 
-  if (compact) {
-    return (
-      <Card size="sm" className={cn(forgottenClass, limitClass)}>
-        <CardContent className="flex flex-col gap-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
+  const sm = compact ? 'sm' : undefined
+  const flexBtn = compact ? 'sm:flex-1' : 'flex-1'
+
+  const customerButton = (
+    <Tip label={compact ? (customer ? `مشتری: ${customer.name} (تغییر)` : 'انتخاب مشتری') : 'تغییر مشتری'}>
+      <Button
+        variant="ghost"
+        size={compact ? 'xs' : 'sm'}
+        className={compact ? 'max-w-28 shrink-0' : undefined}
+        aria-label="تغییر مشتری"
+        onClick={() => setCustomerOpen(true)}
+      >
+        <Pencil />
+        <span className={compact ? 'truncate' : undefined}>
+          {customer ? customer.name : compact ? 'مشتری' : 'مشتری مهمان'}
+        </span>
+      </Button>
+    </Tip>
+  )
+
+  const priceSelect = (
+    <PriceSelect
+      groups={groups}
+      value={type.id}
+      onChange={requestType}
+      overrides={settings.priceOverrides}
+      now={time}
+      extraItems={[{ value: SWITCH_DEVICE, label: 'تغییر دستگاه…' }]}
+      extra={<SelectItem value={SWITCH_DEVICE}>تغییر دستگاه…</SelectItem>}
+      trigger={
+        <Tip label="تغییر نرخ یا دستگاه">
+          <SelectTrigger
+            size={sm}
+            className={compact ? 'w-full text-xs max-md:data-[size=sm]:h-11' : 'w-auto min-w-44'}
+            aria-label="نرخ"
+          >
+            <SelectValue />
+          </SelectTrigger>
+        </Tip>
+      }
+    />
+  )
+
+  const timer = (
+    <Tip label={rangeTitle}>
+      <div>
+        <Timer ms={elapsedMs(session, time)} compact={compact} />
+      </div>
+    </Tip>
+  )
+
+  const backdateButton = (
+    <BackdateTimeDialog compact={compact} session={session} settings={settings} onAdd={addBackdated} />
+  )
+  const limitButton = compact ? (
+    <Tip label={limitTip}>
+      <Button
+        variant={exceeded ? 'destructive' : hasLimit ? 'secondary' : 'outline'}
+        size="icon-sm"
+        aria-label="محدودیت"
+        onClick={() => setLimitOpen(true)}
+      >
+        <AlarmClock />
+      </Button>
+    </Tip>
+  ) : (
+    <Tip label={limitTip}>
+      <Button variant="outline" onClick={() => setLimitOpen(true)}>
+        <AlarmClock /> {hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}
+      </Button>
+    </Tip>
+  )
+  const extraPicker = (
+    <ExtraItemPicker
+      compact={compact}
+      settings={settings}
+      onAdd={(item) => onUpdate((s) => addExtraItem(s, item))}
+    />
+  )
+
+  const actionButtons = running ? (
+    <Tip label="توقف موقت تایم">
+      <Button size={sm} className={flexBtn} onClick={pause}>
+        <Pause /> توقف
+      </Button>
+    </Tip>
+  ) : (
+    <>
+      <Tip label={reserved ? 'شروع تایم' : 'ادامه‌ی تایم'}>
+        <Button size={sm} className={flexBtn} onClick={resume}>
+          <Play /> {reserved ? 'شروع' : 'ادامه'}
+        </Button>
+      </Tip>
+      {reserved ? (
+        <Tip label="لغو رزرو">
+          <Button
+            size={sm}
+            variant="destructive"
+            className={flexBtn}
+            onClick={() => setCancelOpen(true)}
+          >
+            <X /> {compact ? 'لغو' : 'لغو رزرو'}
+          </Button>
+        </Tip>
+      ) : (
+        <Tip label="پایان تایم و مشاهده صورت‌حساب">
+          <Button size={sm} variant="destructive" className={flexBtn} onClick={openSummary}>
+            <Square /> اتمام
+          </Button>
+        </Tip>
+      )}
+    </>
+  )
+
+  return (
+    <Card size={sm} className={cn(forgottenClass, limitClass)}>
+      <CardContent className={cn('flex flex-col', compact ? 'gap-2.5' : 'gap-4')}>
+        <div
+          className={cn(
+            'flex items-center justify-between',
+            compact ? 'gap-2' : 'flex-wrap gap-4',
+          )}
+        >
+          <div
+            className={cn('flex items-center', compact ? 'min-w-0 gap-1.5' : 'flex-wrap gap-2')}
+          >
+            {compact && (
               <Tip label={statusLabel[statusKey]}>
                 <span
                   className={`size-2.5 shrink-0 rounded-full ${running ? 'animate-pulse bg-green-500' : reserved ? 'bg-amber-500' : 'bg-muted-foreground/50'}`}
                 />
               </Tip>
-              <Tip label={name}>
-                <span className="truncate text-base font-bold">{name}</span>
-              </Tip>
-              {session.categoryName && (
-                <Badge variant="outline" className="shrink-0">
-                  {session.categoryName}
-                </Badge>
-              )}
-            </div>
-            <Tip label={customer ? `مشتری: ${customer.name} (تغییر)` : 'انتخاب مشتری'}>
-              <Button
-                variant="ghost"
-                size="xs"
-                className="max-w-28 shrink-0"
-                aria-label="تغییر مشتری"
-                onClick={() => setCustomerOpen(true)}
-              >
-                <Pencil />
-                <span className="truncate">{customer ? customer.name : 'مشتری'}</span>
-              </Button>
-            </Tip>
-          </div>
-
-          {forgottenBadge && <div className="flex justify-center">{forgottenBadge}</div>}
-
-          <Tip label={rangeTitle}>
-            <div>
-              <Timer ms={elapsedMs(session, time)} compact />
-            </div>
-          </Tip>
-
-          <Tip label="مشاهده جزئیات هزینه">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={openSummary}
-              className="h-auto items-baseline justify-center gap-1.5 py-0.5 max-md:h-auto"
-            >
-              <span className="text-2xl font-bold" dir="ltr">
-                {displayTotal}
-              </span>
-              <span className="text-xs text-muted-foreground">تومان</span>
-            </Button>
-          </Tip>
-
-          <PriceSelect
-            groups={groups}
-            value={type.id}
-            onChange={requestType}
-            overrides={settings.priceOverrides}
-            now={time}
-            extraItems={[{ value: SWITCH_DEVICE, label: 'تغییر دستگاه…' }]}
-            extra={<SelectItem value={SWITCH_DEVICE}>تغییر دستگاه…</SelectItem>}
-            trigger={
-              <Tip label="تغییر نرخ یا دستگاه">
-                <SelectTrigger size="sm" className="w-full text-xs max-md:data-[size=sm]:h-11" aria-label="نرخ">
-                  <SelectValue />
-                </SelectTrigger>
-              </Tip>
-            }
-          />
-
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
-            <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-1">
-              {running ? (
-                <Tip label="توقف موقت تایم">
-                  <Button size="sm" className="sm:flex-1" onClick={pause}>
-                    <Pause /> توقف
-                  </Button>
-                </Tip>
-              ) : (
-                <>
-                  <Tip label={reserved ? 'شروع تایم' : 'ادامه‌ی تایم'}>
-                    <Button size="sm" className="sm:flex-1" onClick={resume}>
-                      <Play /> {reserved ? 'شروع' : 'ادامه'}
-                    </Button>
-                  </Tip>
-                  {reserved ? (
-                    <Tip label="لغو رزرو">
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="sm:flex-1"
-                        onClick={() => setCancelOpen(true)}
-                      >
-                        <X /> لغو
-                      </Button>
-                    </Tip>
-                  ) : (
-                    <Tip label="پایان تایم و مشاهده صورت‌حساب">
-                      <Button size="sm" variant="destructive" className="sm:flex-1" onClick={openSummary}>
-                        <Square /> اتمام
-                      </Button>
-                    </Tip>
-                  )}
-                </>
-              )}
-            </div>
-            <div className="flex items-center justify-end gap-1.5">
-              <Tip label={limitTip}>
-                <Button
-                  variant={exceeded ? 'destructive' : hasLimit ? 'secondary' : 'outline'}
-                  size="icon-sm"
-                  aria-label="محدودیت"
-                  onClick={() => setLimitOpen(true)}
-                >
-                  <AlarmClock />
-                </Button>
-              </Tip>
-              <BackdateTimeDialog compact session={session} settings={settings} onAdd={addBackdated} />
-              <ExtraItemPicker
-                compact
-                settings={settings}
-                onAdd={(item) => onUpdate((s) => addExtraItem(s, item))}
-              />
-            </div>
-          </div>
-
-          {session.extraItems.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {session.extraItems.length > 0 && (
-                <Tip label="مشاهده و تغییر بوفه و سایر هزینه‌ها">
-                  <Badge
-                    variant="secondary"
-                    className="h-auto cursor-pointer py-0.5 hover:bg-secondary/70"
-                    render={<button type="button" onClick={openSummary} />}
-                  >
-                    بوفه و سایر هزینه‌ها: {formatNumber(session.extraItems.reduce((n, i) => n + i.qty, 0))}
-                  </Badge>
-                </Tip>
-              )}
-            </div>
-          )}
-        </CardContent>
-        {dialogs}
-      </Card>
-    )
-  }
-
-  return (
-    <Card className={cn(forgottenClass, limitClass)}>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2">
+            )}
             <Tip label={name}>
-              <span className="truncate text-lg font-bold">{name}</span>
+              <span className={cn('truncate font-bold', compact ? 'text-base' : 'text-lg')}>
+                {name}
+              </span>
             </Tip>
-            {session.categoryName && <Badge variant="outline">{session.categoryName}</Badge>}
-            <PriceSelect
-              groups={groups}
-              value={type.id}
-              onChange={requestType}
-              overrides={settings.priceOverrides}
-              now={time}
-              extraItems={[{ value: SWITCH_DEVICE, label: 'تغییر دستگاه…' }]}
-              extra={<SelectItem value={SWITCH_DEVICE}>تغییر دستگاه…</SelectItem>}
-              trigger={
-                <Tip label="تغییر نرخ یا دستگاه">
-                  <SelectTrigger className="w-auto min-w-44" aria-label="نرخ">
-                    <SelectValue />
-                  </SelectTrigger>
-                </Tip>
-              }
-            />
-            <Badge variant={running ? 'default' : 'secondary'}>{statusLabel[statusKey]}</Badge>
-            {forgottenBadge}
-            <Tip label="تغییر مشتری">
+            {session.categoryName && (
+              <Badge variant="outline" className={compact ? 'shrink-0' : undefined}>
+                {session.categoryName}
+              </Badge>
+            )}
+            {!compact && (
+              <>
+                {priceSelect}
+                <Badge variant={running ? 'default' : 'secondary'}>{statusLabel[statusKey]}</Badge>
+                {forgottenBadge}
+                {customerButton}
+              </>
+            )}
+          </div>
+          {compact ? customerButton : timer}
+        </div>
+
+        {compact && (
+          <>
+            {forgottenBadge && <div className="flex justify-center">{forgottenBadge}</div>}
+            {timer}
+          </>
+        )}
+
+        {compact ? (
+          <>
+            <Tip label="مشاهده جزئیات هزینه">
               <Button
+                type="button"
                 variant="ghost"
-                size="sm"
-                aria-label="تغییر مشتری"
-                onClick={() => setCustomerOpen(true)}
+                onClick={openSummary}
+                className="h-auto items-baseline justify-center gap-1.5 py-0.5 max-md:h-auto"
               >
-                <Pencil /> {customer ? customer.name : 'مشتری مهمان'}
+                <span className="text-2xl font-bold" dir="ltr">
+                  {displayTotal}
+                </span>
+                <span className="text-xs text-muted-foreground">تومان</span>
               </Button>
             </Tip>
-          </div>
-
-          <Tip label={rangeTitle}>
-            <div>
-              <Timer ms={elapsedMs(session, time)} />
+            {priceSelect}
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+              <div className="flex flex-col gap-1.5 sm:flex-1 sm:flex-row">{actionButtons}</div>
+              <div className="flex items-center justify-end gap-1.5">
+                {limitButton}
+                {backdateButton}
+                {extraPicker}
+              </div>
             </div>
-          </Tip>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="flex flex-col gap-1.5">
-            <Label>زمان گذشته</Label>
-            <BackdateTimeDialog session={session} settings={settings} onAdd={addBackdated} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>محدودیت</Label>
-            <Tip label={limitTip}>
-              <Button variant="outline" onClick={() => setLimitOpen(true)}>
-                <AlarmClock /> {hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}
-              </Button>
-            </Tip>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>بوفه و سایر هزینه‌ها</Label>
-            <ExtraItemPicker
-              settings={settings}
-              onAdd={(item) => onUpdate((s) => addExtraItem(s, item))}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>مجموع هزینه تایم</Label>
-            <div className="flex items-center gap-2">
-              <Tip label="مشاهده جزئیات هزینه">
-                <Input
-                  readOnly
-                  dir="ltr"
-                  className="cursor-pointer font-bold"
-                  value={displayTotal}
-                  onClick={openSummary}
-                />
-              </Tip>
-              <span className="shrink-0 text-sm text-muted-foreground">تومان</span>
+          </>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex flex-col gap-1.5">
+              <Label>زمان گذشته</Label>
+              {backdateButton}
             </div>
-          </div>
-        </div>
-
-        {session.extraItems.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {session.extraItems.map((i) => (
-              <Tip key={i.id} label={i.description || 'تغییر'}>
-                <Badge
-                  variant="secondary"
-                  className="h-auto cursor-pointer py-1 hover:bg-secondary/70"
-                  render={<button type="button" onClick={openSummary} />}
-                >
-                  {i.name}
-                  {i.description ? ` (${i.description})` : ''} × {formatNumber(i.qty)} ={' '}
-                  {formatNumber(i.price * i.qty)}
-                </Badge>
-              </Tip>
-            ))}
+            <div className="flex flex-col gap-1.5">
+              <Label>محدودیت</Label>
+              {limitButton}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>بوفه و سایر هزینه‌ها</Label>
+              {extraPicker}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>مجموع هزینه تایم</Label>
+              <div className="flex items-center gap-2">
+                <Tip label="مشاهده جزئیات هزینه">
+                  <Input
+                    readOnly
+                    dir="ltr"
+                    className="cursor-pointer font-bold"
+                    value={displayTotal}
+                    onClick={openSummary}
+                  />
+                </Tip>
+                <span className="shrink-0 text-sm text-muted-foreground">تومان</span>
+              </div>
+            </div>
           </div>
         )}
-        <div className="flex flex-col gap-2 sm:flex-row">
-          {running ? (
-            <Tip label="توقف موقت تایم">
-              <Button className="flex-1" onClick={pause}>
-                <Pause /> توقف
-              </Button>
-            </Tip>
-          ) : (
-            <>
-              <Tip label={reserved ? 'شروع تایم' : 'ادامه‌ی تایم'}>
-                <Button className="flex-1" onClick={resume}>
-                  <Play /> {reserved ? 'شروع' : 'ادامه'}
-                </Button>
+
+        {session.extraItems.length > 0 &&
+          (compact ? (
+            <div className="flex flex-wrap justify-center gap-1.5">
+              <Tip label="مشاهده و تغییر بوفه و سایر هزینه‌ها">
+                <Badge
+                  variant="secondary"
+                  className="h-auto cursor-pointer py-0.5 hover:bg-secondary/70"
+                  render={<button type="button" onClick={openSummary} />}
+                >
+                  بوفه و سایر هزینه‌ها: {formatNumber(session.extraItems.reduce((n, i) => n + i.qty, 0))}
+                </Badge>
               </Tip>
-              {reserved ? (
-                <Tip label="لغو رزرو">
-                  <Button className="flex-1" variant="destructive" onClick={() => setCancelOpen(true)}>
-                    <X /> لغو رزرو
-                  </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {session.extraItems.map((i) => (
+                <Tip key={i.id} label={i.description || 'تغییر'}>
+                  <Badge
+                    variant="secondary"
+                    className="h-auto cursor-pointer py-1 hover:bg-secondary/70"
+                    render={<button type="button" onClick={openSummary} />}
+                  >
+                    {i.name}
+                    {i.description ? ` (${i.description})` : ''} × {formatNumber(i.qty)} ={' '}
+                    {formatNumber(i.price * i.qty)}
+                  </Badge>
                 </Tip>
-              ) : (
-                <Tip label="پایان تایم و مشاهده صورت‌حساب">
-                  <Button className="flex-1" variant="destructive" onClick={openSummary}>
-                    <Square /> اتمام
-                  </Button>
-                </Tip>
-              )}
-            </>
-          )}
-        </div>
+              ))}
+            </div>
+          ))}
+
+        {!compact && <div className="flex flex-col gap-2 sm:flex-row">{actionButtons}</div>}
       </CardContent>
       {dialogs}
     </Card>

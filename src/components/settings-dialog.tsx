@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Check, Settings as SettingsIcon } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { InstallDialog } from '@/components/install-dialog'
 import {
   Dialog,
   DialogContent,
@@ -108,6 +110,7 @@ export function SettingsDialog({
     setQuickExtend,
   } = useTheme()
   const [autostartSaved, setAutostartSaved] = useState(false)
+  const [installOpen, setInstallOpen] = useState(false)
   const [tab, setTab] = useState<SettingsTab>(initialTab)
 
   const saved: Draft = {
@@ -411,13 +414,13 @@ export function SettingsDialog({
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="round-step">رند کردن مبلغ نهایی</Label>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Select
                     items={ROUND_ITEMS}
                     value={draft.rounding.mode}
                     onValueChange={(m) => patch({ rounding: { ...draft.rounding, mode: m as RoundMode } })}
                   >
-                    <SelectTrigger className="w-36" aria-label="نوع رند کردن">
+                    <SelectTrigger className="w-full sm:flex-1" aria-label="نوع رند کردن">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -428,17 +431,19 @@ export function SettingsDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                  <div className="flex items-center gap-2 sm:flex-1">
                   <span className="text-sm text-muted-foreground">مضرب</span>
                   <MoneyInput
                     id="round-step"
                     aria-invalid={!roundingValid}
-                    className="w-32"
+                    className="min-w-0 flex-1"
                     value={draft.rounding.step > 0 ? formatNumber(draft.rounding.step) : ''}
                     onChange={(e) =>
                       patch({ rounding: { ...draft.rounding, step: parseNumber(e.target.value) } })
                     }
                   />
                   <span className="text-sm text-muted-foreground">تومان</span>
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   مبلغ نهایی هنگام اتمام تایم به این صورت گرد می‌شود (خودکار یا با دکمه‌ی «رند کردن»).
@@ -447,47 +452,60 @@ export function SettingsDialog({
 
               <div className="flex flex-col gap-1.5">
                 <Label>افزایش سریع محدودیت</Label>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex items-center gap-2 sm:flex-1">
                   <MinutesInput
                     id="quick-extend-minutes"
                     aria-invalid={draft.quickExtend.minutes <= 0}
                     aria-label="افزایش سریع محدودیت زمانی"
-                    className="w-32"
+                    className="min-w-0 flex-1"
                     value={draft.quickExtend.minutes > 0 ? String(draft.quickExtend.minutes) : ''}
                     onChange={(e) =>
                       patch({ quickExtend: { ...draft.quickExtend, minutes: parseNumber(e.target.value) } })
                     }
                   />
                   <span className="text-sm text-muted-foreground">دقیقه (محدودیت زمانی)</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
+                  </div>
+                  <div className="flex items-center gap-2 sm:flex-1">
                   <MoneyInput
                     id="quick-extend-cost"
                     aria-invalid={draft.quickExtend.cost <= 0}
                     aria-label="افزایش سریع محدودیت هزینه"
-                    className="w-32"
+                    className="min-w-0 flex-1"
                     value={draft.quickExtend.cost > 0 ? formatNumber(draft.quickExtend.cost) : ''}
                     onChange={(e) =>
                       patch({ quickExtend: { ...draft.quickExtend, cost: parseNumber(e.target.value) } })
                     }
                   />
                   <span className="text-sm text-muted-foreground">تومان (محدودیت هزینه)</span>
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   وقتی محدودیت یک تایم تمام شود، دکمه‌ی «کمی بیشتر» روی هشدار به همین اندازه به آن اضافه می‌کند.
                 </p>
               </div>
 
-              {isTauri() && (
-                <div className="flex items-center justify-between gap-4">
-                  <Label htmlFor="autostart-switch">اجرای خودکار با روشن شدن سیستم</Label>
-                  <Switch
-                    id="autostart-switch"
-                    checked={draft.autostart}
-                    onCheckedChange={(c) => patch({ autostart: c })}
-                  />
-                </div>
-              )}
+              <div className="flex items-center justify-between gap-4">
+                <Label htmlFor="autostart-switch" className="flex items-center gap-2">
+                  اجرای خودکار با روشن شدن سیستم
+                  {!isTauri() && (
+                    <Badge
+                      variant="secondary"
+                      className="cursor-pointer hover:bg-secondary/70"
+                      render={<button type="button" onClick={() => setInstallOpen(true)} />}
+                    >
+                      فقط ویندوز
+                    </Badge>
+                  )}
+                </Label>
+                <Switch
+                  id="autostart-switch"
+                  checked={isTauri() && draft.autostart}
+                  disabled={!isTauri()}
+                  onCheckedChange={(c) => patch({ autostart: c })}
+                />
+              </div>
+              <InstallDialog open={installOpen} onOpenChange={setInstallOpen} windowsOnly />
             </TabsContent>
 
             <TabsContent value="rates" className="flex flex-col gap-6">

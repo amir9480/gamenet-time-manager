@@ -9,6 +9,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NewCustomerDialog } from '@/components/new-customer-dialog'
@@ -39,6 +49,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
   const [debtsFor, setDebtsFor] = useState<Customer | null>(null)
   const [statsFor, setStatsFor] = useState<Customer | null>(null)
   const [debtorsOnly, setDebtorsOnly] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<Customer | null>(null)
 
   // Deferred: the list renders first, the totals fill in once the history has been summed
   // (undefined while loading; re-summed whenever history changes).
@@ -223,7 +234,7 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
                             size="icon"
                             aria-label="حذف"
                             disabled={busy || indebted}
-                            onClick={() => deleteCustomer(c.id)}
+                            onClick={() => setPendingDelete(c)}
                           >
                             <Trash2 />
                           </Button>
@@ -283,6 +294,28 @@ export function CustomersDialog({ open, onOpenChange, customers, usage }: Props)
           onOpenChange={(o) => !o && setEditing(null)}
         />
       )}
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(o) => !o && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف مشتری؟</AlertDialogTitle>
+            <AlertDialogDescription>«{pendingDelete?.name}» حذف می‌شود.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>انصراف</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (!pendingDelete) return
+                deleteCustomer(pendingDelete.id)
+                setPendingDelete(null)
+              }}
+            >
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

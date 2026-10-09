@@ -11,7 +11,7 @@ export type DeviceSample = {
 }
 
 export const DEVICE_SAMPLES: DeviceSample[] = [
-  { id: 'pc', name: 'پی‌سی', prefix: 'پی‌سی', priceNames: ['اقتصادی', 'گیمینگ'], checked: true },
+  { id: 'pc', name: 'پی‌سی', prefix: 'پی‌سی', priceNames: ['اقتصادی', 'گیمینگ', 'آنلاین'], checked: true },
   { id: 'ps3', name: 'پلی‌استیشن 3', prefix: 'پلی‌استیشن 3 شماره', priceNames: ['یک دسته', 'دو دسته', 'سه دسته', 'چهار دسته'], checked: false },
   { id: 'ps4', name: 'پلی‌استیشن 4', prefix: 'پلی‌استیشن 4 شماره', priceNames: ['یک دسته', 'دو دسته', 'سه دسته', 'چهار دسته'], checked: true },
   { id: 'ps5', name: 'پلی‌استیشن 5', prefix: 'پلی‌استیشن 5 شماره', priceNames: ['یک دسته', 'دو دسته', 'سه دسته', 'چهار دسته'], checked: true },
@@ -41,7 +41,6 @@ export const EXTRA_SAMPLES: ExtraSample[] = [
       'پفک',
       'کیک',
       'بیسکویت',
-      'ساندویچ',
     ],
   },
   {
@@ -50,9 +49,8 @@ export const EXTRA_SAMPLES: ExtraSample[] = [
     checked: true,
     items: [
       'نوشابه',
+      'لیموناد',
       'آب معدنی',
-      'دوغ',
-      'آبمیوه',
       'نوشیدنی انرژی‌زا',
     ],
   },

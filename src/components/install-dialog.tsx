@@ -11,10 +11,15 @@ import {
 import { promptInstall, useInstall } from '@/lib/install'
 import { fetchLatestRelease, RELEASES_URL, type ReleaseInfo } from '@/lib/release'
 
-type Props = { open: boolean; onOpenChange: (open: boolean) => void }
+type Props = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  // Hides the PWA option (opened from a Windows-only feature such as autostart).
+  windowsOnly?: boolean
+}
 
 // Web version only: install it as a PWA, or download the Windows desktop app from GitHub releases.
-export function InstallDialog({ open, onOpenChange }: Props) {
+export function InstallDialog({ open, onOpenChange, windowsOnly }: Props) {
   const { canPrompt } = useInstall()
   const [release, setRelease] = useState<ReleaseInfo | null>(null)
 
@@ -33,6 +38,7 @@ export function InstallDialog({ open, onOpenChange }: Props) {
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
+          {!windowsOnly && (
           <div className="flex flex-col gap-2 rounded-lg border p-3">
             <b className="flex items-center gap-2">
               <Globe className="size-4" /> نسخه‌ی وب (PWA)
@@ -59,14 +65,18 @@ export function InstallDialog({ open, onOpenChange }: Props) {
               </p>
             )}
           </div>
+          )}
 
           <div className="flex flex-col gap-2 rounded-lg border p-3">
             <b className="flex items-center gap-2">
               <Monitor className="size-4" /> نسخه‌ی ویندوز (exe)
             </b>
             <p className="text-sm text-muted-foreground">
-              نصب‌کننده‌ی ویندوز از صفحه‌ی انتشارهای گیت‌هاب دانلود می‌شود. داده‌های نسخه‌ی وب و
+              . اطلاعات نسخه‌ی وب و
               ویندوز جدا هستند؛ با پشتیبان‌گیری منتقل کنید.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              نسخه ویندوز قابلیت اجرای برنامه به محض راه اندازی سیستم را دارد.
             </p>
             <Button
               variant="outline"

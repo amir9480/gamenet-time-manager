@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { MoneyInput } from '@/components/ui/money-input'
+import { Tip } from '@/components/tip'
 import { OnboardingItemDialog } from '@/components/onboarding-item-dialog'
 import { useTheme } from '@/components/theme-provider'
 import { formatNumber, parseNumber } from '@/lib/format'
@@ -241,26 +242,32 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                             }
                           />
                         </Money>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="حذف نرخ"
-                          disabled={c.prices.length <= 1}
-                          onClick={() => setPrices((ps) => ps.filter((x) => x.id !== p.id))}
+                        <Tip
+                          label={`چنانچه ${d.name} با قیمت ${p.name.trim() || 'این نرخ'} ندارید حذف کنید`}
                         >
-                          <Trash2 />
-                        </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="حذف نرخ"
+                            disabled={c.prices.length <= 1}
+                            onClick={() => setPrices((ps) => ps.filter((x) => x.id !== p.id))}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </Tip>
                       </div>
                     ))}
-                    <Button
-                      size="sm"
-                      className="self-start"
-                      onClick={() =>
-                        setPrices((ps) => [...ps, { id: uid(), name: '', price: DEFAULT_HOURLY_PRICE }])
-                      }
-                    >
-                      <Plus /> افزودن نرخ
-                    </Button>
+                    <Tip label={`افزودن نرخ جدید برای ${d.name}`}>
+                      <Button
+                        size="sm"
+                        className="self-start"
+                        onClick={() =>
+                          setPrices((ps) => [...ps, { id: uid(), name: '', price: DEFAULT_HOURLY_PRICE }])
+                        }
+                      >
+                        <Plus /> افزودن نرخ
+                      </Button>
+                    </Tip>
                   </div>
                 )
               })}
@@ -278,9 +285,11 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                 <div key={e.id} className={cn(cardCls(false), 'flex flex-col gap-2')}>
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-bold">{e.name}</h3>
-                    <Button size="sm" onClick={() => setAddFor(e)}>
-                      <Plus /> افزودن مورد
-                    </Button>
+                    <Tip label={`یک مورد جدید به لیست ${e.name} اضافه کنید`}>
+                      <Button size="sm" onClick={() => setAddFor(e)}>
+                        <Plus /> افزودن مورد
+                      </Button>
+                    </Tip>
                   </div>
                   {choice.items[e.id].length === 0 && (
                     <p className="text-xs text-muted-foreground">موردی در این دسته نیست.</p>
@@ -306,14 +315,16 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                           }
                         />
                       </Money>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`حذف ${i.name}`}
-                        onClick={() => setItems(e.id, (items) => items.filter((x) => x.id !== i.id))}
-                      >
-                        <Trash2 />
-                      </Button>
+                      <Tip label={`چنانچه ${i.name} برای فروش ندارید حذف کنید`}>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`حذف ${i.name}`}
+                          onClick={() => setItems(e.id, (items) => items.filter((x) => x.id !== i.id))}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </Tip>
                     </div>
                   ))}
                 </div>
