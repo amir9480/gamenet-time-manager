@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2, Upload } from 'lucide-react'
+import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -128,7 +129,7 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                 <h3 className="font-bold">چه دستگاه‌هایی دارید؟</h3>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {DEVICE_SAMPLES.map((d) => (
-                    <label
+                    <Label
                       key={d.id}
                       className={cn(
                         cardCls(choice.devices[d.id].checked),
@@ -140,7 +141,7 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                         onCheckedChange={(v) => setDevice(d.id, { checked: v })}
                       />
                       <span className="font-medium">{d.name}</span>
-                    </label>
+                    </Label>
                   ))}
                 </div>
               </section>
@@ -149,7 +150,7 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                 <h3 className="font-bold">چه چیزهایی می‌فروشید؟</h3>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {EXTRA_SAMPLES.map((e) => (
-                    <label
+                    <Label
                       key={e.id}
                       className={cn(cardCls(choice.extras[e.id]), 'flex cursor-pointer items-start gap-2')}
                     >
@@ -166,7 +167,7 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                           {e.items.join('، ')}
                         </span>
                       </span>
-                    </label>
+                    </Label>
                   ))}
                 </div>
               </section>

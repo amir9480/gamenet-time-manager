@@ -53,7 +53,7 @@ function RateGroupPicker({
   return (
     <div className="flex flex-col gap-1.5">
       {groups.map((g) => (
-        <label key={g.id} className="flex cursor-pointer items-start gap-2 rounded-lg border p-2">
+        <Label key={g.id} className="flex cursor-pointer items-start gap-2 rounded-lg border p-2">
           <Checkbox
             className="mt-0.5"
             checked={value.includes(g.id)}
@@ -65,7 +65,7 @@ function RateGroupPicker({
               {g.prices.map((p) => `${p.name} (${formatNumber(p.price)})`).join('، ')}
             </span>
           </span>
-        </label>
+        </Label>
       ))}
     </div>
   )

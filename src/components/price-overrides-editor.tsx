@@ -181,7 +181,7 @@ export function PriceOverridesEditor({ overrides, groups, onChange }: Props) {
                 const onlyOne = checked && o.weekdays.length <= 1
                 return (
                   <Tip key={value} label={onlyOne ? 'حداقل یک روز لازم است' : name}>
-                    <label className="flex items-center gap-1.5 text-sm">
+                    <Label className="flex items-center gap-1.5 text-sm">
                       <Checkbox
                         disabled={onlyOne}
                         checked={checked}
@@ -196,7 +196,7 @@ export function PriceOverridesEditor({ overrides, groups, onChange }: Props) {
                         }
                       />
                       {name}
-                    </label>
+                    </Label>
                   </Tip>
                 )
               })}

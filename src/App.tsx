@@ -333,14 +333,16 @@ function Main() {
                     onChange={(e) => setQuery(e.target.value)}
                   />
                   {query && (
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon-xs"
                       aria-label="پاک کردن جستجو"
-                      className="absolute end-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      className="absolute end-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                       onClick={() => setQuery('')}
                     >
                       <X className="size-3.5" />
-                    </button>
+                    </Button>
                   )}
                 </div>
                 <div role="radiogroup" aria-label="نحوه‌ی نمایش" className="flex items-center gap-1">

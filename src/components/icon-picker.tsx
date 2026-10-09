@@ -90,8 +90,9 @@ export function IconPicker({ value, onChange }: Props) {
                 const active = value.kind === 'lucide' && value.name === name
                 return (
                   <Tip key={name} label={name}>
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       aria-label={name}
                       aria-pressed={active}
                       onClick={() => {
@@ -100,7 +101,7 @@ export function IconPicker({ value, onChange }: Props) {
                         setOpen(false)
                       }}
                       className={cn(
-                        'flex aspect-square items-center justify-center rounded-md hover:bg-muted',
+                        'aspect-square size-auto rounded-md p-0 max-md:size-auto',
                         active && 'bg-primary/10 text-primary ring-1 ring-primary',
                       )}
                     >
@@ -109,7 +110,7 @@ export function IconPicker({ value, onChange }: Props) {
                         className="size-5"
                         fallback={() => <span className="size-5" />}
                       />
-                    </button>
+                    </Button>
                   </Tip>
                 )
               })}
@@ -125,7 +126,7 @@ export function IconPicker({ value, onChange }: Props) {
         <Button variant="outline" onClick={() => fileRef.current?.click()}>
           <Upload /> آیکن دلخواه
         </Button>
-        <input
+        <Input
           ref={fileRef}
           type="file"
           accept="image/*"

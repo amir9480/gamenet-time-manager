@@ -111,7 +111,7 @@ export function RadioCard({
   children: ReactNode
 }) {
   return (
-    <label
+    <Label
       className={cn(
         'flex items-center gap-2.5 rounded-lg border p-3 transition-colors',
         disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-muted/50',
@@ -120,7 +120,7 @@ export function RadioCard({
     >
       <RadioGroupItem value={value} disabled={disabled} />
       {children}
-    </label>
+    </Label>
   )
 }
 
@@ -573,13 +573,13 @@ export function AddSessionDialog({
                   onChange={(e) => setPrepay(e.target.value)}
                 />
                 {prepayLimitEnabled && (
-                  <label className="flex items-center gap-2 text-sm">
+                  <Label className="flex items-center gap-2 text-sm">
                     <Checkbox
                       checked={prepaySetsLimit}
                       onCheckedChange={(v) => setPrepaySetsLimit(v === true)}
                     />
                     تنظیم خودکار محدودیت هزینه بر اساس پیش‌پرداخت
-                  </label>
+                  </Label>
                 )}
               </div>
             </div>

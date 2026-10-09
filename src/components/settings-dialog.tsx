@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { MoneyInput } from '@/components/ui/money-input'
 import { Tip } from '@/components/tip'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDiscardGuard } from '@/components/discard-dialog'
@@ -25,7 +26,7 @@ import { DevicesEditor } from '@/components/devices-editor'
 import { ExtraItemsEditor } from '@/components/extra-items-editor'
 import { PriceOverridesEditor } from '@/components/price-overrides-editor'
 import { RateGroupsEditor } from '@/components/rate-groups-editor'
-import { DEFAULT_TITLE, useTheme, type Theme } from '@/components/theme-provider'
+import { DEFAULT_TITLE, SCALE_MAX, SCALE_MIN, useTheme, type Theme } from '@/components/theme-provider'
 import { ACCENTS, type Accent } from '@/lib/accents'
 import type { AppIconValue } from '@/lib/app-icon'
 import { formatNumber, parseNumber } from '@/lib/format'
@@ -69,6 +70,8 @@ type Draft = Settings & {
   title: string
   icon: AppIconValue
   grouping: boolean
+  uiScale: number
+  fontScale: number
   rounding: Rounding
   quickExtend: QuickExtend
 }
@@ -92,8 +95,13 @@ export function SettingsDialog({
     setTitle,
     icon,
     setIcon,
+    setPreview,
     grouping,
     setGrouping,
+    uiScale,
+    setUiScale,
+    fontScale,
+    setFontScale,
     rounding,
     setRounding,
     quickExtend,
@@ -110,6 +118,8 @@ export function SettingsDialog({
     title,
     icon,
     grouping,
+    uiScale,
+    fontScale,
     rounding,
     quickExtend,
   }
@@ -141,6 +151,21 @@ export function SettingsDialog({
     // Only when the dialog opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  // Theme, accent and scales preview live; closing (save or cancel) drops the preview.
+  useEffect(() => {
+    if (!open) {
+      setPreview(null)
+      return
+    }
+    setPreview({
+      theme: draft.theme,
+      accent: draft.accent,
+      uiScale: draft.uiScale,
+      fontScale: draft.fontScale,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, draft.theme, draft.accent, draft.uiScale, draft.fontScale])
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
 
@@ -202,6 +227,8 @@ export function SettingsDialog({
     setTitle(draft.title.trim() || DEFAULT_TITLE)
     setIcon(draft.icon)
     setGrouping(draft.grouping)
+    setUiScale(draft.uiScale)
+    setFontScale(draft.fontScale)
     setRounding(draft.rounding)
     setQuickExtend(draft.quickExtend)
     if (isTauri() && draft.autostart !== autostartSaved) {
@@ -240,7 +267,7 @@ export function SettingsDialog({
           </DialogHeader>
 
           <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className="gap-4">
-            <TabsList className="w-full max-w-full justify-start">
+            <TabsList className="w-full max-w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <TabsTrigger value="general" className="shrink-0">عمومی</TabsTrigger>
               <TabsTrigger value="rates" className="shrink-0">نرخ‌ها {dot(ratesValid)}</TabsTrigger>
               <TabsTrigger value="devices" className="shrink-0">دستگاه‌ها {dot(devicesValid)}</TabsTrigger>
@@ -291,23 +318,72 @@ export function SettingsDialog({
                 <div className="flex flex-wrap gap-2">
                   {ACCENTS.map((a) => (
                     <Tip key={a.id} label={a.label}>
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="icon"
                         aria-label={a.label}
                         aria-pressed={draft.accent === a.id}
                         onClick={() => patch({ accent: a.id })}
                         className={cn(
-                          'flex size-8 items-center justify-center rounded-full text-white ring-offset-2 ring-offset-popover transition',
+                          'size-8 rounded-full text-white hover:text-white max-md:size-8 ring-offset-2 ring-offset-popover transition',
                           draft.accent === a.id ? 'ring-2 ring-foreground' : 'hover:scale-110',
                         )}
                         style={{ backgroundColor: a.swatch }}
                       >
                         {draft.accent === a.id && <Check className="size-4" />}
-                      </button>
+                      </Button>
                     </Tip>
                   ))}
                 </div>
               </div>
+
+              {(
+                [
+                  {
+                    key: 'uiScale',
+                    id: 'ui-scale',
+                    label: 'مقیاس رابط کاربری',
+                    hint: 'اندازه‌ی همه‌ی اجزای برنامه (متن، دکمه‌ها و فاصله‌ها) را با هم کوچک یا بزرگ می‌کند؛ برای مانیتورهای مختلف مناسب است.',
+                  },
+                  {
+                    key: 'fontScale',
+                    id: 'font-scale',
+                    label: 'اندازه‌ی متن',
+                    hint: 'فقط اندازه‌ی نوشته‌ها را کم یا زیاد می‌کند و بقیه‌ی اجزا را تغییر نمی‌دهد.',
+                  },
+                ] as const
+              ).map((s) => (
+                <div key={s.key} className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between gap-4">
+                    <Label htmlFor={s.id}>{s.label}</Label>
+                    <div className="flex items-center gap-2">
+                      <span dir="ltr" className="w-12 text-end text-sm tabular-nums">
+                        {draft[s.key]}%
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={draft[s.key] === 100}
+                        onClick={() => patch({ [s.key]: 100 })}
+                      >
+                        بازنشانی
+                      </Button>
+                    </div>
+                  </div>
+                  <Slider
+                    id={s.id}
+                    dir="ltr"
+                    min={SCALE_MIN}
+                    max={SCALE_MAX}
+                    step={5}
+                    value={[draft[s.key]]}
+                    onValueChange={(v) => patch({ [s.key]: Array.isArray(v) ? v[0] : v })}
+                  />
+                  <p className="text-xs text-muted-foreground">{s.hint}</p>
+                </div>
+              ))}
 
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between gap-4">

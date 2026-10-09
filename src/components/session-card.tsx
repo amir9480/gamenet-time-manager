@@ -329,16 +329,17 @@ ${limitLines.join('\n')}` : ''
           </Tip>
 
           <Tip label="مشاهده جزئیات هزینه">
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={openSummary}
-              className="flex items-baseline justify-center gap-1.5 rounded-md py-0.5 hover:bg-muted"
+              className="h-auto items-baseline justify-center gap-1.5 py-0.5 max-md:h-auto"
             >
               <span className="text-2xl font-bold" dir="ltr">
                 {displayTotal}
               </span>
               <span className="text-xs text-muted-foreground">تومان</span>
-            </button>
+            </Button>
           </Tip>
 
           <PriceSelect

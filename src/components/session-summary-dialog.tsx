@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { MoneyInput } from '@/components/ui/money-input'
 import {
   Select,
@@ -641,7 +642,7 @@ export function SessionSummaryDialog({
 
             <div className="flex flex-col gap-1.5 border-t pt-2">
                 <div className="flex items-center justify-between gap-4 text-base font-bold">
-                  <label htmlFor="final-total">مبلغ نهایی</label>
+                  <Label htmlFor="final-total">مبلغ نهایی</Label>
                   <div className="flex items-center gap-2">
                     {draft.status === 'running' && (
                       <Button onClick={pauseNow}>
@@ -756,14 +757,13 @@ export function SessionSummaryDialog({
                       باید مبلغ را به مشتری برگردانید یا پیش از اتمام، یک مشتری انتخاب کنید تا مبلغ به
                       اعتبار او اضافه شود.
                     </p>
-                    <label className="mt-2 flex items-center gap-2">
-                      <input
-                        type="checkbox"
+                    <Label className="mt-2 flex items-center gap-2">
+                      <Checkbox
                         checked={guestChargebackDone}
-                        onChange={(e) => setGuestChargebackDone(e.target.checked)}
+                        onCheckedChange={(v) => setGuestChargebackDone(v === true)}
                       />
                       برگشت مبلغ انجام شد
-                    </label>
+                    </Label>
                   </div>
                 )}
             </div>

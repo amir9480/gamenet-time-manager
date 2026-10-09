@@ -178,7 +178,7 @@ export function CustomerDebtsDialog({
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2">
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+          <Label className="flex items-center gap-2 text-sm sm:col-span-2">
             <Checkbox
               checked={rangeOn}
               onCheckedChange={(v) => {
@@ -187,7 +187,7 @@ export function CustomerDebtsDialog({
               }}
             />
             اعمال بازه‌ی تاریخ
-          </label>
+          </Label>
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">از تاریخ</Label>
             <JalaliDatePicker

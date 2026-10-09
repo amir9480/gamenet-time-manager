@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Accent } from '@/lib/accents'
 import { DEFAULT_ICON, type AppIconValue } from '@/lib/app-icon'
 import {
@@ -11,9 +11,18 @@ import {
 
 export type Theme = 'light' | 'dark'
 
+// Unsaved look settings shown live while Settings is open; cleared when it closes.
+export type LookPreview = { theme: Theme; accent: Accent; uiScale: number; fontScale: number }
+
 export type ViewMode = 'detailed' | 'compact'
 
 export const DEFAULT_TITLE = 'نرم افزار مدیریت زمان گیم نت'
+
+export const SCALE_MIN = 70
+export const SCALE_MAX = 200
+
+const clampScale = (n: unknown) =>
+  typeof n === 'number' && Number.isFinite(n) ? Math.min(SCALE_MAX, Math.max(SCALE_MIN, n)) : 100
 
 const ThemeContext = createContext<{
   theme: Theme
@@ -26,12 +35,18 @@ const ThemeContext = createContext<{
   // App icon shown in the header / empty state.
   icon: AppIconValue
   setIcon: (i: AppIconValue) => void
+  setPreview: (p: LookPreview | null) => void
   // Main list layout (toggled on the main page).
   view: ViewMode
   setView: (v: ViewMode) => void
   // Group / filter timers by device type (edited in Settings).
   grouping: boolean
   setGrouping: (g: boolean) => void
+  // Whole-interface scale and text-only scale, in percent (Settings > عمومی).
+  uiScale: number
+  setUiScale: (n: number) => void
+  fontScale: number
+  setFontScale: (n: number) => void
   // How the «رند کردن» button rounds the final amount when ending a timer.
   rounding: Rounding
   setRounding: (r: Rounding) => void
@@ -47,10 +62,15 @@ const ThemeContext = createContext<{
   setTitle: () => {},
   icon: DEFAULT_ICON,
   setIcon: () => {},
+  setPreview: () => {},
   view: 'compact',
   setView: () => {},
   grouping: true,
   setGrouping: () => {},
+  uiScale: 100,
+  setUiScale: () => {},
+  fontScale: 100,
+  setFontScale: () => {},
   rounding: DEFAULT_ROUNDING,
   setRounding: () => {},
   quickExtend: DEFAULT_QUICK_EXTEND,
@@ -77,6 +97,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // Older saved values have no `auto`: fall back to the defaults.
   const rounding = { ...DEFAULT_ROUNDING, ...storedRounding }
 
+  // Percent values; older installs have none, so they get 100.
+  const [storedUiScale, setUiScale] = useLocalStorage<number>('gamenet-ui-scale', () => 100)
+  const uiScale = clampScale(storedUiScale)
+  const [storedFontScale, setFontScale] = useLocalStorage<number>('gamenet-font-scale', () => 100)
+  const fontScale = clampScale(storedFontScale)
+
   const [storedQuickExtend, setQuickExtend] = useLocalStorage<QuickExtend>(
     'gamenet-quick-extend',
     () => DEFAULT_QUICK_EXTEND,
@@ -93,13 +119,27 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [title])
 
-  useEffect(() => {
-    document.documentElement.dataset.accent = accent
-  }, [accent])
+  const [preview, setPreview] = useState<LookPreview | null>(null)
+  const shownUiScale = preview ? clampScale(preview.uiScale) : uiScale
+  const shownFontScale = preview ? clampScale(preview.fontScale) : fontScale
+  const shownAccent = preview?.accent ?? accent
+  const shownTheme = preview?.theme ?? theme
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-  }, [theme])
+    document.documentElement.style.fontSize = `${shownUiScale}%`
+  }, [shownUiScale])
 
-  return <ThemeContext.Provider value={{ theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, view, setView, grouping, setGrouping, rounding, setRounding, quickExtend, setQuickExtend }}>{children}</ThemeContext.Provider>
+  useEffect(() => {
+    document.documentElement.style.setProperty('--font-scale', String(shownFontScale / 100))
+  }, [shownFontScale])
+
+  useEffect(() => {
+    document.documentElement.dataset.accent = shownAccent
+  }, [shownAccent])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', shownTheme === 'dark')
+  }, [shownTheme])
+
+  return <ThemeContext.Provider value={{ theme, setTheme, accent, setAccent, title, setTitle, icon, setIcon, setPreview, view, setView, grouping, setGrouping, uiScale, setUiScale, fontScale, setFontScale, rounding, setRounding, quickExtend, setQuickExtend }}>{children}</ThemeContext.Provider>
 }

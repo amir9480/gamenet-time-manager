@@ -27,6 +27,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { FilterCombobox } from '@/components/filter-combobox'
 import { StatsPanel } from '@/components/stats-panel'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -325,9 +333,10 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
                   </div>
                   {g.entries.map((e) => (
                     <div key={e.id} className="flex flex-col gap-2 rounded-lg border p-3">
-                      <button
+                      <Button
                         type="button"
-                        className="flex items-start justify-between gap-2 text-start"
+                        variant="ghost"
+                        className="h-auto items-start justify-between gap-2 p-0 text-start font-normal whitespace-normal hover:bg-transparent max-md:h-auto"
                         onClick={() => setExpanded(expanded === e.id ? null : e.id)}
                       >
                         <div className="min-w-0 flex-1">
@@ -344,7 +353,7 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
                             expanded === e.id && 'rotate-180',
                           )}
                         />
-                      </button>
+                      </Button>
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                         <span dir="ltr" className="inline-block">
                           {formatJalaliClock(e.startedAt, false)} –{' '}
@@ -396,59 +405,59 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
               ))}
             </div>
 
-            <table className="hidden w-full text-start text-sm sm:table">
-              <thead className="text-xs text-muted-foreground">
-                <tr className="border-b">
-                  <th className="px-2 py-1.5 text-start font-normal">تایم</th>
-                  <th className="px-2 py-1.5 text-start font-normal">شروع – پایان</th>
-                  <th className="px-2 py-1.5 text-start font-normal">مدت</th>
-                  <th className="px-2 py-1.5 text-start font-normal">هزینه</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
+            <div className="hidden sm:block"><Table>
+              <TableHeader className="text-xs text-muted-foreground">
+                <TableRow className="border-b">
+                  <TableHead className="h-auto py-1.5 font-normal text-start">تایم</TableHead>
+                  <TableHead className="h-auto py-1.5 font-normal text-start">شروع – پایان</TableHead>
+                  <TableHead className="h-auto py-1.5 font-normal text-start">مدت</TableHead>
+                  <TableHead className="h-auto py-1.5 font-normal text-start">هزینه</TableHead>
+                  <TableHead className="h-auto" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {visible.map((g) => (
                   <Fragment key={g.key}>
-                    <tr className="bg-muted/60">
-                      <td colSpan={2} className="px-2 py-2 font-bold">
+                    <TableRow className="bg-muted/60">
+                      <TableCell colSpan={2} className="px-2 py-2 font-bold whitespace-normal">
                         {formatJalaliLong(g.entries[0].endedAt)}{' '}
                         <span className="font-normal text-muted-foreground">
                           ({toFa(g.key)} · {toFa(g.entries.length)} تایم)
                         </span>
-                      </td>
-                      <td className="px-2 py-2 text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-muted-foreground whitespace-normal">
                         <span dir="ltr" className="inline-block">
                           {toFa(formatDuration(g.durationMs))}
                         </span>
-                      </td>
-                      <td colSpan={2} className="px-2 py-2 font-bold whitespace-nowrap">
+                      </TableCell>
+                      <TableCell colSpan={2} className="px-2 py-2 font-bold whitespace-nowrap">
                         {toman(g.total)}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                     {g.entries.map((e) => (
                       <Fragment key={e.id}>
-                        <tr
+                        <TableRow
                           className="cursor-pointer border-b align-top hover:bg-muted/40"
                           onClick={() => setExpanded(expanded === e.id ? null : e.id)}
                         >
-                          <td className="px-2 py-2">
+                          <TableCell className="px-2 py-2 whitespace-normal">
                             <div className="truncate">{e.deviceNames.join('، ')}</div>
                             <div className="truncate text-xs text-muted-foreground">
                               {[e.categoryNames.join('، '), e.customerName ?? NO_CUSTOMER].filter(Boolean).join(' · ')}
                             </div>
-                          </td>
-                          <td className="px-2 py-2 whitespace-nowrap">
+                          </TableCell>
+                          <TableCell className="px-2 py-2 whitespace-nowrap">
                             <span dir="ltr" className="inline-block">
                               {formatJalaliClock(e.startedAt, false)} –{' '}
                               {formatJalaliClock(e.endedAt, false)}
                             </span>
-                          </td>
-                          <td className="px-2 py-2">
+                          </TableCell>
+                          <TableCell className="px-2 py-2 whitespace-normal">
                             <span dir="ltr" className="inline-block">
                               {toFa(formatDuration(e.durationMs))}
                             </span>
-                          </td>
-                          <td className="px-2 py-2">
+                          </TableCell>
+                          <TableCell className="px-2 py-2 whitespace-normal">
                             <div className="flex flex-wrap items-center gap-1.5">
                             <span className="whitespace-nowrap">{toman(e.total)}</span>
                             {historyDebt(e) > 0 && (
@@ -465,8 +474,8 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
                               </Badge>
                             )}
                             </div>
-                          </td>
-                          <td className="px-1 py-1">
+                          </TableCell>
+                          <TableCell className="px-1 py-1 whitespace-normal">
                             <div className="flex items-center">
                               <ChevronDown
                                 className={cn(
@@ -486,21 +495,21 @@ export function HistoryDialog({ open, onOpenChange, fixedCustomer }: Props) {
                                 <Trash2 />
                               </Button>
                             </div>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                         {expanded === e.id && (
-                          <tr className="border-b bg-muted/20">
-                            <td colSpan={5} className="px-3 py-3">
+                          <TableRow className="border-b bg-muted/20">
+                            <TableCell colSpan={5} className="px-3 py-3 whitespace-normal">
                               <Details entry={e} />
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         )}
                       </Fragment>
                     ))}
                   </Fragment>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table></div>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Button

@@ -112,7 +112,7 @@ export function DataTab({ activeSessions }: { activeSessions: number }) {
         <Button variant="outline" disabled={busy} onClick={() => fileRef.current?.click()}>
           <Upload /> انتخاب فایل
         </Button>
-        <input
+        <Input
           ref={fileRef}
           type="file"
           accept=".json,application/json"
