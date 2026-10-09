@@ -23,6 +23,7 @@ import {
 import { saveFile } from '@/lib/download'
 import { formatNumber } from '@/lib/format'
 import { formatJalaliDateTime } from '@/lib/jalali'
+import { useSecurity, verifyPin } from '@/lib/security'
 
 const RESET_WORD = 'حذف'
 
@@ -49,6 +50,116 @@ function Row({
   )
 }
 
+// Confirmation for a data operation: asks for the app PIN when one is set, and optionally the
+// word «حذف». The body only mounts while open, so the inputs start empty every time.
+function GuardedBody({
+  title,
+  description,
+  needWord,
+  actionLabel,
+  destructive,
+  onConfirm,
+}: {
+  title: string
+  description: ReactNode
+  needWord?: boolean
+  actionLabel: string
+  destructive: boolean
+  onConfirm: () => void
+}) {
+  const { hasPin } = useSecurity()
+  const [word, setWord] = useState('')
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState('')
+  const [checking, setChecking] = useState(false)
+
+  const ready = (!needWord || word.trim() === RESET_WORD) && (!hasPin || pin.length > 0)
+
+  const confirm = async () => {
+    if (!hasPin) return onConfirm()
+    setChecking(true)
+    const res = await verifyPin(pin)
+    setChecking(false)
+    if (res.ok) return onConfirm()
+    setPin('')
+    if (res.reason === 'forgot') setError('فرایند فراموشی رمز در جریان است؛ ابتدا آن را لغو کنید.')
+    else if (res.reason === 'wait') setError('تلاش‌های ناموفق زیاد بود؛ کمی بعد دوباره تلاش کنید.')
+    else if (res.until) setError('رمز اشتباه است. تلاش‌های ناموفق زیاد بود؛ کمی بعد دوباره تلاش کنید.')
+    else setError('رمز اشتباه است.')
+  }
+
+  return (
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
+        <AlertDialogDescription>
+          {description}
+          {needWord && <> برای تایید، کلمه‌ی «{RESET_WORD}» را بنویسید.</>}
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      {needWord && (
+        <Input
+          aria-label="تایید پاک کردن"
+          placeholder={RESET_WORD}
+          value={word}
+          onChange={(e) => setWord(e.target.value)}
+        />
+      )}
+      {hasPin && (
+        <Input
+          type="password"
+          inputMode="numeric"
+          dir="ltr"
+          autoComplete="off"
+          aria-label="رمز برنامه"
+          placeholder="رمز برنامه"
+          value={pin}
+          onChange={(e) => {
+            setPin(e.target.value)
+            setError('')
+          }}
+        />
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <AlertDialogFooter>
+        <AlertDialogCancel>انصراف</AlertDialogCancel>
+        <AlertDialogAction
+          variant={destructive ? 'destructive' : 'default'}
+          disabled={!ready || checking}
+          onClick={(e) => {
+            e.preventDefault()
+            void confirm()
+          }}
+        >
+          {actionLabel}
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  )
+}
+
+function GuardedDialog({
+  open,
+  onClose,
+  destructive = true,
+  ...body
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  description: ReactNode
+  needWord?: boolean
+  actionLabel: string
+  destructive?: boolean
+  onConfirm: () => void
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <GuardedBody {...body} destructive={destructive} />
+    </AlertDialog>
+  )
+}
+
 // Backup and cleanup. Unlike the other tabs these act immediately (not part of the draft).
 export function DataTab({ activeSessions }: { activeSessions: number }) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -57,7 +168,8 @@ export function DataTab({ activeSessions }: { activeSessions: number }) {
   const [pending, setPending] = useState<Backup | null>(null)
   const [clearingHistory, setClearingHistory] = useState(false)
   const [resetting, setResetting] = useState(false)
-  const [word, setWord] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const { hasPin } = useSecurity()
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true)
@@ -100,7 +212,7 @@ export function DataTab({ activeSessions }: { activeSessions: number }) {
         title="خروجی گرفتن"
         description="همه‌ی اطلاعات (نرخ‌ها، دستگاه‌ها، بوفه، مشتریان، تایم‌های در جریان، تاریخچه، نسیه‌ها و پرداخت‌ها) و تنظیمات ظاهری در یک فایل پشتیبان ذخیره می‌شود."
       >
-        <Button variant="outline" disabled={busy} onClick={exportData}>
+        <Button variant="outline" disabled={busy} onClick={() => (hasPin ? setExporting(true) : exportData())}>
           <Download /> خروجی گرفتن
         </Button>
       </Row>
@@ -144,112 +256,85 @@ export function DataTab({ activeSessions }: { activeSessions: number }) {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <AlertDialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>جایگزینی اطلاعات با فایل پشتیبان؟</AlertDialogTitle>
-            <AlertDialogDescription>
-              {pending && (
-                <>
-                  فایل پشتیبان
-                  {pending.exportedAt > 0 && <> ({formatJalaliDateTime(pending.exportedAt)})</>}{' '}
-                  شامل {formatNumber(count(pending, 'devices'))} دستگاه،{' '}
-                  {formatNumber(count(pending, 'customers'))} مشتری،{' '}
-                  {formatNumber(count(pending, 'history'))} تایم در تاریخچه و{' '}
-                  {formatNumber(count(pending, 'sessions'))} تایم در جریان است. همه‌ی اطلاعات فعلی
-                  {activeSessions > 0 && <> (از جمله {formatNumber(activeSessions)} تایم در جریان)</>}{' '}
-                  حذف و با آن جایگزین می‌شود.
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>انصراف</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                const backup = pending
-                setPending(null)
-                if (backup)
-                  run(async () => {
-                    await importBackup(backup)
-                    reload()
-                  })
-              }}
-            >
-              جایگزین کن
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={clearingHistory} onOpenChange={setClearingHistory}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>پاک کردن تاریخچه؟</AlertDialogTitle>
-            <AlertDialogDescription>
-              همه‌ی تایم‌های پایان‌یافته و آمار آن‌ها برای همیشه پاک می‌شوند؛ نسیه‌های ثبت‌شده‌ی مشتریان (که از تاریخچه محاسبه می‌شوند) هم از بین می‌روند. این کار قابل بازگشت
-              نیست؛ در صورت نیاز ابتدا خروجی بگیرید.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>انصراف</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                setClearingHistory(false)
-                run(async () => {
-                  await clearHistory()
-                })
-              }}
-            >
-              پاک کن
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
-        open={resetting}
-        onOpenChange={(o) => {
-          setResetting(o)
-          if (!o) setWord('')
+      <GuardedDialog
+        open={pending !== null}
+        onClose={() => setPending(null)}
+        title="جایگزینی اطلاعات با فایل پشتیبان؟"
+        description={
+          pending && (
+            <>
+              فایل پشتیبان
+              {pending.exportedAt > 0 && <> ({formatJalaliDateTime(pending.exportedAt)})</>} شامل{' '}
+              {formatNumber(count(pending, 'devices'))} دستگاه،{' '}
+              {formatNumber(count(pending, 'customers'))} مشتری،{' '}
+              {formatNumber(count(pending, 'history'))} تایم در تاریخچه و{' '}
+              {formatNumber(count(pending, 'sessions'))} تایم در جریان است. همه‌ی اطلاعات فعلی
+              {activeSessions > 0 && <> (از جمله {formatNumber(activeSessions)} تایم در جریان)</>}{' '}
+              حذف و با آن جایگزین می‌شود.
+            </>
+          )
+        }
+        needWord
+        actionLabel="جایگزین کن"
+        onConfirm={() => {
+          const backup = pending
+          setPending(null)
+          if (backup)
+            run(async () => {
+              await importBackup(backup)
+              reload()
+            })
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>پاک کردن همه‌ی داده‌ها؟</AlertDialogTitle>
-            <AlertDialogDescription>
-              نرخ‌ها، دستگاه‌ها، بوفه، مشتریان، تاریخچه
-              {activeSessions > 0 && <> و {formatNumber(activeSessions)} تایم در جریان</>} برای
-              همیشه پاک می‌شوند و برنامه با تنظیمات پیش‌فرض دوباره شروع می‌شود. برای تایید، کلمه‌ی «
-              {RESET_WORD}» را بنویسید.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <Input
-            aria-label="تایید پاک کردن"
-            placeholder={RESET_WORD}
-            value={word}
-            onChange={(e) => setWord(e.target.value)}
-          />
-          <AlertDialogFooter>
-            <AlertDialogCancel>انصراف</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={word.trim() !== RESET_WORD}
-              onClick={() => {
-                setResetting(false)
-                run(async () => {
-                  await resetAllData()
-                  reload()
-                })
-              }}
-            >
-              پاک کردن همه
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      />
+
+      <GuardedDialog
+        open={clearingHistory}
+        onClose={() => setClearingHistory(false)}
+        title="پاک کردن تاریخچه؟"
+        description="همه‌ی تایم‌های پایان‌یافته و آمار آن‌ها برای همیشه پاک می‌شوند؛ نسیه‌های ثبت‌شده‌ی مشتریان (که از تاریخچه محاسبه می‌شوند) هم از بین می‌روند. این کار قابل بازگشت نیست؛ در صورت نیاز ابتدا خروجی بگیرید."
+        actionLabel="پاک کن"
+        onConfirm={() => {
+          setClearingHistory(false)
+          run(async () => {
+            await clearHistory()
+          })
+        }}
+      />
+
+      <GuardedDialog
+        open={resetting}
+        onClose={() => setResetting(false)}
+        title="پاک کردن همه‌ی داده‌ها؟"
+        description={
+          <>
+            نرخ‌ها، دستگاه‌ها، بوفه، مشتریان، تاریخچه
+            {activeSessions > 0 && <> و {formatNumber(activeSessions)} تایم در جریان</>} برای همیشه
+            پاک می‌شوند و برنامه با تنظیمات پیش‌فرض دوباره شروع می‌شود.
+          </>
+        }
+        needWord
+        actionLabel="پاک کردن همه"
+        onConfirm={() => {
+          setResetting(false)
+          run(async () => {
+            await resetAllData()
+            reload()
+          })
+        }}
+      />
+
+      <GuardedDialog
+        open={exporting}
+        onClose={() => setExporting(false)}
+        title="خروجی گرفتن"
+        description="برای خروجی گرفتن از اطلاعات، رمز برنامه را وارد کنید."
+        actionLabel="خروجی بگیر"
+        destructive={false}
+        onConfirm={() => {
+          setExporting(false)
+          exportData()
+        }}
+      />
     </div>
   )
 }
