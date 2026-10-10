@@ -524,14 +524,19 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
               }
             >
               {categories.map((c) => (
-                <RadioCard key={c.id} value={c.id} checked={!choice.custom && choice.categoryId === c.id}>
+                <RadioCard
+                  key={c.id}
+                  value={c.id}
+                  checked={!choice.custom && choice.categoryId === c.id}
+                  onReselect={() => choose(pickCategory(c.id), 'category')}
+                >
                   <span className="flex flex-1 items-center justify-between gap-2">
                     <span className="font-medium">{c.name}</span>
                     <span className="text-xs text-muted-foreground">{toFa(itemsIn(c.id).length)} مورد</span>
                   </span>
                 </RadioCard>
               ))}
-              <RadioCard value={OTHER_VALUE} checked={choice.custom} tour="extra-other">
+              <RadioCard value={OTHER_VALUE} checked={choice.custom} onReselect={() => choose({ categoryId: '', itemId: '', custom: true }, 'category')} tour="extra-other">
                 <span className="flex flex-1 items-center justify-between gap-2">
                   <span className="font-medium">{OTHER_ITEM_NAME}</span>
                   <span className="text-xs text-muted-foreground">قیمت دلخواه</span>
@@ -552,14 +557,19 @@ export function ExtraItemPicker({ settings, onAdd, compact }: Props) {
               }
             >
               {itemsIn(choice.categoryId).map((c) => (
-                <RadioCard key={c.id} value={c.id} checked={choice.itemId === c.id}>
+                <RadioCard
+                  key={c.id}
+                  value={c.id}
+                  checked={choice.itemId === c.id}
+                  onReselect={() => choose({ ...choice, itemId: c.id, custom: false }, 'product')}
+                >
                   <span className="flex flex-1 items-center justify-between gap-2">
                     <span className="font-medium">{c.name}</span>
                     <span className="text-xs text-muted-foreground">{formatNumber(c.price)} تومان</span>
                   </span>
                 </RadioCard>
               ))}
-              <RadioCard value={OTHER_VALUE} checked={choice.custom} tour="extra-other">
+              <RadioCard value={OTHER_VALUE} checked={choice.custom} onReselect={() => choose({ ...choice, itemId: '', custom: true }, 'product')} tour="extra-other">
                 <span className="flex flex-1 items-center justify-between gap-2">
                   <span className="font-medium">{OTHER_ITEM_NAME}</span>
                   <span className="text-xs text-muted-foreground">قیمت دلخواه</span>

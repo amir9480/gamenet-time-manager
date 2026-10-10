@@ -47,8 +47,6 @@ import {
   computeCost,
   costLimitEtaMs,
   currentPrice,
-  EMPTY_PRICE,
-  defaultPriceFor,
   deviceOf,
   devicePriceGroups,
   elapsedMs,
@@ -59,6 +57,7 @@ import {
   pauseSession,
   remainingCost,
   remainingMs,
+  resumeConflict,
   resumeSession,
   selectedPrice,
   setCostLimit,
@@ -164,7 +163,7 @@ export const sessionCardSteps = (): DriveStep[] => [
     popover: {
       title: 'توقف',
       description:
-        'تایم را موقتاً متوقف می‌کند؛ در این مدت هزینه‌ای حساب نمی‌شود. بعداً با «ادامه» دوباره شروع می‌شود و با «اتمام» صورت‌حساب نهایی را می‌بینید.',
+        'تایم را موقتاً متوقف می‌کند؛ در این مدت هزینه‌ای حساب نمی‌شود. بعداً با «ادامه» دوباره شروع می‌شود. دکمه‌ی «اتمام» کنار آن همیشه نمایان است: تایم را متوقف می‌کند و بلافاصله صورت‌حساب نهایی را باز می‌کند.',
       side: 'top',
     },
   },
@@ -328,7 +327,10 @@ ${limitLines.join('\n')}` : ''
   // time/cost regardless of which card style is in use.
   const limitTip = `${hasLimit ? 'ویرایش محدودیت' : 'تعیین محدودیت'}${limitLine}`
 
-  const resume = () => onUpdate((s) => resumeSession(settings, s, Date.now()))
+  // Its device may have been taken meanwhile: then a free device must be picked first.
+  const conflict = resumeConflict(session, sessions)
+  const resume = () =>
+    conflict ? setSwitchOpen(true) : onUpdate((s) => resumeSession(settings, s, Date.now()))
   const pause = () => {
     onUpdate((s) => pauseSession(s, Date.now()))
     offerPausedTour()
@@ -354,7 +356,7 @@ ${limitLines.join('\n')}` : ''
     setSummaryOpen(true)
   }
   const addBackdated = (device: Device, category: string, minutes: number) => {
-    const price = defaultPriceFor(device, settings.rateGroups) ?? EMPTY_PRICE
+    const price = selectedPrice(settings, session)
     onUpdate((s) => addBackdatedTime(s, device, category, price, minutes))
   }
 
@@ -425,8 +427,12 @@ ${limitLines.join('\n')}` : ''
           settings={settings}
           sessions={sessions}
           session={session}
+          resumeConflict={conflict}
           onSwitch={(device, category, price) =>
-            onUpdate((x) => switchDevice(x, device, category, price, Date.now()))
+            onUpdate((x) => {
+              const moved = switchDevice(x, device, category, price, Date.now())
+              return conflict ? resumeSession(settings, moved, Date.now()) : moved
+            })
           }
         />
 
@@ -566,12 +572,34 @@ ${limitLines.join('\n')}` : ''
     />
   )
 
-  const actionButtons = running ? (
-    <Tip label="توقف موقت تایم">
-      <Button size={sm} className={flexBtn} aria-label="توقف" data-tour="card-pause" onClick={pause}>
-        <Pause /> {lbl('توقف')}
+  // Ending a running session pauses it first, then opens the cost overview.
+  const endButton = (
+    <Tip label="پایان تایم و مشاهده صورت‌حساب">
+      <Button
+        size={sm}
+        variant="destructive"
+        className={flexBtn}
+        aria-label="اتمام"
+        data-tour="card-end"
+        onClick={() => {
+          if (running) onUpdate((s) => pauseSession(s, Date.now()))
+          openSummary()
+        }}
+      >
+        <Square /> {lbl('اتمام')}
       </Button>
     </Tip>
+  )
+
+  const actionButtons = running ? (
+    <>
+      <Tip label="توقف موقت تایم">
+        <Button size={sm} className={flexBtn} aria-label="توقف" data-tour="card-pause" onClick={pause}>
+          <Pause /> {lbl('توقف')}
+        </Button>
+      </Tip>
+      {endButton}
+    </>
   ) : (
     <>
       <Tip label={reserved ? 'شروع تایم' : 'ادامه‌ی تایم'}>
@@ -598,18 +626,7 @@ ${limitLines.join('\n')}` : ''
           </Button>
         </Tip>
       ) : (
-        <Tip label="پایان تایم و مشاهده صورت‌حساب">
-          <Button
-            size={sm}
-            variant="destructive"
-            className={flexBtn}
-            aria-label="اتمام"
-            data-tour="card-end"
-            onClick={openSummary}
-          >
-            <Square /> {lbl('اتمام')}
-          </Button>
-        </Tip>
+        endButton
       )}
     </>
   )

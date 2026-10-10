@@ -1,6 +1,16 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, ArrowLeftRight, ArrowRight, CalendarClock, Play } from 'lucide-react'
 import { Tip } from '@/components/tip'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Combobox,
@@ -38,7 +48,7 @@ import {
   devicePriceGroups,
   devicePrices,
   flatPrices,
-  freeDevices,
+  deviceStates,
   type Device,
   type FlatPrice,
   type Session,
@@ -77,6 +87,7 @@ type Props = {
         prepay?: number,
       ) => void
       onSwitch?: undefined
+      resumeConflict?: undefined
     }
   | {
       // Switch-device mode: move `session` to another free device/price (no customer step).
@@ -84,6 +95,9 @@ type Props = {
       session: Session
       onCreate?: undefined
       onSwitch: (device: Device, category: string, price: FlatPrice) => void
+      // The session is paused/reserved and its device is taken by a running session: it must
+      // pick another device, and the caller resumes it afterwards.
+      resumeConflict?: boolean
     }
 )
 
@@ -96,10 +110,12 @@ type SearchItem = {
   label: string
   sub: string
   busy: boolean // device in use (or type with no free device)
+  held?: boolean // device only held by a paused/reserved session
   fields: Field[] // everything this entry can be found by, shown or not
 }
 
 export const RedDot = () => <span className="size-2 shrink-0 rounded-full bg-destructive" aria-hidden />
+export const AmberDot = () => <span className="size-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
 
 // One selectable card inside a RadioGroup; busy cards stay visible but disabled.
 export function RadioCard({
@@ -107,6 +123,8 @@ export function RadioCard({
   checked,
   disabled,
   tour,
+  className,
+  onReselect,
   children,
 }: {
   value: string
@@ -114,15 +132,27 @@ export function RadioCard({
   disabled?: boolean
   // `data-tour` name, for the guides that point at this card.
   tour?: string
+  className?: string
+  // Clicking an already selected card does not change the group's value, so it never reaches
+  // `onValueChange`; this lets the caller still move on to the next step.
+  onReselect?: () => void
   children: ReactNode
 }) {
+  const last = useRef(0)
   return (
     <Label
       data-tour={tour}
+      onClick={() => {
+        // A click on the label is forwarded to the radio and bubbles again: handle it once.
+        if (!checked || disabled || !onReselect || Date.now() - last.current < 100) return
+        last.current = Date.now()
+        onReselect()
+      }}
       className={cn(
         'flex items-center gap-2.5 rounded-lg border p-3 transition-colors',
         disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-muted/50',
         checked && 'border-primary bg-primary/5',
+        className,
       )}
     >
       <RadioGroupItem value={value} disabled={disabled} />
@@ -179,7 +209,7 @@ export const addSessionTour: TourDef = {
       popover: {
         title: 'یا مرحله‌به‌مرحله انتخاب کنید',
         description:
-          'نوع دستگاه، دستگاه و نرخ ساعتی را انتخاب کنید. با انتخاب هر کارت، خودکار به مرحله‌ی بعد می‌روید. آزاد بودن دستگاه‌ها با نقطه‌ی قرمز مشخص می‌شود.',
+          'نوع دستگاه، دستگاه و نرخ ساعتی را انتخاب کنید. با انتخاب هر کارت، خودکار به مرحله‌ی بعد می‌روید. دستگاه‌های آزاد اول می‌آیند؛ نقطه‌ی زرد یعنی دستگاه برای تایم رزرو یا متوقف‌شده‌ای نگه داشته شده (با تأیید می‌توانید از آن استفاده کنید) و نقطه‌ی قرمز یعنی در حال استفاده است.',
         side: 'bottom',
         showButtons: ['close'],
       },
@@ -299,12 +329,20 @@ export function AddSessionDialog({
   onCreate,
   session,
   onSwitch,
+  resumeConflict,
 }: Props) {
   const switchMode = !!session
   // Switch-device mode skips the customer step entirely.
   const ORDER = switchMode ? FULL_ORDER.filter((k) => k !== 'customer') : FULL_ORDER
-  const busyIds = new Set(sessions.map((s) => s.deviceId))
-  const free = freeDevices(settings.devices, sessions)
+  // Devices with a running session are unavailable; devices only held by a paused/reserved
+  // session can be force-used after a confirmation. The session being moved never blocks itself
+  // but its own current device is not a target.
+  const states = deviceStates(sessions, session?.id)
+  if (session) states.set(session.deviceId, 'using')
+  const busyIds = new Set([...states].filter(([, v]) => v === 'using').map(([k]) => k))
+  const heldIds = new Set([...states].filter(([, v]) => v === 'held').map(([k]) => k))
+  const free = settings.devices.filter((d) => !busyIds.has(d.id))
+  const [forceOpen, setForceOpen] = useState(false)
   const devicesOf = (categoryId: string) => settings.devices.filter((d) => d.categoryId === categoryId)
   const freeIn = (categoryId: string) => devicesOf(categoryId).filter((d) => !busyIds.has(d.id))
   // Only types that actually have devices can start a session.
@@ -418,6 +456,8 @@ export function AddSessionDialog({
           ? !!price
           : !!device && !!price
 
+  // Free first, then held (reserved/paused, yellow), then in use.
+  const rankOf = (id: string) => (busyIds.has(id) ? 2 : heldIds.has(id) ? 1 : 0)
   const pickCategory = (categoryId: string): Pick => resolve({ categoryId, deviceId: '', priceId: '' })
   const pickDevice = (d: Device): Pick => resolve({ categoryId: d.categoryId, deviceId: d.id, priceId: '' })
 
@@ -439,7 +479,8 @@ export function AddSessionDialog({
     String(priceNow(p)),
     p.groupName,
   ]
-  const statusField = (busy: boolean) => (busy ? 'در حال استفاده' : 'آزاد')
+  const statusField = (busy: boolean, held = false) =>
+    busy ? 'در حال استفاده' : held ? 'رزرو یا متوقف' : 'آزاد'
   const searchItems: SearchItem[] = categories.flatMap((c) => {
     const inCategory = devicesOf(c.id)
     const freeCount = freeIn(c.id).length
@@ -482,8 +523,13 @@ export function AddSessionDialog({
         deviceId: d.id,
         label: d.name,
         busy: busyIds.has(d.id),
+        held: heldIds.has(d.id),
       }
-      const own: Field[] = [{ text: d.name, weight: 3 }, { text: c.name, weight: 2 }, statusField(base.busy)]
+      const own: Field[] = [
+        { text: d.name, weight: 3 },
+        { text: c.name, weight: 2 },
+        statusField(base.busy, base.held),
+      ]
       return prices.length > 1
         ? prices.map((p) => ({
             ...base,
@@ -517,8 +563,11 @@ export function AddSessionDialog({
     setStep(after(stepsFor(p), item.priceId ? 'rate' : item.kind === 'category' ? 'category' : 'device'))
   }
 
-  const submit = () => {
+  const submit = (confirmed = false) => {
     if (!device || !price) return
+    // A device held by a paused/reserved session needs an explicit confirmation.
+    if (heldIds.has(device.id) && !confirmed) return setForceOpen(true)
+    setForceOpen(false)
     if (switchMode) {
       onSwitch!(device, categoryName(settings, device), price)
       onOpenChange(false)
@@ -557,10 +606,16 @@ export function AddSessionDialog({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-1">
-              {switchMode ? 'تغییر دستگاه' : reserve ? 'رزرو تایم' : 'افزودن تایم'}
+              {resumeConflict ? 'انتخاب دستگاه دیگر' : switchMode ? 'تغییر دستگاه' : reserve ? 'رزرو تایم' : 'افزودن تایم'}
               <TourHelpButton tour="add-session" />
             </DialogTitle>
-            {switchMode && session && (
+            {resumeConflict && session && (
+              <DialogDescription className="rounded-lg border border-amber-500/60 bg-amber-500/10 p-2.5 text-foreground">
+                دستگاه «{session.deviceName}» الان برای تایم دیگری استفاده می‌شود؛ برای ادامه‌ی این
+                تایم باید دستگاه دیگری انتخاب کنید. تایم بعد از انتخاب از همین لحظه ادامه پیدا می‌کند.
+              </DialogDescription>
+            )}
+            {switchMode && !resumeConflict && session && (
               <DialogDescription>
                 از این لحظه، زمان با دستگاه و نرخ جدید محاسبه می‌شود؛ زمان گذشته با نرخ قبلی می‌ماند و
                 دستگاه فعلی ({session.deviceName}) آزاد می‌شود.
@@ -573,7 +628,7 @@ export function AddSessionDialog({
             // Ranked multi-word search instead of the built-in contiguous-substring filter.
             filter={null}
             filteredItems={rank(searchItems, query, (it) => it.fields).sort(
-              (a, b) => Number(a.busy) - Number(b.busy),
+              (a, b) => Number(a.busy) * 2 + Number(!!a.held) - (Number(b.busy) * 2 + Number(!!b.held)),
             )}
             value={null}
             onValueChange={(it) => quickSelect(it as SearchItem | null)}
@@ -595,7 +650,7 @@ export function AddSessionDialog({
                 {(it: SearchItem) => (
                   <ComboboxItem key={it.key} value={it} disabled={it.busy}>
                     <span className="flex flex-1 items-center gap-2">
-                      {it.busy && <RedDot />}
+                      {it.busy ? <RedDot /> : it.held && <AmberDot />}
                       <span>{it.label}</span>
                       <span className="text-xs text-muted-foreground">{it.sub}</span>
                     </span>
@@ -624,7 +679,13 @@ export function AddSessionDialog({
               {categories.map((c) => {
                 const n = freeIn(c.id).length
                 return (
-                  <RadioCard key={c.id} value={c.id} checked={pick.categoryId === c.id} disabled={n === 0}>
+                  <RadioCard
+                    key={c.id}
+                    value={c.id}
+                    checked={pick.categoryId === c.id}
+                    disabled={n === 0}
+                    onReselect={() => choose(pickCategory(c.id), 'category')}
+                  >
                     <span className="flex flex-1 items-center justify-between gap-2">
                       <span className="flex items-center gap-2 font-medium">
                         {n === 0 && <RedDot />}
@@ -650,14 +711,26 @@ export function AddSessionDialog({
               }}
             >
               {[...devicesOf(pick.categoryId)]
-                .sort((a, b) => Number(busyIds.has(a.id)) - Number(busyIds.has(b.id)))
+                .sort((a, b) => rankOf(a.id) - rankOf(b.id))
                 .map((d) => {
                 const busy = busyIds.has(d.id)
+                const held = heldIds.has(d.id)
                 return (
-                  <RadioCard key={d.id} value={d.id} checked={pick.deviceId === d.id} disabled={busy}>
-                    <Tip label={busy ? 'در حال استفاده' : undefined}>
+                  <RadioCard
+                    key={d.id}
+                    value={d.id}
+                    checked={pick.deviceId === d.id}
+                    disabled={busy}
+                    onReselect={() => choose(pickDevice(d), 'device')}
+                    className={held ? 'border-amber-500/60 bg-amber-500/10' : undefined}
+                  >
+                    <Tip
+                      label={
+                        busy ? 'در حال استفاده' : held ? 'برای تایم دیگری رزرو یا متوقف شده' : undefined
+                      }
+                    >
                       <span className="flex flex-1 items-center gap-2 font-medium">
-                        {busy && <RedDot />}
+                        {busy ? <RedDot /> : held && <AmberDot />}
                         {d.name}
                       </span>
                     </Tip>
@@ -680,7 +753,12 @@ export function AddSessionDialog({
                   )}
                   <div className="grid gap-2 sm:grid-cols-2">
                     {g.prices.map((p) => (
-                      <RadioCard key={p.id} value={p.id} checked={pick.priceId === p.id}>
+                      <RadioCard
+                        key={p.id}
+                        value={p.id}
+                        checked={pick.priceId === p.id}
+                        onReselect={() => choose({ ...pick, priceId: p.id }, 'rate')}
+                      >
                         <span className="flex flex-1 items-center justify-between gap-2">
                           <span className="font-medium">{p.name}</span>
                           <span className="text-xs text-muted-foreground">
@@ -773,9 +851,9 @@ export function AddSessionDialog({
               </Button>
             )}
             {last ? (
-              <Button disabled={!stepValid} data-tour="add-submit" onClick={submit}>
-                {switchMode ? <ArrowLeftRight /> : reserve ? <CalendarClock /> : <Play />}{' '}
-                {switchMode ? 'تغییر دستگاه' : reserve ? 'ثبت رزرو' : 'شروع تایم'}
+              <Button disabled={!stepValid} data-tour="add-submit" onClick={() => submit()}>
+                {resumeConflict ? <Play /> : switchMode ? <ArrowLeftRight /> : reserve ? <CalendarClock /> : <Play />}{' '}
+                {resumeConflict ? 'ادامه با این دستگاه' : switchMode ? 'تغییر دستگاه' : reserve ? 'ثبت رزرو' : 'شروع تایم'}
               </Button>
             ) : (
               <Button disabled={!stepValid} onClick={() => setStep(after(steps, step))}>
@@ -786,6 +864,21 @@ export function AddSessionDialog({
         </DialogContent>
       </Dialog>
       {dialog}
+      <AlertDialog open={forceOpen} onOpenChange={setForceOpen}>
+        <AlertDialogContent raised>
+          <AlertDialogHeader>
+            <AlertDialogTitle>استفاده از دستگاه رزرو یا متوقف؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              «{device?.name}» برای تایم دیگری رزرو یا متوقف شده است. اگر از آن استفاده کنید، آن تایم
+              برای ادامه باید دستگاه دیگری انتخاب کند. مطمئنید؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>انصراف</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => submit(true)}>بله، استفاده شود</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

@@ -13,7 +13,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MoneyInput } from '@/components/ui/money-input'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Tip } from '@/components/tip'
 import { formatNumber, parseNumber } from '@/lib/format'
 import { uid, type Device, type RateGroup, type Usage } from '@/lib/store'
@@ -36,7 +35,7 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
     const price = { id: uid(), name: 'نوع ۱', price: 0 }
     onChange([
       ...groups,
-      { id: uid(), name: `نرخ ${groups.length + 1}`, prices: [price], defaultPriceId: price.id },
+      { id: uid(), name: `نرخ ${groups.length + 1}`, prices: [price] },
     ])
   }
 
@@ -47,10 +46,7 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
     }))
 
   const removePrice = (g: RateGroup, id: string) =>
-    patchGroup(g.id, (x) => {
-      const prices = x.prices.filter((p) => p.id !== id)
-      return { ...x, prices, defaultPriceId: x.defaultPriceId === id ? prices[0].id : x.defaultPriceId }
-    })
+    patchGroup(g.id, (x) => ({ ...x, prices: x.prices.filter((p) => p.id !== id) }))
 
   const confirmDelete = () => {
     if (!pendingDelete) return
@@ -76,11 +72,11 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
           : ''
         return (
           <div key={g.id} className="flex flex-col gap-2 rounded-lg border p-3">
-            <div className="grid grid-cols-[1.5rem_1fr_2rem] items-center gap-2 sm:grid-cols-[1.5rem_1fr_1fr_2rem]">
+            <div className="grid grid-cols-[1fr_2rem] items-center gap-2 sm:grid-cols-[1fr_1fr_2rem]">
               <Input
                 aria-label="نام نرخ"
                 aria-invalid={!g.name.trim()}
-                className="col-[2] font-bold sm:col-[2/4]"
+                className="col-[1] font-bold sm:col-[1/3]"
                 value={g.name}
                 onChange={(e) => patchGroup(g.id, (x) => ({ ...x, name: e.target.value }))}
               />
@@ -100,26 +96,19 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
               </Tip>
             </div>
 
-            <div className="hidden grid-cols-[1.5rem_1fr_1fr_2rem] items-center gap-2 text-xs text-muted-foreground sm:grid">
-              <Tip label="پیش‌فرض">
-                <span>پ</span>
-              </Tip>
+            <div className="hidden grid-cols-[1fr_1fr_2rem] items-center gap-2 text-xs text-muted-foreground sm:grid">
               <span>نام قیمت</span>
               <span>قیمت ساعتی (تومان)</span>
               <span />
             </div>
-            <RadioGroup
-              value={g.defaultPriceId}
-              onValueChange={(v) => patchGroup(g.id, (x) => ({ ...x, defaultPriceId: v as string }))}
-            >
+            <div className="grid gap-2">
               {g.prices.map((p) => {
                 const inUse = usage.priceIds.has(p.id)
                 return (
                   <div
                     key={p.id}
-                    className="grid grid-cols-[1.5rem_1fr_2rem] items-center gap-2 sm:grid-cols-[1.5rem_1fr_1fr_2rem]"
+                    className="grid grid-cols-[1fr_2rem] items-center gap-2 sm:grid-cols-[1fr_1fr_2rem]"
                   >
-                    <RadioGroupItem value={p.id} aria-label={`پیش‌فرض: ${p.name}`} />
                     <Input
                       aria-label="نام قیمت"
                       aria-invalid={!p.name.trim()}
@@ -144,7 +133,7 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
                           ),
                         }))
                       }
-                      className="col-start-2 row-start-2 sm:col-start-3 sm:row-start-1"
+                      className="col-start-1 row-start-2 sm:col-start-2 sm:row-start-1"
                     />
                     <Tip
                       label={
@@ -173,8 +162,8 @@ export function RateGroupsEditor({ groups, devices, usage, onChange }: Props) {
                   </div>
                 )
               })}
-            </RadioGroup>
-            <Button variant="outline" size="sm" className="ms-8 self-start" onClick={() => addPrice(g)}>
+            </div>
+            <Button variant="outline" size="sm" className="self-start" onClick={() => addPrice(g)}>
               <Plus /> افزودن قیمت
             </Button>
           </div>

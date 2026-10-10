@@ -7,7 +7,7 @@ import { jalaliWeekday, startOfDay } from '@/lib/jalali'
 export type Price = { id: string; name: string; price: number }
 
 // A named group of per-hour prices (e.g. «نرخ پی‌سی») with one default price.
-export type RateGroup = { id: string; name: string; prices: Price[]; defaultPriceId: string }
+export type RateGroup = { id: string; name: string; prices: Price[] }
 
 // A price flattened out of its group; this is what segments/extra times mirror.
 export type FlatPrice = Price & { groupId: string; groupName: string }
@@ -125,7 +125,7 @@ export const defaultSettings = (): Settings => {
   const extraCategories = ['خوراکی', 'نوشیدنی سرد', 'نوشیدنی گرم', 'قهوه', 'سیگار و قلیان'].map(cat)
   const byName = (n: string) => extraCategories.find((c) => c.name === n)!.id
   return {
-    rateGroups: [{ id: uid(), name: 'نرخ عمومی', prices, defaultPriceId: prices[1].id }],
+    rateGroups: [{ id: uid(), name: 'نرخ عمومی', prices }],
     deviceCategories: ['پی‌سی', 'پلی‌استیشن', 'بیلیارد', 'پینگ‌پنگ'].map(cat),
     devices: [],
     extraCategories,
@@ -153,18 +153,8 @@ export const devicePriceGroups = (device: Device | undefined, groups: RateGroup[
 export const devicePrices = (device: Device | undefined, groups: RateGroup[]): FlatPrice[] =>
   flatPrices(devicePriceGroups(device, groups))
 
-// Default price of the device's first rate group.
 // Placeholder for when a device has no price at all (e.g. no rate group assigned).
 export const EMPTY_PRICE: FlatPrice = { id: '', name: '—', price: 0, groupId: '', groupName: '' }
-
-export const defaultPriceFor = (
-  device: Device | undefined,
-  groups: RateGroup[],
-): FlatPrice | undefined => {
-  const prices = devicePrices(device, groups)
-  const first = devicePriceGroups(device, groups)[0]
-  return prices.find((p) => p.id === first?.defaultPriceId) ?? prices[0]
-}
 
 export const deviceOf = (settings: Settings, s: Session) =>
   settings.devices.find((d) => d.id === s.deviceId)
@@ -176,7 +166,7 @@ export const selectedPrice = (settings: Settings, s: Session): FlatPrice => {
   const pick =
     own.find((p) => p.id === s.typeId) ??
     flatPrices(settings.rateGroups).find((p) => p.id === s.typeId) ??
-    defaultPriceFor(device, settings.rateGroups)
+    own[0]
   const last = s.segments[s.segments.length - 1]
   return (
     pick ?? {
@@ -196,6 +186,27 @@ export const freeDevices = (devices: Device[], sessions: Session[]) => {
   const used = new Set(sessions.map((s) => s.deviceId))
   return devices.filter((d) => !used.has(d.id))
 }
+
+// 'using' = a running session is on it; 'held' = only paused/reserved sessions point at it
+// (it may be force-used by another session); 'free' = nobody. `ignore` skips one session
+// (the one being moved).
+export type DeviceState = 'free' | 'held' | 'using'
+
+export const deviceStates = (sessions: Session[], ignoreId?: string) => {
+  const map = new Map<string, DeviceState>()
+  for (const s of sessions) {
+    if (s.id === ignoreId) continue
+    if (s.status === 'running') map.set(s.deviceId, 'using')
+    else if (map.get(s.deviceId) !== 'using') map.set(s.deviceId, 'held')
+  }
+  return map
+}
+
+// A paused/reserved session whose device is now used by another running session: it cannot
+// resume there and must pick another device first.
+export const resumeConflict = (s: Session, sessions: Session[]) =>
+  s.status !== 'running' &&
+  sessions.some((o) => o.id !== s.id && o.status === 'running' && o.deviceId === s.deviceId)
 
 // ---- sessions ---------------------------------------------------------------
 
@@ -819,7 +830,7 @@ export const prefKey = (name: string) => `${STORAGE_PREFIX}${name}`
 export const usageOf = (sessions: Session[]): Usage => ({
   deviceIds: new Set(sessions.map((s) => s.deviceId)),
   customerIds: new Set(sessions.flatMap((s) => (s.customerId ? [s.customerId] : []))),
-  priceIds: new Set(sessions.map((s) => s.typeId)),
+  priceIds: new Set(sessions.flatMap((s) => [s.typeId, ...s.segments.map((seg) => seg.typeId)])),
   extraItemIds: new Set(
     sessions.flatMap((s) => s.extraItems.flatMap((i) => (i.catalogId ? [i.catalogId] : []))),
   ),

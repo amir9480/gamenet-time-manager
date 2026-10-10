@@ -21,7 +21,6 @@ import {
   DEFAULT_HOURLY_PRICE,
   DEVICE_SAMPLES,
   EXTRA_SAMPLES,
-  PREFERRED_DEFAULT_PRICE,
   defaultChoice,
   settingsFromChoice,
   type OnboardingChoice,
@@ -205,7 +204,7 @@ export function OnboardingDialog({ open, settings, onFinish, onImport }: Props) 
                       />
                     </div>
 
-                    <div className="text-xs text-muted-foreground">نرخ‌های ساعتی (نرخ «{PREFERRED_DEFAULT_PRICE}» پیش‌فرض است؛ اگر نباشد، اولی)</div>
+                    <div className="text-xs text-muted-foreground">نرخ‌های ساعتی</div>
                     {c.prices.map((p) => (
                       <div
                         key={p.id}

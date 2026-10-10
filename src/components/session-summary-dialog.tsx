@@ -60,13 +60,12 @@ import {
 } from '@/lib/tour'
 import { onSessionUpdated } from '@/lib/session-events'
 import {
-  EMPTY_PRICE,
+  selectedPrice,
   MIN_BILLABLE_MS,
   ROUND_MODE_LABELS,
   addBackdatedTime,
   addExtraItem,
   categoryName,
-  defaultPriceFor,
   devicePriceGroups,
   extraItemsCost,
   flatPrices,
@@ -555,7 +554,7 @@ export function SessionSummaryDialog({
     const device = settings.devices.find((x) => x.id === deviceId)
     if (!device) return
     const prices = flatPrices(devicePriceGroups(device, settings.rateGroups))
-    const price = prices.find((p) => p.id === seg.typeId) ?? defaultPriceFor(device, settings.rateGroups)
+    const price = prices.find((p) => p.id === seg.typeId)
     patchSegment(index, {
       deviceId: device.id,
       deviceName: device.name,
@@ -646,7 +645,7 @@ export function SessionSummaryDialog({
                               d,
                               device,
                               category,
-                              defaultPriceFor(device, settings.rateGroups) ?? EMPTY_PRICE,
+                              selectedPrice(settings, d),
                               minutes,
                             ),
                           )
@@ -655,7 +654,7 @@ export function SessionSummaryDialog({
                     </span>
                     {draft.status !== 'running' && (
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         data-tour="sum-resume"
                         onClick={() => setDraft((d) => resumeSession(settings, d, Date.now()))}
