@@ -24,6 +24,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { MoneyInput } from '@/components/ui/money-input'
 import {
@@ -208,6 +209,12 @@ export const summaryTour: TourDef = {
       'sum-prepay-list',
       'پیش‌پرداخت‌های ثبت‌شده',
       'هر پیش‌پرداخت با مبلغ و ساعت ثبتش نشان داده می‌شود و قابل ویرایش یا حذف است. اگر پیش‌پرداختی نباشد، پیام خالی را می‌بینید.',
+      'top',
+    ),
+    sumStep(
+      'sum-note',
+      'یادداشت',
+      'هر نکته‌ای درباره‌ی این تایم را اینجا بنویسید. با «ذخیره» روی کارت تایم یک آیکون اطلاعات می‌آید که با نگه داشتن نشانگر یا کلیک روی آن، یادداشت را می‌بینید.',
       'top',
     ),
     sumStep(
@@ -938,6 +945,20 @@ export function SessionSummaryDialog({
             </div>
 
             {/* Right: the bill and how it gets settled. */}
+            <div className="flex min-w-0 flex-col gap-4">
+            <Section title="یادداشت" tour="sum-note">
+              <Textarea
+                aria-label="یادداشت"
+                placeholder="یادداشت شخصی درباره این تایم"
+                className="min-h-20 resize-none bg-background"
+                value={draft.note ?? ''}
+                onChange={(e) => {
+                  const note = e.target.value
+                  setDraft((d) => ({ ...d, note }))
+                }}
+              />
+            </Section>
+
             <div className="flex min-w-0 flex-col gap-4 rounded-xl border bg-muted/30 p-4">
               <div className="flex flex-col gap-2" data-tour="sum-totals">
                 <Row
@@ -1086,6 +1107,7 @@ export function SessionSummaryDialog({
                   </Label>
                 </div>
               )}
+            </div>
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlarmClock, Pause, Pencil, Play, Square, X } from 'lucide-react'
+import { AlarmClock, Info, Pause, Pencil, Play, Square, X } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AddSessionDialog } from '@/components/add-session-dialog'
 import { CustomerPickerDialog } from '@/components/customer-picker-dialog'
@@ -105,7 +106,7 @@ export const sessionCardSteps = (): DriveStep[] => [
     popover: {
       title: 'کارت تایم',
       description:
-        'این کارت، جدیدترین تایمی است که ساخته‌اید. هر تایم در جریان یک کارت جداگانه دارد و همه‌ی کارهای آن تایم از همین‌جا انجام می‌شود.',
+        'این کارت، جدیدترین تایمی است که ساخته‌اید. هر تایم در جریان یک کارت جداگانه دارد و همه‌ی کارهای آن تایم از همین‌جا انجام می‌شود. با کلیک روی هر قسمت خالی کارت (مثل نام دستگاه یا زمان) ریز هزینه‌ها و یادداشت تایم باز می‌شود.',
       side: 'bottom',
     },
   },
@@ -459,6 +460,36 @@ ${limitLines.join('\n')}` : ''
     <span className={compact ? 'max-md:@max-[30rem]/card:hidden' : undefined}>{t}</span>
   )
 
+  // Clicking any non-interactive part of the card (name, time, empty space...) opens the cost
+  // overview. Clicks on controls, and inside dialogs/popovers portaled out of the card (React
+  // still bubbles those through the tree), are left alone.
+  const onCardClick = (e: React.MouseEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement
+    if (!e.currentTarget.contains(target)) return
+    if (target.closest('button, a, input, textarea, select, label, [role="combobox"], [role="button"]'))
+      return
+    if (window.getSelection()?.toString()) return
+    openSummary()
+  }
+
+  const note = session.note?.trim()
+  const noteIcon = note && (
+    <Popover>
+      <PopoverTrigger
+        openOnHover
+        delay={150}
+        aria-label="یادداشت"
+        data-tour="card-note"
+        className="inline-flex shrink-0 cursor-pointer items-center text-muted-foreground hover:text-foreground"
+      >
+        <Info className="size-4" />
+      </PopoverTrigger>
+      <PopoverContent className="w-auto max-w-72 whitespace-pre-wrap wrap-break-word" side="bottom">
+        {note}
+      </PopoverContent>
+    </Popover>
+  )
+
   const customerButton = (
     <Tip label={compact ? (customer ? `مشتری: ${customer.name} (تغییر)` : 'انتخاب مشتری') : 'تغییر مشتری'}>
       <Button
@@ -672,7 +703,8 @@ ${limitLines.join('\n')}` : ''
   return (
     <Card
       size={sm}
-      className={cn('@container/card', forgottenClass, limitClass)}
+      className={cn('@container/card cursor-pointer', forgottenClass, limitClass)}
+      onClick={onCardClick}
       data-tour="session-card"
       data-tour-at={first?.from ?? session.reservedAt ?? 0}
     >
@@ -694,6 +726,7 @@ ${limitLines.join('\n')}` : ''
                   {name}
                 </span>
               </Tip>
+              {noteIcon}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {session.categoryName && <Badge variant="outline">{session.categoryName}</Badge>}

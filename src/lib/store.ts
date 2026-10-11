@@ -107,6 +107,8 @@ export type Session = {
   costLimit?: number
   // Set for a reservation (created paused, no segments); orders it among the running sessions.
   reservedAt?: number
+  // Free-text note (یادداشت) of the operator; edited in the cost overview dialog.
+  note?: string
 }
 
 export const OTHER_ITEM_NAME = 'سایر هزینه‌ها'
@@ -1010,6 +1012,7 @@ export const sessionSearchFields = (
   s.status === 'running' ? 'در حال بازی' : isReserved(s) ? 'رزرو' : 'متوقف',
   ...s.segments.map((x) => `${x.typeName} ${x.price}`),
   ...s.extraItems.map((i) => `${i.name} ${i.description ?? ''} ${i.price}`),
+  s.note ?? '',
   String(computeCost(s, now)),
 ]
 
